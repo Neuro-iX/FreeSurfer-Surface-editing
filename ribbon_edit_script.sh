@@ -8,7 +8,7 @@ Help ()
 builtin echo "
 AUTHOR: Benoît Verreman
 
-LAST UPDATE: 2023-10-05
+LAST UPDATE: 2023-10-16
 
 DESCRIPTION: 
 Use ribbon and subcortical NIFTI files to compute pial surface.
@@ -74,19 +74,28 @@ Echo ()
 #################
 ## Function to reset report.sh and outputs
 #################
-Delete()
+Create()
 {
-rm -f report.sh
+if [ ! -d "$OUTPUT_FOLDER" ]
+then
 Echo "#!/bin/bash"
 
-cmd "Reset $OUTPUT_FOLDER" \
-"rm -r $OUTPUT_FOLDER; \
-mkdir $OUTPUT_FOLDER;
+cmd "Create $OUTPUT_FOLDER" \
+"mkdir $OUTPUT_FOLDER;
 mkdir $OUTPUT_FOLDER/transforms;
 mkdir $OUTPUT_FOLDER/scripts;
 mkdir $OUTPUT_FOLDER/surf;
 mkdir $OUTPUT_FOLDER/mri;
 mkdir $OUTPUT_FOLDER/label;"
+fi
+}
+Delete()
+{
+rm -f report.sh
+
+cmd "Reset $OUTPUT_FOLDER" \
+"rm -r $OUTPUT_FOLDER;"
+Create
 }
 
 #################
@@ -280,6 +289,7 @@ RH_RIBBON_EDIT_PIAL_SMOOTH="$OUTPUT_FOLDER/surf/rh.ribbon_edit.smooth.pial"
 #################
 ## Indicate a new invocation of this script in report.sh
 #################
+Create #Test if outputs folder already exist, and if it does not, create one
 Echo "
 #*******************
 #*******************
