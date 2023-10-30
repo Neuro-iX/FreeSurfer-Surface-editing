@@ -211,6 +211,24 @@ shift "$(( OPTIND - 1 ))"
 : ${SUBJID:?Missing argument --subjid or -s}
 
 #################
+## Remove slaches from $SUBJECTS_DIR and $SUBJID
+#################
+export var="${SUBJECTS_DIR: -1}"
+if [[ "$var" == "/" ]]; then
+export SUBJECTS_DIR="${SUBJECTS_DIR:0:-1}"
+fi
+
+export var="${SUBJID: -1}"
+if [[ "$var" == "/" ]]; then
+export SUBJID="${SUBJID:0:-1}"
+fi
+
+export var="${SUBJID:0:1}"
+if [[ "$var" == "/" ]]; then
+export SUBJID="${SUBJID:1}"
+fi
+
+#################
 ## Input files
 #################
 T1="$SUBJECTS_DIR/$SUBJID/mri/T1.mgz"
