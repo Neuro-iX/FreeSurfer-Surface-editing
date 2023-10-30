@@ -8,7 +8,7 @@ Help ()
 builtin echo "
 AUTHOR: Benoît Verreman
 
-LAST UPDATE: 2023-10-16
+LAST UPDATE: 2023-10-30
 
 DESCRIPTION: 
 Use ribbon and subcortical NIFTI files to compute pial surface.
