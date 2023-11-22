@@ -74,7 +74,7 @@ OUTPUT_FOLDER="outputs"
 #################
 Echo ()
 {
-    builtin echo "$@" | tee -a $SUBJECTS_DIR/$SUBJID/report.sh
+    builtin echo "$@" | tee -a $SUBJECTS_DIR/$SUBJID/$OUTPUT_FOLDER/report.sh
 }
 
 #################
