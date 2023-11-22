@@ -8,11 +8,11 @@ Help ()
 builtin echo "
 AUTHOR: Benoît Verreman
 
-LAST UPDATE: 2023-10-30
+LAST UPDATE: 2023-11-22
 
 DESCRIPTION: 
-Use ribbon and subcortical NIFTI files to compute pial surface.
-Also based on previously created <subjid> folder using Freesurfer 7.4.1
+Use ribbon and subcortical NIFTI files to recompute pial surface,
+based on previously created <subjid> folder using Freesurfer 7.4.1
 Create a log 'report.sh'.
 Create a folder 'outputs' with all the output files.
 
@@ -21,6 +21,7 @@ Export SUBJECTS_DIR and FREESURFER_HOME correctly
 Launch Freesurfer 7.4.1 command: 
 $ recon-all -s <subjid> -i <subject_image> -autorecon1 -autorecon2 -hires -parallel -openmp 4 -expert expert_file.txt
 Prepare ribbon and subcortical NIFTI files (first step in the pipeline: convert)
+Put the script inside <subjid> folder
 
 EXAMPLES:
 $ bash ribbon_edit_script.sh --subjid <subjid> --ribbon <ribbon-edit.nii.gz> --subcortical <subcortical.nii.gz>
@@ -56,6 +57,11 @@ HEMI
 }
 
 #################
+## Set default permission of working directory to a+rwx
+#################
+umask 0000
+
+#################
 ## Default global variables
 #################
 current_date_time=$(date)
@@ -68,7 +74,7 @@ OUTPUT_FOLDER="outputs"
 #################
 Echo ()
 {
-    builtin echo "$@" | tee -a report.sh
+    builtin echo "$@" | tee -a $SUBJECTS_DIR/$SUBJID/report.sh
 }
 
 #################
@@ -76,25 +82,26 @@ Echo ()
 #################
 Create()
 {
-if [ ! -d "$OUTPUT_FOLDER" ]
-then
 Echo "#!/bin/bash"
 
-cmd "Create $OUTPUT_FOLDER" \
-"mkdir $OUTPUT_FOLDER;
-mkdir $OUTPUT_FOLDER/transforms;
-mkdir $OUTPUT_FOLDER/scripts;
-mkdir $OUTPUT_FOLDER/surf;
-mkdir $OUTPUT_FOLDER/mri;
-mkdir $OUTPUT_FOLDER/label;"
+if [ ! -d "$SUBJECTS_DIR/$SUBJID/$OUTPUT_FOLDER" ]
+then
+	cmd "Create $SUBJECTS_DIR/$SUBJID/$OUTPUT_FOLDER" \
+	"mkdir $SUBJECTS_DIR/$SUBJID/$OUTPUT_FOLDER;
+	mkdir $SUBJECTS_DIR/$SUBJID/$OUTPUT_FOLDER/transforms;
+	mkdir $SUBJECTS_DIR/$SUBJID/$OUTPUT_FOLDER/scripts;
+	mkdir $SUBJECTS_DIR/$SUBJID/$OUTPUT_FOLDER/surf;
+	mkdir $SUBJECTS_DIR/$SUBJID/$OUTPUT_FOLDER/mri;
+	mkdir $SUBJECTS_DIR/$SUBJID/$OUTPUT_FOLDER/label;"
 fi
 }
+
 Delete()
 {
 rm -f report.sh
 
-cmd "Reset $OUTPUT_FOLDER" \
-"rm -r $OUTPUT_FOLDER;"
+cmd "Reset $SUBJECTS_DIR/$SUBJID/$OUTPUT_FOLDER" \
+"rm -r $SUBJECTS_DIR/$SUBJID/$OUTPUT_FOLDER;"
 Create
 }
 
@@ -248,66 +255,68 @@ SUBCORTICALMASSLUT="$FREESURFER_HOME/SubCorticalMassLUT.txt"
 #################
 ## Output files
 #################
-RIBBON_EDIT="$OUTPUT_FOLDER/mri/ribbon-edit.mgz"
-SUBCORTICAL_EDIT="$OUTPUT_FOLDER/mri/subcortical-edit.mgz"
+RIBBON_EDIT="$SUBJECTS_DIR/$SUBJID/$OUTPUT_FOLDER/mri/ribbon-edit.mgz"
+SUBCORTICAL_EDIT="$SUBJECTS_DIR/$SUBJID/$OUTPUT_FOLDER/mri/subcortical-edit.mgz"
 
-SUBCORTICAL_MASK="$OUTPUT_FOLDER/mri/subcortical-mask.mgz"
-BRAIN_MASK="$OUTPUT_FOLDER/mri/brain-mask.mgz"
+SUBCORTICAL_MASK="$SUBJECTS_DIR/$SUBJID/$OUTPUT_FOLDER/mri/subcortical-mask.mgz"
+BRAIN_MASK="$SUBJECTS_DIR/$SUBJID/$OUTPUT_FOLDER/mri/brain-mask.mgz"
 
-T1_MASKED="$OUTPUT_FOLDER/mri/T1-masked.mgz"
+T1_MASKED="$SUBJECTS_DIR/$SUBJID/$OUTPUT_FOLDER/mri/T1-masked.mgz"
 
-TALAIRACH="$OUTPUT_FOLDER/transforms/talairach.lta"
-NORM="$OUTPUT_FOLDER/mri/norm.mgz"
-TALAIRACH_M3Z="$OUTPUT_FOLDER/transforms/talairach.m3z"
-ASEG_AUTO_NOCCSEG="$OUTPUT_FOLDER/mri/aseg.auto_noCCseg.mgz"
-ASEG_AUTO="$OUTPUT_FOLDER/mri/aseg.auto.mgz"
-ASEG_PRESURF="$OUTPUT_FOLDER/mri/aseg.presurf.mgz"
+TALAIRACH="$SUBJECTS_DIR/$SUBJID/$OUTPUT_FOLDER/transforms/talairach.lta"
+NORM="$SUBJECTS_DIR/$SUBJID/$OUTPUT_FOLDER/mri/norm.mgz"
+TALAIRACH_M3Z="$SUBJECTS_DIR/$SUBJID/$OUTPUT_FOLDER/transforms/talairach.m3z"
+ASEG_AUTO_NOCCSEG="$SUBJECTS_DIR/$SUBJID/$OUTPUT_FOLDER/mri/aseg.auto_noCCseg.mgz"
+ASEG_AUTO="$SUBJECTS_DIR/$SUBJID/$OUTPUT_FOLDER/mri/aseg.auto.mgz"
+ASEG_PRESURF="$SUBJECTS_DIR/$SUBJID/$OUTPUT_FOLDER/mri/aseg.presurf.mgz"
 
-BRAIN="$OUTPUT_FOLDER/mri/brain.mgz"
-BRAIN_FINALSURFS="$OUTPUT_FOLDER/mri/brain.finalsurfs.mgz"
+BRAIN="$SUBJECTS_DIR/$SUBJID/$OUTPUT_FOLDER/mri/brain.mgz"
+BRAIN_FINALSURFS="$SUBJECTS_DIR/$SUBJID/$OUTPUT_FOLDER/mri/brain.finalsurfs.mgz"
 
-WM_BMASK="$OUTPUT_FOLDER/mri/wm-bmask.mgz"
-WM_MASK="$OUTPUT_FOLDER/mri/wm-mask.mgz"
-WM_CONCAT="$OUTPUT_FOLDER/mri/wm-concat.mgz"
-WM_BMASK_250="$OUTPUT_FOLDER/mri/wm-bmask-250.mgz"
-WM_ASEGEDIT="$OUTPUT_FOLDER/mri/wm-asegedit.mgz"
-WM_EDITED="$OUTPUT_FOLDER/mri/wm.mgz" # Use this name for mri_fix_topology
+WM_BMASK="$SUBJECTS_DIR/$SUBJID/$OUTPUT_FOLDER/mri/wm-bmask.mgz"
+WM_MASK="$SUBJECTS_DIR/$SUBJID/$OUTPUT_FOLDER/mri/wm-mask.mgz"
+WM_CONCAT="$SUBJECTS_DIR/$SUBJID/$OUTPUT_FOLDER/mri/wm-concat.mgz"
+WM_BMASK_250="$SUBJECTS_DIR/$SUBJID/$OUTPUT_FOLDER/mri/wm-bmask-250.mgz"
+WM_ASEGEDIT="$SUBJECTS_DIR/$SUBJID/$OUTPUT_FOLDER/mri/wm-asegedit.mgz"
+WM_EDITED="$SUBJECTS_DIR/$SUBJID/$OUTPUT_FOLDER/mri/wm.mgz" # Use this name for mri_fix_topology
 
-FILLED_PRETRESS_LH="$OUTPUT_FOLDER/mri/filled_pretress_lh.mgz"
-FILLED_PRETRESS_RH="$OUTPUT_FOLDER/mri/filled_pretress_rh.mgz"
-LH_ORIG_NOFIX_PREDEC="$OUTPUT_FOLDER/surf/lh.orig.nofix.predec"
-RH_ORIG_NOFIX_PREDEC="$OUTPUT_FOLDER/surf/rh.orig.nofix.predec"
-LH_ORIG_NOFIX="$OUTPUT_FOLDER/surf/lh.orig.nofix"
-RH_ORIG_NOFIX="$OUTPUT_FOLDER/surf/rh.orig.nofix"
+FILLED_PRETRESS_LH="$SUBJECTS_DIR/$SUBJID/$OUTPUT_FOLDER/mri/filled_pretress_lh.mgz"
+FILLED_PRETRESS_RH="$SUBJECTS_DIR/$SUBJID/$OUTPUT_FOLDER/mri/filled_pretress_rh.mgz"
+LH_ORIG_NOFIX_PREDEC="$SUBJECTS_DIR/$SUBJID/$OUTPUT_FOLDER/surf/lh.orig.nofix.predec"
+RH_ORIG_NOFIX_PREDEC="$SUBJECTS_DIR/$SUBJID/$OUTPUT_FOLDER/surf/rh.orig.nofix.predec"
+LH_ORIG_NOFIX="$SUBJECTS_DIR/$SUBJID/$OUTPUT_FOLDER/surf/lh.orig.nofix"
+RH_ORIG_NOFIX="$SUBJECTS_DIR/$SUBJID/$OUTPUT_FOLDER/surf/rh.orig.nofix"
 
-LH_SMOOTHW_NOFIX="$OUTPUT_FOLDER/surf/lh.smoothwm.nofix"
-RH_SMOOTHW_NOFIX="$OUTPUT_FOLDER/surf/rh.smoothwm.nofix"
-LH_INFLATED_NOFIX="$OUTPUT_FOLDER/surf/lh.inflated.nofix"
-RH_INFLATED_NOFIX="$OUTPUT_FOLDER/surf/rh.inflated.nofix"
-LH_QSPHERE_NOFIX="$OUTPUT_FOLDER/surf/lh.qsphere.nofix"
-RH_QSPHERE_NOFIX="$OUTPUT_FOLDER/surf/rh.qsphere.nofix"
+LH_SMOOTHW_NOFIX="$SUBJECTS_DIR/$SUBJID/$OUTPUT_FOLDER/surf/lh.smoothwm.nofix"
+RH_SMOOTHW_NOFIX="$SUBJECTS_DIR/$SUBJID/$OUTPUT_FOLDER/surf/rh.smoothwm.nofix"
+LH_INFLATED_NOFIX="$SUBJECTS_DIR/$SUBJID/$OUTPUT_FOLDER/surf/lh.inflated.nofix"
+RH_INFLATED_NOFIX="$SUBJECTS_DIR/$SUBJID/$OUTPUT_FOLDER/surf/rh.inflated.nofix"
+LH_QSPHERE_NOFIX="$SUBJECTS_DIR/$SUBJID/$OUTPUT_FOLDER/surf/lh.qsphere.nofix"
+RH_QSPHERE_NOFIX="$SUBJECTS_DIR/$SUBJID/$OUTPUT_FOLDER/surf/rh.qsphere.nofix"
 LH_ORIG_PREMESH="$SUBJECTS_DIR/$SUBJID/$OUTPUT_FOLDER/surf/lh.orig.premesh"
 RH_ORIG_PREMESH="$SUBJECTS_DIR/$SUBJID/$OUTPUT_FOLDER/surf/rh.orig.premesh"
 LH_ORIG="$SUBJECTS_DIR/$SUBJID/$OUTPUT_FOLDER/surf/lh.orig"
 RH_ORIG="$SUBJECTS_DIR/$SUBJID/$OUTPUT_FOLDER/surf/rh.orig"
 
-LH_CORTEX_LABEL="$OUTPUT_FOLDER/label/lh.cortex.label"
-RH_CORTEX_LABEL="$OUTPUT_FOLDER/label/rh.cortex.label"
+LH_CORTEX_LABEL="$SUBJECTS_DIR/$SUBJID/$OUTPUT_FOLDER/label/lh.cortex.label"
+RH_CORTEX_LABEL="$SUBJECTS_DIR/$SUBJID/$OUTPUT_FOLDER/label/rh.cortex.label"
 #LH_CORTEX_HIPAMYG_LABEL="$OUTPUT_FOLDER/label/lh.cortex+hipamyg.label"
 #RH_CORTEX_HIPAMYG_LABEL="$OUTPUT_FOLDER/label/rh.cortex+hipamyg.label"
 
-AUTODET_NEW_GW_STATS_LH="$OUTPUT_FOLDER/surf/autodet-new.gw.stats.lh.dat"
-AUTODET_NEW_GW_STATS_RH="$OUTPUT_FOLDER/surf/autodet-new.gw.stats.rh.dat"
-LH_RIBBON_EDIT_PIAL="$OUTPUT_FOLDER/surf/lh.ribbon_edit.pial"
-RH_RIBBON_EDIT_PIAL="$OUTPUT_FOLDER/surf/rh.ribbon_edit.pial"
+AUTODET_NEW_GW_STATS_LH="$SUBJECTS_DIR/$SUBJID/$OUTPUT_FOLDER/surf/autodet-new.gw.stats.lh.dat"
+AUTODET_NEW_GW_STATS_RH="$SUBJECTS_DIR/$SUBJID/$OUTPUT_FOLDER/surf/autodet-new.gw.stats.rh.dat"
+LH_RIBBON_EDIT_PIAL="$SUBJECTS_DIR/$SUBJID/$OUTPUT_FOLDER/surf/lh.ribbon_edit.pial"
+RH_RIBBON_EDIT_PIAL="$SUBJECTS_DIR/$SUBJID/$OUTPUT_FOLDER/surf/rh.ribbon_edit.pial"
 
-LH_RIBBON_EDIT_PIAL_SMOOTH="$OUTPUT_FOLDER/surf/lh.ribbon_edit.smooth.pial"
-RH_RIBBON_EDIT_PIAL_SMOOTH="$OUTPUT_FOLDER/surf/rh.ribbon_edit.smooth.pial"
+LH_RIBBON_EDIT_PIAL_SMOOTH="$SUBJECTS_DIR/$SUBJID/$OUTPUT_FOLDER/surf/lh.ribbon_edit.smooth.pial"
+RH_RIBBON_EDIT_PIAL_SMOOTH="$SUBJECTS_DIR/$SUBJID/$OUTPUT_FOLDER/surf/rh.ribbon_edit.smooth.pial"
 
 #################
 ## Indicate a new invocation of this script in report.sh
 #################
-Create #Test if outputs folder already exist, and if it does not, create one
+#Test if outputs folder already exist, and if it does not, create one
+Create
+
 Echo "
 #*******************
 #*******************
@@ -327,10 +336,10 @@ Echo "# Given ribbon: $RIBBON"
 Echo "# Given subcortical: $SUBCORTICAL"
 
 cmd "Convert $RIBBON and $SUBCORTICAL for same dimensions" \
-"mri_convert $RIBBON $RIBBON_EDIT -rt nearest -ns 1 --conform_min"
+"mri_convert $RIBBON $RIBBON_EDIT"  #-rt nearest -ns 1 --conform_min"
 
 cmd "" \
-"mri_convert $SUBCORTICAL $SUBCORTICAL_EDIT -rt nearest -ns 1 --conform_min"
+"mri_convert $SUBCORTICAL $SUBCORTICAL_EDIT" #-rt nearest -ns 1 --conform_min"
 fi
 
 # Get corrected bmask of the whole brain
