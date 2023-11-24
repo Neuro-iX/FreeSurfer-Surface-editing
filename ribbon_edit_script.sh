@@ -379,20 +379,7 @@ cmd "Subcortical Segment: mri_ca_label" \
 
 cmd "CC Segment: mri_cc" \
 "mri_cc -aseg aseg.auto_noCCseg.mgz -o aseg.auto.mgz -lta $CC_UP $SUBJID/$OUTPUT_FOLDER" # Function "mri_cc" add "mri/" to $ASEG_AUTO_NOCCSEG and $ASEG_AUTO
-fi
 
-
-#OR
-#cmd "Copy" \
-#"cp $BRAIN $BRAIN_FINALSURFS"
-
-
-#################
-## Compute wm.mgz : wm-bmask AND if(wm == 250 & wm-bmask), then wm-mask = 250
-#################
-# Extract white matter from ribbon-edit to create wm-bmask.mgz
-if ((TAG<=6))
-then
 cmd "Merge ASeg" \
 "cp $ASEG_AUTO $ASEG_PRESURF"
 
@@ -402,7 +389,17 @@ cmd "Intensity Normalize" \
 #Not needed
 cmd "Mask BFS" \
 "mri_mask -T 5 $BRAIN $T1_MASKED $BRAIN_FINALSURFS"
+#OR
+#cmd "Copy" \
+#"cp $BRAIN $BRAIN_FINALSURFS"
+fi
 
+#################
+## Compute wm.mgz : wm-bmask AND if(wm == 250 & wm-bmask), then wm-mask = 250
+#################
+# Extract white matter from ribbon-edit to create wm-bmask.mgz
+if ((TAG<=6))
+then
 cmd "Extract WM from $RIBBON_EDIT" \
 "mri_extract_label $RIBBON_EDIT 1 3 $WM_BMASK" #0/128 binary mask
 fi
