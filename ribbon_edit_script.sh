@@ -8,7 +8,7 @@ Help ()
 builtin echo "
 AUTHOR: Benoît Verreman
 
-LAST UPDATE: 2023-11-22
+LAST UPDATE: 2023-11-24
 
 DESCRIPTION: 
 Use ribbon and subcortical NIFTI files to recompute pial surface,
@@ -67,7 +67,7 @@ umask 0000
 current_date_time=$(date)
 TAG=1 # Start from beginning
 HEMI=0 # Both hemispheres
-OUTPUT_FOLDER="outputs"
+OUTPUT_FOLDER="outputsSCLabelConform"
 
 #################
 ## Function to print both on terminal and on script report.sh
@@ -88,10 +88,10 @@ if [ ! -d "$SUBJECTS_DIR/$SUBJID/$OUTPUT_FOLDER" ]
 then
 	cmd "Create $SUBJECTS_DIR/$SUBJID/$OUTPUT_FOLDER" \
 	"mkdir $SUBJECTS_DIR/$SUBJID/$OUTPUT_FOLDER;
-	mkdir $SUBJECTS_DIR/$SUBJID/$OUTPUT_FOLDER/transforms;
 	mkdir $SUBJECTS_DIR/$SUBJID/$OUTPUT_FOLDER/scripts;
 	mkdir $SUBJECTS_DIR/$SUBJID/$OUTPUT_FOLDER/surf;
 	mkdir $SUBJECTS_DIR/$SUBJID/$OUTPUT_FOLDER/mri;
+	mkdir $SUBJECTS_DIR/$SUBJID/$OUTPUT_FOLDER/mri/transforms;
 	mkdir $SUBJECTS_DIR/$SUBJID/$OUTPUT_FOLDER/label;"
 fi
 }
@@ -263,9 +263,9 @@ BRAIN_MASK="$SUBJECTS_DIR/$SUBJID/$OUTPUT_FOLDER/mri/brain-mask.mgz"
 
 T1_MASKED="$SUBJECTS_DIR/$SUBJID/$OUTPUT_FOLDER/mri/T1-masked.mgz"
 
-TALAIRACH="$SUBJECTS_DIR/$SUBJID/$OUTPUT_FOLDER/transforms/talairach.lta"
+TALAIRACH="$SUBJECTS_DIR/$SUBJID/$OUTPUT_FOLDER/mri/transforms/talairach.lta"
 NORM="$SUBJECTS_DIR/$SUBJID/$OUTPUT_FOLDER/mri/norm.mgz"
-TALAIRACH_M3Z="$SUBJECTS_DIR/$SUBJID/$OUTPUT_FOLDER/transforms/talairach.m3z"
+TALAIRACH_M3Z="$SUBJECTS_DIR/$SUBJID/$OUTPUT_FOLDER/mri/transforms/talairach.m3z"
 ASEG_AUTO_NOCCSEG="$SUBJECTS_DIR/$SUBJID/$OUTPUT_FOLDER/mri/aseg.auto_noCCseg.mgz"
 ASEG_AUTO="$SUBJECTS_DIR/$SUBJID/$OUTPUT_FOLDER/mri/aseg.auto.mgz"
 ASEG_PRESURF="$SUBJECTS_DIR/$SUBJID/$OUTPUT_FOLDER/mri/aseg.presurf.mgz"
@@ -336,17 +336,17 @@ Echo "# Given ribbon: $RIBBON"
 Echo "# Given subcortical: $SUBCORTICAL"
 
 cmd "Convert $RIBBON and $SUBCORTICAL for same dimensions" \
-"mri_convert $RIBBON $RIBBON_EDIT"  #-rt nearest -ns 1 --conform_min"
+"mri_convert $RIBBON $RIBBON_EDIT -rt nearest -ns 1 --conform_min"
 
 cmd "" \
-"mri_convert $SUBCORTICAL $SUBCORTICAL_EDIT" #-rt nearest -ns 1 --conform_min"
+"mri_convert $SUBCORTICAL $SUBCORTICAL_EDIT -rt nearest -ns 1 --conform_min"
 fi
 
 # Get corrected bmask of the whole brain
 if ((TAG<=3))
 then
 cmd "Extract labels from $SUBCORTICAL_EDIT (Cerebellum, Medulla oblongata, Pons and Midbrain) into $SUBCORTICAL_MASK" \
-"mri_extract_label $SUBCORTICAL_EDIT 5 15 29 30 33 34 $SUBCORTICAL_MASK"
+"mri_extract_label $SUBCORTICAL_EDIT 5 15 29 30 32 31 $SUBCORTICAL_MASK"
 
 cmd "Concatenate $RIBBON_EDIT with $SUBCORTICAL_MASK into $BRAIN_MASK" \
 "mri_concat --i $RIBBON_EDIT --i $SUBCORTICAL_MASK --o $BRAIN_MASK --combine"
@@ -378,8 +378,21 @@ cmd "Subcortical Segment: mri_ca_label" \
 "mri_ca_label -relabel_unlikely 9 .3 -prior 0.5 -align $NORM $TALAIRACH_M3Z $RB_ALL $ASEG_AUTO_NOCCSEG"
 
 cmd "CC Segment: mri_cc" \
-"mri_cc -aseg ../$ASEG_AUTO_NOCCSEG -o ../$ASEG_AUTO -lta $CC_UP $SUBJID" # Function "mri_cc" add "mri/" to $ASEG_AUTO_NOCCSEG and $ASEG_AUTO
+"mri_cc -aseg aseg.auto_noCCseg.mgz -o aseg.auto.mgz -lta $CC_UP $SUBJID/$OUTPUT_FOLDER" # Function "mri_cc" add "mri/" to $ASEG_AUTO_NOCCSEG and $ASEG_AUTO
+fi
 
+
+#OR
+#cmd "Copy" \
+#"cp $BRAIN $BRAIN_FINALSURFS"
+
+
+#################
+## Compute wm.mgz : wm-bmask AND if(wm == 250 & wm-bmask), then wm-mask = 250
+#################
+# Extract white matter from ribbon-edit to create wm-bmask.mgz
+if ((TAG<=6))
+then
 cmd "Merge ASeg" \
 "cp $ASEG_AUTO $ASEG_PRESURF"
 
@@ -390,17 +403,6 @@ cmd "Intensity Normalize" \
 cmd "Mask BFS" \
 "mri_mask -T 5 $BRAIN $T1_MASKED $BRAIN_FINALSURFS"
 
-#OR
-#cmd "Copy" \
-#"cp $BRAIN $BRAIN_FINALSURFS"
-fi
-
-#################
-## Compute wm.mgz : wm-bmask AND if(wm == 250 & wm-bmask), then wm-mask = 250
-#################
-# Extract white matter from ribbon-edit to create wm-bmask.mgz
-if ((TAG<=6))
-then
 cmd "Extract WM from $RIBBON_EDIT" \
 "mri_extract_label $RIBBON_EDIT 1 3 $WM_BMASK" #0/128 binary mask
 fi
