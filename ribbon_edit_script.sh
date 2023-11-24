@@ -401,7 +401,7 @@ fi
 if ((TAG<=6))
 then
 cmd "Extract WM from $RIBBON_EDIT" \
-"mri_extract_label $RIBBON_EDIT 1 3 $WM_BMASK" #0/128 binary mask
+"mri_extract_label $RIBBON_EDIT 2 41 $WM_BMASK" #0/128 binary mask
 fi
 
 # Compute WM_EDIT based on BRAIN_FINALSURFS masked by WM_BMASK
