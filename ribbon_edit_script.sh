@@ -436,10 +436,10 @@ if ((HEMI>=0))
 then
 	# Compute directly ORIG_NOFIX
 	cmd "Pretress lh WM from $RIBBON_EDIT" \
-	"mri_pretess $RIBBON_EDIT 1 $NORM $FILLED_PRETRESS_LH"
+	"mri_pretess $RIBBON_EDIT 2 $NORM $FILLED_PRETRESS_LH"
 
 	cmd "Tessellate lh WM surf" \
-	"mri_tessellate $FILLED_PRETRESS_LH 1 $LH_ORIG_NOFIX_PREDEC"
+	"mri_tessellate $FILLED_PRETRESS_LH 2 $LH_ORIG_NOFIX_PREDEC"
 
 	cmd "Extract main component lh WM surf" \
 	"mris_extract_main_component $LH_ORIG_NOFIX_PREDEC $LH_ORIG_NOFIX_PREDEC"
@@ -476,10 +476,10 @@ if ((HEMI<=0))
 then
 	# Compute directly ORIG_NOFIX
 	cmd "Pretress rh WM from $RIBBON_EDIT" \
-	"mri_pretess $RIBBON_EDIT 3 $NORM $FILLED_PRETRESS_RH"
+	"mri_pretess $RIBBON_EDIT 41 $NORM $FILLED_PRETRESS_RH"
 
 	cmd "Tessellate rh WM surf" \
-	"mri_tessellate $FILLED_PRETRESS_RH 3 $RH_ORIG_NOFIX_PREDEC"
+	"mri_tessellate $FILLED_PRETRESS_RH 41 $RH_ORIG_NOFIX_PREDEC"
 
 	cmd "Extract main component rh WM surf" \
 	"mris_extract_main_component $RH_ORIG_NOFIX_PREDEC $RH_ORIG_NOFIX_PREDEC"
