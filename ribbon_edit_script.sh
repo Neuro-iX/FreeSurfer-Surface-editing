@@ -8,7 +8,7 @@ Help ()
 builtin echo "
 AUTHOR: Benoît Verreman
 
-LAST UPDATE: 2023-11-24
+LAST UPDATE: 2023-12-12
 
 DESCRIPTION: 
 Use ribbon and subcortical NIFTI files to recompute pial surface,
@@ -24,11 +24,15 @@ Prepare ribbon and subcortical NIFTI files (first step in the pipeline: convert)
 Put the script inside <subjid> folder
 
 EXAMPLES:
+$ bash ribbon_edit_script.sh -i 133019_T1w_acpc_dc_restore.nii.gz -s 133019 -r 133019_ribbon.nii.gz -c 133019_subcortical.nii.gz
+
 $ bash ribbon_edit_script.sh --subjid <subjid> --ribbon <ribbon-edit.nii.gz> --subcortical <subcortical.nii.gz>
 
 $ bash ribbon_edit_script.sh -s <subjid> --pial --rh
 
 PARAMETERS:
+--image or -i: Relative or absolute path to T1w image file
+
 --subjid or -s: Relative or absolute path to subjid folder 
 --ribbon or -r: Relative or absolute path to ribbon file
 --subcortical or -c: Relative or absolute path to subcortical file
@@ -67,23 +71,34 @@ umask 0000
 current_date_time=$(date)
 TAG=1 # Start from beginning
 HEMI=0 # Both hemispheres
-OUTPUT_FOLDER="outputsSCLabelConform"
+FS=0 # Default: No Freesurfer
+OUTPUT_FOLDER="outputs"
 
 #################
 ## Function to print both on terminal and on script report.sh
 #################
 Echo ()
 {
-    builtin echo "$@" | tee -a $SUBJECTS_DIR/$SUBJID/$OUTPUT_FOLDER/report.sh
+    builtin echo "$@" | tee -a $SUBJECTS_DIR/report.sh
 }
 
 #################
-## Function to reset report.sh and outputs
+## Function to reset report.sh, $OUTPUT_FOLDER and mri_convert_correction_by_translation.py
 #################
-Create()
+CreateScripts()
 {
+if [ ! -f "$SUBJECTS_DIR/report.sh" ]
+then
 Echo "#!/bin/bash"
+fi
 
+script_nifti_padding
+
+script_expert_file
+}
+
+CreateFolders()
+{
 if [ ! -d "$SUBJECTS_DIR/$SUBJID/$OUTPUT_FOLDER" ]
 then
 	cmd "Create $SUBJECTS_DIR/$SUBJID/$OUTPUT_FOLDER" \
@@ -98,11 +113,66 @@ fi
 
 Delete()
 {
-rm -f report.sh
-
 cmd "Reset $SUBJECTS_DIR/$SUBJID/$OUTPUT_FOLDER" \
 "rm -r $SUBJECTS_DIR/$SUBJID/$OUTPUT_FOLDER;"
-Create
+
+rm $SUBJECTS_DIR/report.sh
+}
+
+#################
+## Create a python script "mri_convert_correction_by_translation.py"
+#################
+script_nifti_padding()
+{
+if [ ! -f "$SUBJECTS_DIR/nifti_padding.py" ]
+then
+cat > $SUBJECTS_DIR/nifti_padding.py <<EOF
+import os
+import nibabel as nib
+import nibabel.processing #Used in conform
+import scipy.ndimage #Used in conform
+import sys #To add parameters
+
+# SUBJID directory
+img_in = sys.argv[1]
+img_out = sys.argv[2]
+
+#Load image to be treated
+if not os.path.isfile(img_in):
+    raise FileNotFoundError("The following path doesn't exist: " + img_in)
+else:
+    img = nib.load(img_in)
+
+#New MRI image
+def padding(img, new_name):
+    new_img = nib.processing.conform(img, out_shape=(311, 311, 311), \
+    voxel_size=(0.7, 0.7, 0.7), order=0, cval=0, orientation='LAS', out_class=None)
+    nib.save(new_img, new_name)
+    
+padding(img, img_out)
+EOF
+fi
+}
+
+#################
+## Create an expert_file.txt for FreeSurfer
+#################
+script_expert_file()
+{
+if [ ! -f "$SUBJECTS_DIR/expert_file.txt" ]
+then
+cat > $SUBJECTS_DIR/expert_file.txt <<EOF
+mris_inflate -n 30
+EOF
+fi
+}
+
+#################
+## Use python script "nifti_padding.py"
+#################
+nifti_padding()
+{
+python $SUBJECTS_DIR/nifti_padding.py $1 $2
 }
 
 #################
@@ -126,11 +196,12 @@ eval $2
 #################
 ## Manage flags
 #################
+unset -v IMAGE
 unset -v SUBJID
 unset -v RIBBON
 unset -v SUBCORTICAL
 
-VALID_ARGS=$(getopt -o s:r:c:h --long subjid:,ribbon:,subcortical:,help,convert,bmask,maskT1,brain.finalsurfs,wm-bmask,wm,orig,stats,pial,smooth,rh,lh,del -- "$@")
+VALID_ARGS=$(getopt -o i:s:r:c:h --long image:,subjid:,ribbon:,subcortical:,help,convert,bmask,maskT1,brain.finalsurfs,wm-bmask,wm,orig,stats,pial,smooth,rh,lh,del -- "$@")
 if [[ $? -ne 0 ]]; then
     exit 1;
 fi
@@ -138,6 +209,11 @@ fi
 eval set -- "$VALID_ARGS"
 while [ : ]; do
   case "$1" in
+    -i | --image)
+        IMAGE=$2
+        FS=1
+        shift 2
+        ;;
     -s | --subjid)
         SUBJID=$2
         shift 2
@@ -203,7 +279,7 @@ while [ : ]; do
 	shift
 	;;
     --del)
-	Delete
+	Delete #Only report.sh and $OUTPUT_FOLDER
 	shift
 	;;
     --) shift; 
@@ -255,12 +331,17 @@ SUBCORTICALMASSLUT="$FREESURFER_HOME/SubCorticalMassLUT.txt"
 #################
 ## Output files
 #################
+IMAGE_PADDED="$SUBJECTS_DIR/image-padded.mgz"
+
+RIBBON_PADDED="$SUBJECTS_DIR/$SUBJID/$OUTPUT_FOLDER/mri/ribbon-precorrection.mgz"
+SUBCORTICAL_PADDED="$SUBJECTS_DIR/$SUBJID/$OUTPUT_FOLDER/mri/subcortical-precorrection.mgz"
 RIBBON_EDIT="$SUBJECTS_DIR/$SUBJID/$OUTPUT_FOLDER/mri/ribbon-edit.mgz"
 SUBCORTICAL_EDIT="$SUBJECTS_DIR/$SUBJID/$OUTPUT_FOLDER/mri/subcortical-edit.mgz"
 
 SUBCORTICAL_MASK="$SUBJECTS_DIR/$SUBJID/$OUTPUT_FOLDER/mri/subcortical-mask.mgz"
 BRAIN_MASK="$SUBJECTS_DIR/$SUBJID/$OUTPUT_FOLDER/mri/brain-mask.mgz"
 
+T1_CORRECTED="$SUBJECTS_DIR/$SUBJID/$OUTPUT_FOLDER/mri/T1-corrected.mgz"
 T1_MASKED="$SUBJECTS_DIR/$SUBJID/$OUTPUT_FOLDER/mri/T1-masked.mgz"
 
 TALAIRACH="$SUBJECTS_DIR/$SUBJID/$OUTPUT_FOLDER/mri/transforms/talairach.lta"
@@ -312,10 +393,10 @@ LH_RIBBON_EDIT_PIAL_SMOOTH="$SUBJECTS_DIR/$SUBJID/$OUTPUT_FOLDER/surf/lh.ribbon_
 RH_RIBBON_EDIT_PIAL_SMOOTH="$SUBJECTS_DIR/$SUBJID/$OUTPUT_FOLDER/surf/rh.ribbon_edit.smooth.pial"
 
 #################
-## Indicate a new invocation of this script in report.sh
+## New invocation in report.sh and create
 #################
-#Test if outputs folder already exist, and if it does not, create one
-Create
+#Test if $OUTPUT_FOLDER folder already exist, and if it does not, create one
+CreateScripts
 
 Echo "
 #*******************
@@ -324,6 +405,29 @@ Echo "
 # New invocation of ribbon_edit_script.sh
 
 # Given subjid: $SUBJID"
+
+#################
+## FreeSurfer 7.4.1 on $IMAGE creating $SUBJECTS_DIR/$SUBJID folder
+#################
+if ((FS == 1 && TAG <= 1))
+then
+# Test if user provided $IMAGE
+: ${IMAGE:?Missing argument --image or -i}
+Echo "# Given image: $IMAGE"
+
+if [ -d "$SUBJECTS_DIR/$SUBJID" ]
+then
+	Echo "Do not re-run FreeSurfer on same SUBJID: $SUBJECTS_DIR/$SUBJID"
+	exit 1
+fi
+
+cmd "Compensate for future translation in FreeSurfer" \
+"nifti_padding $IMAGE $IMAGE_PADDED"
+
+#-xopts-overwrite is used when expert file already used before
+cmd "Apply recon-all -autorecon 1 and 2 on $IMAGE_PADDED" \
+"recon-all -autorecon1 -autorecon2 -s $SUBJID -i $IMAGE_PADDED -hires -parallel -openmp 4 -expert expert_file.txt -xopts-overwrite" 
+fi
 
 #################
 ## Convert ribbon and subcortical
@@ -335,14 +439,25 @@ then
 Echo "# Given ribbon: $RIBBON"
 Echo "# Given subcortical: $SUBCORTICAL"
 
-cmd "Convert $RIBBON and $SUBCORTICAL for same dimensions" \
-"mri_convert $RIBBON $RIBBON_EDIT -rt nearest -ns 1 --conform_min"
+CreateFolders
 
-cmd "" \
-"mri_convert $SUBCORTICAL $SUBCORTICAL_EDIT -rt nearest -ns 1 --conform_min"
+cmd "Use script nifti_padding.py on $RIBBON" \
+"nifti_padding $RIBBON $RIBBON_PADDED"
+
+cmd "Use script nifti_padding.py on $SUBCORTICAL" \
+"nifti_padding $SUBCORTICAL $SUBCORTICAL_PADDED"
+
+#Necessary for correcting the orientation of the image
+cmd "Convert $RIBBON_PADDED" \
+"mri_convert $RIBBON_PADDED $RIBBON_EDIT -rt nearest -ns 1 --conform_min"
+
+cmd "Convert $SUBCORTICAL_PADDED" \
+"mri_convert $SUBCORTICAL_PADDED $SUBCORTICAL_EDIT -rt nearest -ns 1 --conform_min"
 fi
 
-# Get corrected bmask of the whole brain
+#################
+## Exctract labels from ribbon and subcortical into brain_mask
+#################
 if ((TAG<=3))
 then
 cmd "Extract labels from $SUBCORTICAL_EDIT (Cerebellum, Medulla oblongata, Pons and Midbrain) into $SUBCORTICAL_MASK" \
@@ -355,7 +470,6 @@ fi
 #################
 ## Recompute brain.finalsurfs.mgz
 #################
-# Mask T1
 if ((TAG<=4))
 then
 cmd "Mask $T1 with $BRAIN_MASK into $T1_MASKED" \
