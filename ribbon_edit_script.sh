@@ -8,7 +8,7 @@ Help ()
 builtin echo "
 AUTHOR: Benoît Verreman
 
-LAST UPDATE: 2023-12-12
+LAST UPDATE: 2024-02-08
 
 DESCRIPTION: 
 Use ribbon and subcortical NIFTI files to recompute pial surface,
@@ -33,7 +33,7 @@ $ bash ribbon_edit_script.sh -s <subjid> --pial --rh
 PARAMETERS:
 --image or -i: Relative or absolute path to T1w image file
 
---subjid or -s: Relative or absolute path to subjid folder 
+--subjid or -s: Relative or absolute path to subjid folder (Necessary)
 --ribbon or -r: Relative or absolute path to ribbon file
 --subcortical or -c: Relative or absolute path to subcortical file
 
@@ -61,11 +61,6 @@ HEMI
 }
 
 #################
-## Set default permission of working directory to a+rwx
-#################
-umask 0000
-
-#################
 ## Default global variables
 #################
 current_date_time=$(date)
@@ -73,6 +68,130 @@ TAG=1 # Start from beginning
 HEMI=0 # Both hemispheres
 FS=0 # Default: No Freesurfer
 OUTPUT_FOLDER="outputs"
+
+#################
+## Manage flags
+#################
+unset -v IMAGE
+unset -v SUBJID
+unset -v RIBBON
+unset -v SUBCORTICAL
+
+VALID_ARGS=$(getopt -o i:s:r:c:h --long image:,subjid:,ribbon:,subcortical:,help,convert,bmask,maskT1,brain.finalsurfs,wm-bmask,wm,orig,stats,pial,smooth,rh,lh,del -- "$@")
+if [[ $? -ne 0 ]]; then
+    exit 1;
+fi
+
+eval set -- "$VALID_ARGS"
+while [ : ]; do
+  case "$1" in
+    -i | --image)
+        IMAGE=$2
+        FS=1
+        shift 2
+        ;;
+    -s | --subjid)
+        SUBJID=$2
+        shift 2
+        ;;
+    -r | --ribbon)
+        RIBBON=$2
+        shift 2
+        ;;
+    -c | --subcortical)
+        SUBCORTICAL=$2
+        shift 2
+        ;;     
+    -h | --help)
+	Help
+	exit 1
+	;;
+    --convert)
+	TAG=2
+	shift
+	;;
+    --bmask)
+	TAG=3
+	shift
+	;;
+    --maskT1)
+	TAG=4
+	shift
+	;;	
+    --brain.finalsurfs)
+	TAG=5
+	shift
+	;;
+    --wm-bmask)
+	TAG=6
+	shift
+	;;
+    --wm)
+	TAG=7
+	shift
+	;;
+    --orig)
+	TAG=8
+	shift
+	;;
+    --stats)
+	TAG=9
+	shift
+	;;
+    --pial)
+	TAG=10
+	shift
+	;;
+    --smooth)
+	TAG=11
+	shift
+	;;
+    --lh)
+	HEMI=1
+	shift
+	;;
+    --rh)
+	HEMI=-1
+	shift
+	;;
+    --del)
+	Delete #Only report.sh and $OUTPUT_FOLDER
+	shift
+	;;
+    --) shift; 
+        break 
+        ;;
+  esac
+done
+
+shift "$(( OPTIND - 1 ))"
+
+# Test if user provided SUBJID
+: ${SUBJID:?Missing argument --subjid or -s}
+
+#################
+## Remove slaches from $SUBJECTS_DIR and $SUBJID
+#################
+export var="${SUBJECTS_DIR: -1}"
+if [[ "$var" == "/" ]]; then
+export SUBJECTS_DIR="${SUBJECTS_DIR:0:-1}"
+fi
+
+export var="${SUBJID: -1}"
+if [[ "$var" == "/" ]]; then
+export SUBJID="${SUBJID:0:-1}"
+fi
+
+export var="${SUBJID:0:1}"
+if [[ "$var" == "/" ]]; then
+export SUBJID="${SUBJID:1}"
+fi
+
+#################
+## Set default permission of working directory to a+rwx
+#################
+#cd $SUBJECTS_DIR
+#umask 0000
 
 #################
 ## Function to print both on terminal and on script report.sh
@@ -194,124 +313,6 @@ eval $2
 }
 
 #################
-## Manage flags
-#################
-unset -v IMAGE
-unset -v SUBJID
-unset -v RIBBON
-unset -v SUBCORTICAL
-
-VALID_ARGS=$(getopt -o i:s:r:c:h --long image:,subjid:,ribbon:,subcortical:,help,convert,bmask,maskT1,brain.finalsurfs,wm-bmask,wm,orig,stats,pial,smooth,rh,lh,del -- "$@")
-if [[ $? -ne 0 ]]; then
-    exit 1;
-fi
-
-eval set -- "$VALID_ARGS"
-while [ : ]; do
-  case "$1" in
-    -i | --image)
-        IMAGE=$2
-        FS=1
-        shift 2
-        ;;
-    -s | --subjid)
-        SUBJID=$2
-        shift 2
-        ;;
-    -r | --ribbon)
-        RIBBON=$2
-        shift 2
-        ;;
-    -c | --subcortical)
-        SUBCORTICAL=$2
-        shift 2
-        ;;     
-    -h | --help)
-	Help
-	exit 1
-	;;
-    --convert)
-	TAG=2
-	shift
-	;;
-    --bmask)
-	TAG=3
-	shift
-	;;
-    --maskT1)
-	TAG=4
-	shift
-	;;	
-    --brain.finalsurfs)
-	TAG=5
-	shift
-	;;
-    --wm-bmask)
-	TAG=6
-	shift
-	;;
-    --wm)
-	TAG=7
-	shift
-	;;
-    --orig)
-	TAG=8
-	shift
-	;;
-    --stats)
-	TAG=9
-	shift
-	;;
-    --pial)
-	TAG=10
-	shift
-	;;
-    --smooth)
-	TAG=11
-	shift
-	;;
-    --lh)
-	HEMI=1
-	shift
-	;;
-    --rh)
-	HEMI=-1
-	shift
-	;;
-    --del)
-	Delete #Only report.sh and $OUTPUT_FOLDER
-	shift
-	;;
-    --) shift; 
-        break 
-        ;;
-  esac
-done
-
-shift "$(( OPTIND - 1 ))"
-
-# Test if user provided SUBJID
-: ${SUBJID:?Missing argument --subjid or -s}
-
-#################
-## Remove slaches from $SUBJECTS_DIR and $SUBJID
-#################
-export var="${SUBJECTS_DIR: -1}"
-if [[ "$var" == "/" ]]; then
-export SUBJECTS_DIR="${SUBJECTS_DIR:0:-1}"
-fi
-
-export var="${SUBJID: -1}"
-if [[ "$var" == "/" ]]; then
-export SUBJID="${SUBJID:0:-1}"
-fi
-
-export var="${SUBJID:0:1}"
-if [[ "$var" == "/" ]]; then
-export SUBJID="${SUBJID:1}"
-fi
-
-#################
 ## Input files
 #################
 T1="$SUBJECTS_DIR/$SUBJID/mri/T1.mgz"
@@ -381,8 +382,8 @@ RH_ORIG="$SUBJECTS_DIR/$SUBJID/$OUTPUT_FOLDER/surf/rh.orig"
 
 LH_CORTEX_LABEL="$SUBJECTS_DIR/$SUBJID/$OUTPUT_FOLDER/label/lh.cortex.label"
 RH_CORTEX_LABEL="$SUBJECTS_DIR/$SUBJID/$OUTPUT_FOLDER/label/rh.cortex.label"
-#LH_CORTEX_HIPAMYG_LABEL="$OUTPUT_FOLDER/label/lh.cortex+hipamyg.label"
-#RH_CORTEX_HIPAMYG_LABEL="$OUTPUT_FOLDER/label/rh.cortex+hipamyg.label"
+LH_CORTEX_HIPAMYG_LABEL="$SUBJECTS_DIR/$SUBJID/$OUTPUT_FOLDER/label/lh.cortex+hipamyg.label"
+RH_CORTEX_HIPAMYG_LABEL="$SUBJECTS_DIR/$SUBJID/$OUTPUT_FOLDER/label/rh.cortex+hipamyg.label"
 
 AUTODET_NEW_GW_STATS_LH="$SUBJECTS_DIR/$SUBJID/$OUTPUT_FOLDER/surf/autodet-new.gw.stats.lh.dat"
 AUTODET_NEW_GW_STATS_RH="$SUBJECTS_DIR/$SUBJID/$OUTPUT_FOLDER/surf/autodet-new.gw.stats.rh.dat"
@@ -648,8 +649,8 @@ then
 	"mri_label2label --label-cortex $LH_ORIG $ASEG_PRESURF 0 $LH_CORTEX_LABEL"
 	
 	# Compute labels to remove HIPOCAMPUS AND AMYGDALA from pial surface in mris_place_surface
-	#cmd "Label2label for lh cortex" \
-	#"mri_label2label --label-cortex $LH_ORIG $ASEG_PRESURF 1 $LH_CORTEX_HIPAMYG_LABEL"
+	cmd "Label2label for lh cortex" \
+	"mri_label2label --label-cortex $LH_ORIG $ASEG_PRESURF 1 $LH_CORTEX_HIPAMYG_LABEL"
 
 fi
 
@@ -669,8 +670,8 @@ then
 	"mri_label2label --label-cortex $RH_ORIG $ASEG_PRESURF 0 $RH_CORTEX_LABEL"
 
 	# Compute labels to remove HIPOCAMPUS AND AMYGDALA from pial surface in mris_place_surface
-	#cmd "Label2label for rh cortex" \
-	#"mri_label2label --label-cortex $RH_ORIG $ASEG_PRESURF 1 $RH_CORTEX_HIPAMYG_LABEL"
+	cmd "Label2label for rh cortex" \
+	"mri_label2label --label-cortex $RH_ORIG $ASEG_PRESURF 1 $RH_CORTEX_HIPAMYG_LABEL"
 fi
 fi
 
@@ -682,30 +683,32 @@ then
 if ((HEMI>=0))
 then	
 	cmd "Computes lh pial surface" \
-	"mris_place_surface --i $LH_ORIG --o $LH_RIBBON_EDIT_PIAL --nsmooth 0 --adgws-in $AUTODET_NEW_GW_STATS_LH --pial --lh --repulse-surf $LH_ORIG --invol $BRAIN_FINALSURFS --threads 6 --white-surf $LH_ORIG --pin-medial-wall $LH_CORTEX_LABEL --seg $ASEG_PRESURF --no-rip"
+	"mris_place_surface --i $LH_ORIG --o $LH_RIBBON_EDIT_PIAL --nsmooth 0 --adgws-in $AUTODET_NEW_GW_STATS_LH --pial --lh --repulse-surf $LH_ORIG --invol $BRAIN_FINALSURFS --threads 6 --white-surf $LH_ORIG --pin-medial-wall $LH_CORTEX_LABEL --seg $ASEG_PRESURF --no-rip" #--rip-label $LH_CORTEX_HIPAMYG_LABEL"
+	#"mris_place_surface --i $LH_ORIG --o $LH_RIBBON_EDIT_PIAL --nsmooth 0 --adgws-in $AUTODET_NEW_GW_STATS_LH --pial --lh --repulse-surf $LH_ORIG --invol $BRAIN_FINALSURFS --threads 6 --white-surf $LH_ORIG --pin-medial-wall $LH_CORTEX_LABEL --seg $ASEG_PRESURF --no-rip"
 fi
 
 if ((HEMI<=0))
 then
 	cmd "Computes rh pial surface" \
-	"mris_place_surface --i $RH_ORIG --o $RH_RIBBON_EDIT_PIAL --nsmooth 0 --adgws-in $AUTODET_NEW_GW_STATS_RH --pial --rh --repulse-surf $RH_ORIG --invol $BRAIN_FINALSURFS --threads 6 --white-surf $RH_ORIG --pin-medial-wall $RH_CORTEX_LABEL --seg $ASEG_PRESURF --no-rip"
+	"mris_place_surface --i $RH_ORIG --o $RH_RIBBON_EDIT_PIAL --nsmooth 0 --adgws-in $AUTODET_NEW_GW_STATS_RH --pial --rh --repulse-surf $RH_ORIG --invol $BRAIN_FINALSURFS --threads 6 --white-surf $RH_ORIG --pin-medial-wall $RH_CORTEX_LABEL --seg $ASEG_PRESURF --no-rip" #--rip-label $RH_CORTEX_HIPAMYG_LABEL"
+	#"mris_place_surface --i $RH_ORIG --o $RH_RIBBON_EDIT_PIAL --nsmooth 0 --adgws-in $AUTODET_NEW_GW_STATS_RH --pial --rh --repulse-surf $RH_ORIG --invol $BRAIN_FINALSURFS --threads 6 --white-surf $RH_ORIG --pin-medial-wall $RH_CORTEX_LABEL --seg $ASEG_PRESURF --no-rip"
 fi
 fi
 
 #################
 ## Add smoothing to pial surface (mris_place_surface)
-#################
-if ((TAG<=11))
-then
-if ((HEMI>=0))
-then	
-	cmd "Smooths lh pial surface" \
-	"mris_place_surface --i $LH_RIBBON_EDIT_PIAL --o $LH_RIBBON_EDIT_PIAL_SMOOTH --nsmooth 1 --adgws-in $AUTODET_NEW_GW_STATS_LH --pial --lh --repulse-surf $LH_RIBBON_EDIT_PIAL --invol $BRAIN_FINALSURFS --threads 6 --white-surf $LH_RIBBON_EDIT_PIAL --pin-medial-wall $LH_CORTEX_LABEL --seg $ASEG_PRESURF --no-rip"
-fi
+# #################
+# if ((TAG<=11))
+# then
+# if ((HEMI>=0))
+# then	
+# 	cmd "Smooths lh pial surface" \
+# 	"mris_place_surface --i $LH_RIBBON_EDIT_PIAL --o $LH_RIBBON_EDIT_PIAL_SMOOTH --nsmooth 1 --adgws-in $AUTODET_NEW_GW_STATS_LH --pial --lh --repulse-surf $LH_RIBBON_EDIT_PIAL --invol $BRAIN_FINALSURFS --threads 6 --white-surf $LH_RIBBON_EDIT_PIAL --pin-medial-wall $LH_CORTEX_LABEL --seg $ASEG_PRESURF --no-rip"
+# fi
 
-if ((HEMI<=0))
-then
-	cmd "Smooths rh pial surface" \
-	"mris_place_surface --i $RH_RIBBON_EDIT_PIAL --o $RH_RIBBON_EDIT_PIAL_SMOOTH --nsmooth 1 --adgws-in $AUTODET_NEW_GW_STATS_RH --pial --rh --repulse-surf $RH_RIBBON_EDIT_PIAL --invol $BRAIN_FINALSURFS --threads 6 --white-surf $RH_ORIG --pin-medial-wall $RH_CORTEX_LABEL --seg $ASEG_PRESURF --no-rip"
-fi
-fi
+# if ((HEMI<=0))
+# then
+# 	cmd "Smooths rh pial surface" \
+# 	"mris_place_surface --i $RH_RIBBON_EDIT_PIAL --o $RH_RIBBON_EDIT_PIAL_SMOOTH --nsmooth 1 --adgws-in $AUTODET_NEW_GW_STATS_RH --pial --rh --repulse-surf $RH_RIBBON_EDIT_PIAL --invol $BRAIN_FINALSURFS --threads 6 --white-surf $RH_ORIG --pin-medial-wall $RH_CORTEX_LABEL --seg $ASEG_PRESURF --no-rip"
+# fi
+# fi
