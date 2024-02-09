@@ -68,6 +68,10 @@ TAG=1 # Start from beginning
 HEMI=0 # Both hemispheres
 FS=0 # Default: No Freesurfer
 OUTPUT_FOLDER="outputs"
+LABELS_SUBCORTICAL="5 15 29 30 32 31"
+LABEL_RIBBON_WM_LH=2
+LABEL_RIBBON_WM_RH=41
+PIAL_BORDER_LOW=5
 
 #################
 ## Manage flags
@@ -462,7 +466,7 @@ fi
 if ((TAG<=3))
 then
 cmd "Extract labels from $SUBCORTICAL_EDIT (Cerebellum, Medulla oblongata, Pons and Midbrain) into $SUBCORTICAL_MASK" \
-"mri_extract_label $SUBCORTICAL_EDIT 5 15 29 30 32 31 $SUBCORTICAL_MASK"
+"mri_extract_label $SUBCORTICAL_EDIT $LABELS_SUBCORTICAL $SUBCORTICAL_MASK"
 
 cmd "Concatenate $RIBBON_EDIT with $SUBCORTICAL_MASK into $BRAIN_MASK" \
 "mri_concat --i $RIBBON_EDIT --i $SUBCORTICAL_MASK --o $BRAIN_MASK --combine"
@@ -516,7 +520,7 @@ fi
 if ((TAG<=6))
 then
 cmd "Extract WM from $RIBBON_EDIT" \
-"mri_extract_label $RIBBON_EDIT 2 41 $WM_BMASK" #0/128 binary mask
+"mri_extract_label $RIBBON_EDIT $LABEL_RIBBON_WM_LH $LABEL_RIBBON_WM_RH $WM_BMASK" #0/128 binary mask
 fi
 
 # Compute WM_EDIT based on BRAIN_FINALSURFS masked by WM_BMASK
@@ -551,10 +555,10 @@ if ((HEMI>=0))
 then
 	# Compute directly ORIG_NOFIX
 	cmd "Pretress lh WM from $RIBBON_EDIT" \
-	"mri_pretess $RIBBON_EDIT 2 $NORM $FILLED_PRETRESS_LH"
+	"mri_pretess $RIBBON_EDIT $RIBBON_WM_LH_LABEL $NORM $FILLED_PRETRESS_LH"
 
 	cmd "Tessellate lh WM surf" \
-	"mri_tessellate $FILLED_PRETRESS_LH 2 $LH_ORIG_NOFIX_PREDEC"
+	"mri_tessellate $FILLED_PRETRESS_LH $RIBBON_WM_LH_LABEL $LH_ORIG_NOFIX_PREDEC"
 
 	cmd "Extract main component lh WM surf" \
 	"mris_extract_main_component $LH_ORIG_NOFIX_PREDEC $LH_ORIG_NOFIX_PREDEC"
@@ -591,10 +595,10 @@ if ((HEMI<=0))
 then
 	# Compute directly ORIG_NOFIX
 	cmd "Pretress rh WM from $RIBBON_EDIT" \
-	"mri_pretess $RIBBON_EDIT 41 $NORM $FILLED_PRETRESS_RH"
+	"mri_pretess $RIBBON_EDIT $RIBBON_WM_RH_LABEL $NORM $FILLED_PRETRESS_RH"
 
 	cmd "Tessellate rh WM surf" \
-	"mri_tessellate $FILLED_PRETRESS_RH 41 $RH_ORIG_NOFIX_PREDEC"
+	"mri_tessellate $FILLED_PRETRESS_RH $RIBBON_WM_RH_LABEL $RH_ORIG_NOFIX_PREDEC"
 
 	cmd "Extract main component rh WM surf" \
 	"mris_extract_main_component $RH_ORIG_NOFIX_PREDEC $RH_ORIG_NOFIX_PREDEC"
@@ -642,7 +646,8 @@ then
 	# In order to improve pial surface, you can lower 'pial_border_low' to 20 
 	# Change stats
 	cmd "Change stats" \
-	"ex -s -c '%s/^pial_border_low.*/pial_border_low   5/g|x' $AUTODET_NEW_GW_STATS_LH"	
+	"sed -i'' -e 's/^pial_border_low[^/n]*/pial_border_low 5/' $AUTODET_NEW_GW_STATS_LH"
+	#ex -s -c '%s/^pial_border_low.*/pial_border_low   $PIAL_BORDER_LOW/g|x' $AUTODET_NEW_GW_STATS_LH
 	
 	# Compute labels for pin-medial-wall
 	cmd "Label2label for lh cortex" \
@@ -663,7 +668,8 @@ then
 	# In order to improve pial surface, you can lower 'pial_border_low' to 20 	
 	# Change stats
 	cmd "Change stats" \
-	"ex -s -c '%s/^pial_border_low.*/pial_border_low   5/g|x' $AUTODET_NEW_GW_STATS_RH"	
+	"sed -i'' -e 's/^pial_border_low[^/n]*/pial_border_low 5/' $AUTODET_NEW_GW_STATS_RH"	
+	#ex -s -c '%s/^pial_border_low.*/pial_border_low   $PIAL_BORDER_LOW/g|x' $AUTODET_NEW_GW_STATS_RH
 	
 	# Compute labels for pin-medial-wall
 	cmd "Label2label for rh cortex" \
@@ -698,17 +704,17 @@ fi
 #################
 ## Add smoothing to pial surface (mris_place_surface)
 # #################
-# if ((TAG<=11))
-# then
-# if ((HEMI>=0))
-# then	
-# 	cmd "Smooths lh pial surface" \
-# 	"mris_place_surface --i $LH_RIBBON_EDIT_PIAL --o $LH_RIBBON_EDIT_PIAL_SMOOTH --nsmooth 1 --adgws-in $AUTODET_NEW_GW_STATS_LH --pial --lh --repulse-surf $LH_RIBBON_EDIT_PIAL --invol $BRAIN_FINALSURFS --threads 6 --white-surf $LH_RIBBON_EDIT_PIAL --pin-medial-wall $LH_CORTEX_LABEL --seg $ASEG_PRESURF --no-rip"
-# fi
+if ((TAG<=11))
+then
+if ((HEMI>=0))
+then	
+	cmd "Smooths lh pial surface" \
+	"mris_place_surface --i $LH_RIBBON_EDIT_PIAL --o $LH_RIBBON_EDIT_PIAL_SMOOTH --nsmooth 1 --adgws-in $AUTODET_NEW_GW_STATS_LH --pial --lh --repulse-surf $LH_RIBBON_EDIT_PIAL --invol $BRAIN_FINALSURFS --threads 6 --white-surf $LH_RIBBON_EDIT_PIAL --pin-medial-wall $LH_CORTEX_LABEL --seg $ASEG_PRESURF --no-rip"
+fi
 
-# if ((HEMI<=0))
-# then
-# 	cmd "Smooths rh pial surface" \
-# 	"mris_place_surface --i $RH_RIBBON_EDIT_PIAL --o $RH_RIBBON_EDIT_PIAL_SMOOTH --nsmooth 1 --adgws-in $AUTODET_NEW_GW_STATS_RH --pial --rh --repulse-surf $RH_RIBBON_EDIT_PIAL --invol $BRAIN_FINALSURFS --threads 6 --white-surf $RH_ORIG --pin-medial-wall $RH_CORTEX_LABEL --seg $ASEG_PRESURF --no-rip"
-# fi
-# fi
+if ((HEMI<=0))
+then
+	cmd "Smooths rh pial surface" \
+ 	"mris_place_surface --i $RH_RIBBON_EDIT_PIAL --o $RH_RIBBON_EDIT_PIAL_SMOOTH --nsmooth 1 --adgws-in $AUTODET_NEW_GW_STATS_RH --pial --rh --repulse-surf $RH_RIBBON_EDIT_PIAL --invol $BRAIN_FINALSURFS --threads 6 --white-surf $RH_ORIG --pin-medial-wall $RH_CORTEX_LABEL --seg $ASEG_PRESURF --no-rip"
+fi
+fi
