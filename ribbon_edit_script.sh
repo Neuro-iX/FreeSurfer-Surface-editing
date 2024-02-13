@@ -8,7 +8,7 @@ Help ()
 builtin echo "
 AUTHOR: Benoît Verreman
 
-LAST UPDATE: 2024-02-08
+LAST UPDATE: 2024-02-13
 
 DESCRIPTION: 
 Use ribbon and subcortical NIFTI files to recompute pial surface,
@@ -18,7 +18,13 @@ Create a folder 'outputs' with all the output files.
 
 PREREQUISITE:
 Export SUBJECTS_DIR and FREESURFER_HOME correctly
-Launch Freesurfer 7.4.1 command: 
+Test if you have access to python: "which python"
+Install two python libraries: "pip install nibabel scipy"  
+
+If you want to launch Freesurfer 7.4.1 recon-all pipeline using the script:
+Add argument -i
+Else:
+Launch Freesurfer 7.4.1 command before using script: 
 $ recon-all -s <subjid> -i <subject_image> -autorecon1 -autorecon2 -hires -parallel -openmp 4 -expert expert_file.txt
 Prepare ribbon and subcortical NIFTI files (first step in the pipeline: convert)
 Put the script inside <subjid> folder
@@ -26,36 +32,34 @@ Put the script inside <subjid> folder
 EXAMPLES:
 $ bash ribbon_edit_script.sh -i 133019_T1w_acpc_dc_restore.nii.gz -s 133019 -r 133019_ribbon.nii.gz -c 133019_subcortical.nii.gz
 
-$ bash ribbon_edit_script.sh --subjid <subjid> --ribbon <ribbon-edit.nii.gz> --subcortical <subcortical.nii.gz>
-
-$ bash ribbon_edit_script.sh -s <subjid> --pial --rh
+$ bash ribbon_edit_script.sh -s <subjid> -8 -r
 
 PARAMETERS:
---image or -i: Relative or absolute path to T1w image file
+-i: Relative or absolute path to T1w image file
 
---subjid or -s: Relative or absolute path to subjid folder (Necessary)
---ribbon or -r: Relative or absolute path to ribbon file
---subcortical or -c: Relative or absolute path to subcortical file
+-s: Relative or absolute path to subjid folder (Necessary)
+-r: Relative or absolute path to ribbon file
+-c: Relative or absolute path to subcortical file
 
---help or -h: Print this string, and exit
+-h: Print this string, and exit
 
 TAG
---ribbons: Start with resizing RIBBON_EDIT and SUBCORTICAL
---bmask: Start with BRAIN_MASK
---maskT1: Start with T1_MASKED
---brain.finalsurfs: Start with skull-stripping up to BRAIN_FINALSURFS
---wm-bmask: Start the creation of WM_BMASK based on RIBBON_EDIT
---wm: Start from computing WM based on WM_BMASK
---orig: Start from computing orig surface based on wm from RIBBON_EDIT
---stats: Start from computing stats
---pial: Start from computing pial surface
---smooth: Start from smoothing pial surface
+-0: (ribbons) Start with resizing RIBBON_EDIT and SUBCORTICAL
+-1: (bmask) Start with BRAIN_MASK
+-2: (maskT1) Start with T1_MASKED
+-3: (brain.finalsurfs) Start with skull-stripping up to BRAIN_FINALSURFS
+-4: (wm-bmask) Start the creation of WM_BMASK based on RIBBON_EDIT
+-5: (wm) Start from computing WM based on WM_BMASK
+-6: (orig) Start from computing orig surface based on wm from RIBBON_EDIT
+-7: (stats) Start from computing stats
+-8: (pial) Start from computing pial surface
+-9: (smooth) Start from smoothing pial surface
 
 HEMI
---rh: Compute only right hemisphere surface
---lh: Compute only left hemisphere surface
+-r: Compute only right hemisphere surface
+-l: Compute only left hemisphere surface
 
---del: Reset outputs folder and report.sh script
+-d: Reset outputs folder and report.sh script
 
 "
 }
@@ -64,7 +68,7 @@ HEMI
 ## Default global variables
 #################
 current_date_time=$(date)
-TAG=1 # Start from beginning
+TAG=-1 # Start from beginning
 HEMI=0 # Both hemispheres
 FS=0 # Default: No Freesurfer
 OUTPUT_FOLDER="outputs"
@@ -81,94 +85,80 @@ unset -v SUBJID
 unset -v RIBBON
 unset -v SUBCORTICAL
 
-VALID_ARGS=$(getopt -o i:s:r:c:h --long image:,subjid:,ribbon:,subcortical:,help,convert,bmask,maskT1,brain.finalsurfs,wm-bmask,wm,orig,stats,pial,smooth,rh,lh,del -- "$@")
-if [[ $? -ne 0 ]]; then
-    exit 1;
-fi
+#If a character is followed by :, then it needs an argument
+VALID_ARGS="i:s:r:c:h0123456789lrd"
 
-eval set -- "$VALID_ARGS"
-while [ : ]; do
-  case "$1" in
-    -i | --image)
-        IMAGE=$2
+echo "$VALID_ARGS"
+
+while getopts ${VALID_ARGS} opt; do
+  case ${opt} in
+    i)
+        IMAGE=${OPTARG}
         FS=1
-        shift 2
         ;;
-    -s | --subjid)
-        SUBJID=$2
-        shift 2
+    s)
+        SUBJID=${OPTARG}
+	echo "subject is knowns"
         ;;
-    -r | --ribbon)
-        RIBBON=$2
-        shift 2
+    r)
+        RIBBON=${OPTARG}
         ;;
-    -c | --subcortical)
-        SUBCORTICAL=$2
-        shift 2
+    c)
+        SUBCORTICAL=${OPTARG}
         ;;     
-    -h | --help)
+    h)
 	Help
 	exit 1
 	;;
-    --convert)
+    0)
+	TAG=0
+	;;
+    1)
+	TAG=1
+	;;
+    2)
 	TAG=2
-	shift
-	;;
-    --bmask)
-	TAG=3
-	shift
-	;;
-    --maskT1)
-	TAG=4
-	shift
 	;;	
-    --brain.finalsurfs)
+    3)
+	TAG=3
+	;;
+    4)
+	TAG=4
+	;;
+    5)
 	TAG=5
-	shift
 	;;
-    --wm-bmask)
+    6)
 	TAG=6
-	shift
 	;;
-    --wm)
+    7)
 	TAG=7
-	shift
 	;;
-    --orig)
+    8)
 	TAG=8
-	shift
 	;;
-    --stats)
+    9)
 	TAG=9
-	shift
 	;;
-    --pial)
-	TAG=10
-	shift
-	;;
-    --smooth)
-	TAG=11
-	shift
-	;;
-    --lh)
+    l)
 	HEMI=1
-	shift
 	;;
-    --rh)
+    r)
 	HEMI=-1
-	shift
 	;;
-    --del)
+    d)
 	Delete #Only report.sh and $OUTPUT_FOLDER
-	shift
 	;;
-    --) shift; 
-        break 
-        ;;
+    :)
+      	echo "Option -${OPTARG} requires an argument."
+      	exit 1
+      	;;
+    ?)
+      	echo "Invalid option: -${OPTARG}."
+      	exit 1
+      	;;
   esac
 done
-
-shift "$(( OPTIND - 1 ))"
 
 # Test if user provided SUBJID
 : ${SUBJID:?Missing argument --subjid or -s}
@@ -414,7 +404,7 @@ Echo "
 #################
 ## FreeSurfer 7.4.1 on $IMAGE creating $SUBJECTS_DIR/$SUBJID folder
 #################
-if ((FS == 1 && TAG <= 1))
+if ((FS == 1 && TAG < 0))
 then
 # Test if user provided $IMAGE
 : ${IMAGE:?Missing argument --image or -i}
@@ -437,7 +427,7 @@ fi
 #################
 ## Convert ribbon and subcortical
 #################
-if ((TAG<=2))
+if ((TAG<=0))
 then
 # Test if user provided RIBBON and SUBCORTICAL
 : ${RIBBON:?Missing argument --ribbon or -r} ${SUBCORTICAL:?Missing argument --subcortical or -c}
@@ -463,7 +453,7 @@ fi
 #################
 ## Exctract labels from ribbon and subcortical into brain_mask
 #################
-if ((TAG<=3))
+if ((TAG<=1))
 then
 cmd "Extract labels from $SUBCORTICAL_EDIT (Cerebellum, Medulla oblongata, Pons and Midbrain) into $SUBCORTICAL_MASK" \
 "mri_extract_label $SUBCORTICAL_EDIT $LABELS_SUBCORTICAL $SUBCORTICAL_MASK"
@@ -475,14 +465,14 @@ fi
 #################
 ## Recompute brain.finalsurfs.mgz
 #################
-if ((TAG<=4))
+if ((TAG<=2))
 then
 cmd "Mask $T1 with $BRAIN_MASK into $T1_MASKED" \
 "mri_mask $T1 $BRAIN_MASK $T1_MASKED"
 fi
 
 # Recompute recon-all steps starting at EM Register up to brain.finalsurfs.mgz
-if ((TAG<=5))
+if ((TAG<=3))
 then
 cmd "EM Register: mri_em_register" \
 "mri_em_register -uns 3 -mask $T1_MASKED $NU $RB_ALL $TALAIRACH"
@@ -517,14 +507,14 @@ fi
 ## Compute wm.mgz : wm-bmask AND if(wm == 250 & wm-bmask), then wm-mask = 250
 #################
 # Extract white matter from ribbon-edit to create wm-bmask.mgz
-if ((TAG<=6))
+if ((TAG<=4))
 then
 cmd "Extract WM from $RIBBON_EDIT" \
 "mri_extract_label $RIBBON_EDIT $LABEL_RIBBON_WM_LH $LABEL_RIBBON_WM_RH $WM_BMASK" #0/128 binary mask
 fi
 
 # Compute WM_EDIT based on BRAIN_FINALSURFS masked by WM_BMASK
-if ((TAG<=7))
+if ((TAG<=5))
 then
 cmd "Concatenate $WM_BMASK with $WM into $WM_CONCAT" \
 "mri_concat --i $WM_BMASK --i $WM --o $WM_CONCAT --sum" #ROI at 378 (128+250)
@@ -549,7 +539,7 @@ fi
 #################
 ## Compute ORIG: Don't need mri_fill, use ribbon-edit wm
 #################
-if ((TAG<=8))
+if ((TAG<=6))
 then
 if ((HEMI>=0))
 then
@@ -635,7 +625,7 @@ fi
 #################
 ## Compute stats for surface
 #################
-if ((TAG<=9))
+if ((TAG<=7))
 then
 if ((HEMI>=0))
 then
@@ -684,7 +674,7 @@ fi
 #################
 ## Compute pial surface: mris_place_surface
 #################
-if ((TAG<=10))
+if ((TAG<=8))
 then
 if ((HEMI>=0))
 then	
@@ -704,7 +694,7 @@ fi
 #################
 ## Add smoothing to pial surface (mris_place_surface)
 # #################
-if ((TAG<=11))
+if ((TAG<=9))
 then
 if ((HEMI>=0))
 then	
