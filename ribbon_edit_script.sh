@@ -8,7 +8,7 @@ Help ()
 builtin echo "
 AUTHOR: Benoît Verreman
 
-LAST UPDATE: 2024-02-13
+LAST UPDATE: 2024-02-14
 
 DESCRIPTION: 
 Use ribbon and subcortical NIFTI files to recompute pial surface,
@@ -18,21 +18,22 @@ Create a folder 'outputs' with all the output files.
 
 PREREQUISITE:
 Export SUBJECTS_DIR and FREESURFER_HOME correctly
-Test if you have access to python: "which python"
-Install two python libraries: "pip install nibabel scipy"  
+
+Test if you have access to python: 'which python'
+Install two python libraries: 'pip install nibabel scipy'
 
 If you want to launch Freesurfer 7.4.1 recon-all pipeline using the script:
-Add argument -i
+	Add argument -i
 Else:
-Launch Freesurfer 7.4.1 command before using script: 
+	Launch Freesurfer 7.4.1 command before using script: 
 $ recon-all -s <subjid> -i <subject_image> -autorecon1 -autorecon2 -hires -parallel -openmp 4 -expert expert_file.txt
-Prepare ribbon and subcortical NIFTI files (first step in the pipeline: convert)
+Prepare ribbon and subcortical NIFTI files (for step 0)
 Put the script inside <subjid> folder
 
 EXAMPLES:
 $ bash ribbon_edit_script.sh -i 133019_T1w_acpc_dc_restore.nii.gz -s 133019 -r 133019_ribbon.nii.gz -c 133019_subcortical.nii.gz
 
-$ bash ribbon_edit_script.sh -s <subjid> -8 -r
+$ bash ribbon_edit_script.sh -s <subjid> -t 8 -r #start from pial computation step (8), right hemisphere only (r)
 
 PARAMETERS:
 -i: Relative or absolute path to T1w image file
@@ -44,16 +45,16 @@ PARAMETERS:
 -h: Print this string, and exit
 
 TAG
--0: (ribbons) Start with resizing RIBBON_EDIT and SUBCORTICAL
--1: (bmask) Start with BRAIN_MASK
--2: (maskT1) Start with T1_MASKED
--3: (brain.finalsurfs) Start with skull-stripping up to BRAIN_FINALSURFS
--4: (wm-bmask) Start the creation of WM_BMASK based on RIBBON_EDIT
--5: (wm) Start from computing WM based on WM_BMASK
--6: (orig) Start from computing orig surface based on wm from RIBBON_EDIT
--7: (stats) Start from computing stats
--8: (pial) Start from computing pial surface
--9: (smooth) Start from smoothing pial surface
+-t 0: (ribbons) Start with resizing RIBBON_EDIT and SUBCORTICAL
+-t 1: (bmask) Start with BRAIN_MASK
+-t 2: (maskT1) Start with T1_MASKED
+-t 3: (brain.finalsurfs) Start with skull-stripping up to BRAIN_FINALSURFS
+-t 4: (wm-bmask) Start the creation of WM_BMASK based on RIBBON_EDIT
+-t 5: (wm) Start from computing WM based on WM_BMASK
+-t 6: (orig) Start from computing orig surface based on wm from RIBBON_EDIT
+-t 7: (stats) Start from computing stats
+-t 8: (pial) Start from computing pial surface
+-t 9: (smooth) Start from smoothing pial surface
 
 HEMI
 -r: Compute only right hemisphere surface
@@ -70,7 +71,7 @@ HEMI
 current_date_time=$(date)
 TAG=-1 # Start from beginning
 HEMI=0 # Both hemispheres
-FS=0 # Default: No Freesurfer
+FS=0 # Default: No recon-all
 OUTPUT_FOLDER="outputs"
 LABELS_SUBCORTICAL="5 15 29 30 32 31"
 LABEL_RIBBON_WM_LH=2
@@ -86,7 +87,7 @@ unset -v RIBBON
 unset -v SUBCORTICAL
 
 #If a character is followed by :, then it needs an argument
-VALID_ARGS="i:s:r:c:h0123456789lrd"
+VALID_ARGS="i:s:r:c:t:hlrd"
 
 echo "$VALID_ARGS"
 
@@ -98,7 +99,6 @@ while getopts ${VALID_ARGS} opt; do
         ;;
     s)
         SUBJID=${OPTARG}
-	echo "subject is knowns"
         ;;
     r)
         RIBBON=${OPTARG}
@@ -106,48 +106,21 @@ while getopts ${VALID_ARGS} opt; do
     c)
         SUBCORTICAL=${OPTARG}
         ;;     
+    t)
+	TAG=${OPTARG}
+	;;
     h)
 	Help
 	exit 1
 	;;
-    0)
-	TAG=0
-	;;
-    1)
-	TAG=1
-	;;
-    2)
-	TAG=2
-	;;	
-    3)
-	TAG=3
-	;;
-    4)
-	TAG=4
-	;;
-    5)
-	TAG=5
-	;;
-    6)
-	TAG=6
-	;;
-    7)
-	TAG=7
-	;;
-    8)
-	TAG=8
-	;;
-    9)
-	TAG=9
-	;;
     l)
-	HEMI=1
+	HEMI=1 #left hemisphere only
 	;;
     r)
-	HEMI=-1
+	HEMI=-1 #right hemisphere only
 	;;
     d)
-	Delete #Only report.sh and $OUTPUT_FOLDER
+	Delete #Delete report.sh and $OUTPUT_FOLDER
 	;;
     :)
       	echo "Option -${OPTARG} requires an argument."
@@ -545,10 +518,10 @@ if ((HEMI>=0))
 then
 	# Compute directly ORIG_NOFIX
 	cmd "Pretress lh WM from $RIBBON_EDIT" \
-	"mri_pretess $RIBBON_EDIT $RIBBON_WM_LH_LABEL $NORM $FILLED_PRETRESS_LH"
+	"mri_pretess $RIBBON_EDIT $LABEL_RIBBON_WM_LH $NORM $FILLED_PRETRESS_LH"
 
 	cmd "Tessellate lh WM surf" \
-	"mri_tessellate $FILLED_PRETRESS_LH $RIBBON_WM_LH_LABEL $LH_ORIG_NOFIX_PREDEC"
+	"mri_tessellate $FILLED_PRETRESS_LH $LABEL_RIBBON_WM_LH $LH_ORIG_NOFIX_PREDEC"
 
 	cmd "Extract main component lh WM surf" \
 	"mris_extract_main_component $LH_ORIG_NOFIX_PREDEC $LH_ORIG_NOFIX_PREDEC"
@@ -585,10 +558,10 @@ if ((HEMI<=0))
 then
 	# Compute directly ORIG_NOFIX
 	cmd "Pretress rh WM from $RIBBON_EDIT" \
-	"mri_pretess $RIBBON_EDIT $RIBBON_WM_RH_LABEL $NORM $FILLED_PRETRESS_RH"
+	"mri_pretess $RIBBON_EDIT $LABEL_RIBBON_WM_RH $NORM $FILLED_PRETRESS_RH"
 
 	cmd "Tessellate rh WM surf" \
-	"mri_tessellate $FILLED_PRETRESS_RH $RIBBON_WM_RH_LABEL $RH_ORIG_NOFIX_PREDEC"
+	"mri_tessellate $FILLED_PRETRESS_RH $LABEL_RIBBON_WM_RH $RH_ORIG_NOFIX_PREDEC"
 
 	cmd "Extract main component rh WM surf" \
 	"mris_extract_main_component $RH_ORIG_NOFIX_PREDEC $RH_ORIG_NOFIX_PREDEC"
@@ -636,7 +609,7 @@ then
 	# In order to improve pial surface, you can lower 'pial_border_low' to 20 
 	# Change stats
 	cmd "Change stats" \
-	"sed -i'' -e 's/^pial_border_low[^/n]*/pial_border_low 5/' $AUTODET_NEW_GW_STATS_LH"
+	"sed -i'' -e 's/^pial_border_low[^/n]*/pial_border_low $PIAL_BORDER_LOW/' $AUTODET_NEW_GW_STATS_LH"
 	#ex -s -c '%s/^pial_border_low.*/pial_border_low   $PIAL_BORDER_LOW/g|x' $AUTODET_NEW_GW_STATS_LH
 	
 	# Compute labels for pin-medial-wall
@@ -658,7 +631,7 @@ then
 	# In order to improve pial surface, you can lower 'pial_border_low' to 20 	
 	# Change stats
 	cmd "Change stats" \
-	"sed -i'' -e 's/^pial_border_low[^/n]*/pial_border_low 5/' $AUTODET_NEW_GW_STATS_RH"	
+	"sed -i'' -e 's/^pial_border_low[^/n]*/pial_border_low $PIAL_BORDER_LOW/' $AUTODET_NEW_GW_STATS_RH"	
 	#ex -s -c '%s/^pial_border_low.*/pial_border_low   $PIAL_BORDER_LOW/g|x' $AUTODET_NEW_GW_STATS_RH
 	
 	# Compute labels for pin-medial-wall
