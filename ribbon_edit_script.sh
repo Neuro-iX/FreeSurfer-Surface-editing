@@ -30,6 +30,8 @@ $ recon-all -s <subjid> -i <subject_image> -autorecon1 -autorecon2 -hires -paral
 Prepare ribbon and subcortical NIFTI files (for step 0)
 Put the script inside <subjid> folder
 
+Modify the value of some constants in the script if needed: LABELS_SUBCORTICAL, LABEL_RIBBON_WM_LH, LABEL_RIBBON_WM_RH, PIAL_BORDER_LOW
+
 EXAMPLES:
 $ bash ribbon_edit_script.sh -i 133019_T1w_acpc_dc_restore.nii.gz -s 133019 -r 133019_ribbon.nii.gz -c 133019_subcortical.nii.gz
 
