@@ -8,7 +8,7 @@ Help ()
 builtin echo "
 AUTHOR: Benoît Verreman
 
-LAST UPDATE: 2024-02-14
+LAST UPDATE: 2024-02-16
 
 DESCRIPTION: 
 Use ribbon and subcortical NIFTI files to recompute pial surface,
@@ -292,7 +292,6 @@ NU="$SUBJECTS_DIR/$SUBJID/mri/nu.mgz"
 RB_ALL="$FREESURFER_HOME/average/RB_all_2020-01-02.gca"
 CTRL_PTS="$SUBJECTS_DIR/$SUBJID/mri/ctrl_pts.mgz"
 CC_UP="$SUBJECTS_DIR/$SUBJID/mri/transforms/cc_up.lta"
-ASEG_PRESURF="$SUBJECTS_DIR/$SUBJID/mri/aseg.presurf.mgz"
 
 WM="$SUBJECTS_DIR/$SUBJID/mri/wm.mgz"
 
