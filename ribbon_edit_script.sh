@@ -8,7 +8,7 @@ Help ()
 builtin echo "
 AUTHOR: Benoît Verreman
 
-LAST UPDATE: 2024-02-16
+LAST UPDATE: 2024-03-11
 
 DESCRIPTION: 
 Use ribbon and subcortical NIFTI files to recompute pial surface,
@@ -16,12 +16,19 @@ based on previously created <subjid> folder using Freesurfer 7.4.1
 Create a log 'report.sh'.
 Create a folder 'outputs' with all the output files.
 
-PREREQUISITE:
+PREREQUISITES:
+*Freesurfer variables:
 Export SUBJECTS_DIR and FREESURFER_HOME correctly
 
+*Python script:
 Test if you have access to python: 'which python'
 Install two python libraries: 'pip install nibabel scipy'
+OR use conda environment:
+'conda create --name env_ribbon_edit_script
+conda activate env_ribbon_edit_script
+conda install nibabel scipy -c conda-forge'
 
+*Freesurfer 'raw' output folder:
 If you want to launch Freesurfer 7.4.1 recon-all pipeline using the script:
 	Add argument -i
 Else:
@@ -30,6 +37,7 @@ $ recon-all -s <subjid> -i <subject_image> -autorecon1 -autorecon2 -hires -paral
 Prepare ribbon and subcortical NIFTI files (for step 0)
 Put the script inside <subjid> folder
 
+*Specific labels and statical values:
 Modify the value of some constants in the script if needed: LABELS_SUBCORTICAL, LABEL_RIBBON_WM_LH, LABEL_RIBBON_WM_RH, PIAL_BORDER_LOW
 
 EXAMPLES:
@@ -79,6 +87,7 @@ LABELS_SUBCORTICAL="5 15 29 30 32 31"
 LABEL_RIBBON_WM_LH=2
 LABEL_RIBBON_WM_RH=41
 PIAL_BORDER_LOW=5
+TRANSLATE_T1_NU_AND_WM=0 #Default: Do not translate
 
 #################
 ## Manage flags
@@ -183,6 +192,7 @@ fi
 script_nifti_padding
 
 script_expert_file
+
 }
 
 CreateFolders()
@@ -214,16 +224,20 @@ script_nifti_padding()
 {
 if [ ! -f "$SUBJECTS_DIR/nifti_padding.py" ]
 then
+
+TRANSLATE_T1_NU_AND_WM=1 #we suppose that the script is launched for the first time, because the python script has not been created yet
+
 cat > $SUBJECTS_DIR/nifti_padding.py <<EOF
 import os
 import nibabel as nib
-import nibabel.processing #Used in conform
-import scipy.ndimage #Used in conform
-import sys #To add parameters
+import nibabel.processing #Used in nib.processing.conform
+import scipy.ndimage #Used in nib.processing.conform
+import sys #To add arguments
 
 # SUBJID directory
 img_in = sys.argv[1]
 img_out = sys.argv[2]
+function = sys.argv[3]
 
 #Load image to be treated
 if not os.path.isfile(img_in):
@@ -231,13 +245,25 @@ if not os.path.isfile(img_in):
 else:
     img = nib.load(img_in)
 
-#New MRI image
+#Padding function: reshape the image to (311, 311, 311) with a voxel size of (0.7, 0.7, 0.7) and an orientation of 'LAS'
 def padding(img, new_name):
     new_img = nib.processing.conform(img, out_shape=(311, 311, 311), \
     voxel_size=(0.7, 0.7, 0.7), order=0, cval=0, orientation='LAS', out_class=None)
     nib.save(new_img, new_name)
+
+#Translate function: translate input image of 0.35 to the right and 0.35 to the bottom
+def translate(img, new_name):
+    affine = img.affine.copy()
+    affine[0, 3] += 0.35
+    affine[2, 3] -= 0.35
+    new_img = nib.Nifti1Image(img.get_fdata(), affine)
+    nib.save(new_img, new_name)
     
-padding(img, img_out)
+if function == 'padding':
+    padding(img, img_out)
+elif function == 'translate':
+    translate(img, img_out)
+
 EOF
 fi
 }
@@ -253,14 +279,6 @@ cat > $SUBJECTS_DIR/expert_file.txt <<EOF
 mris_inflate -n 30
 EOF
 fi
-}
-
-#################
-## Use python script "nifti_padding.py"
-#################
-nifti_padding()
-{
-python $SUBJECTS_DIR/nifti_padding.py $1 $2
 }
 
 #################
@@ -310,9 +328,10 @@ SUBCORTICAL_EDIT="$SUBJECTS_DIR/$SUBJID/$OUTPUT_FOLDER/mri/subcortical-edit.mgz"
 SUBCORTICAL_MASK="$SUBJECTS_DIR/$SUBJID/$OUTPUT_FOLDER/mri/subcortical-mask.mgz"
 BRAIN_MASK="$SUBJECTS_DIR/$SUBJID/$OUTPUT_FOLDER/mri/brain-mask.mgz"
 
-T1_CORRECTED="$SUBJECTS_DIR/$SUBJID/$OUTPUT_FOLDER/mri/T1-corrected.mgz"
+T1_TRANSLATED="$SUBJECTS_DIR/$SUBJID/$OUTPUT_FOLDER/mri/T1-translated.mgz"
 T1_MASKED="$SUBJECTS_DIR/$SUBJID/$OUTPUT_FOLDER/mri/T1-masked.mgz"
 
+NU_TRANSLATED="$SUBJECTS_DIR/$SUBJID/$OUTPUT_FOLDER/mri/nu-translated.mgz"
 TALAIRACH="$SUBJECTS_DIR/$SUBJID/$OUTPUT_FOLDER/mri/transforms/talairach.lta"
 NORM="$SUBJECTS_DIR/$SUBJID/$OUTPUT_FOLDER/mri/norm.mgz"
 TALAIRACH_M3Z="$SUBJECTS_DIR/$SUBJID/$OUTPUT_FOLDER/mri/transforms/talairach.m3z"
@@ -323,6 +342,7 @@ ASEG_PRESURF="$SUBJECTS_DIR/$SUBJID/$OUTPUT_FOLDER/mri/aseg.presurf.mgz"
 BRAIN="$SUBJECTS_DIR/$SUBJID/$OUTPUT_FOLDER/mri/brain.mgz"
 BRAIN_FINALSURFS="$SUBJECTS_DIR/$SUBJID/$OUTPUT_FOLDER/mri/brain.finalsurfs.mgz"
 
+WM_TRANSLATED="$SUBJECTS_DIR/$SUBJID/$OUTPUT_FOLDER/mri/wm-translated.mgz"
 WM_BMASK="$SUBJECTS_DIR/$SUBJID/$OUTPUT_FOLDER/mri/wm-bmask.mgz"
 WM_MASK="$SUBJECTS_DIR/$SUBJID/$OUTPUT_FOLDER/mri/wm-mask.mgz"
 WM_CONCAT="$SUBJECTS_DIR/$SUBJID/$OUTPUT_FOLDER/mri/wm-concat.mgz"
@@ -391,11 +411,25 @@ then
 fi
 
 cmd "Compensate for future translation in FreeSurfer" \
-"nifti_padding $IMAGE $IMAGE_PADDED"
+"python $SUBJECTS_DIR/nifti_padding.py $IMAGE $IMAGE_PADDED padding"
+
+#Necessary for correcting the orientation of the image
+cmd "Convert $IMAGE_PADDED" \
+"mri_convert $IMAGE_PADDED $IMAGE_PADDED -rt nearest -ns 1 --conform_min"
+
+TRANSLATE_T1_NU_AND_WM=0 #No need to translate anymore: T1w is padded
 
 #-xopts-overwrite is used when expert file already used before
 cmd "Apply recon-all -autorecon 1 and 2 on $IMAGE_PADDED" \
 "recon-all -autorecon1 -autorecon2 -s $SUBJID -i $IMAGE_PADDED -hires -parallel -openmp 4 -expert expert_file.txt -xopts-overwrite" 
+fi
+
+#################
+## TRANSLATE_T1_NU_AND_WM to 0 if a tag is used
+#################
+if ((TAG >= 0))
+then
+TRANSLATE_T1_NU_AND_WM=0
 fi
 
 #################
@@ -410,11 +444,11 @@ Echo "# Given subcortical: $SUBCORTICAL"
 
 CreateFolders
 
-cmd "Use script nifti_padding.py on $RIBBON" \
-"nifti_padding $RIBBON $RIBBON_PADDED"
+cmd "Use script $SUBJECTS_DIR/nifti_padding.py on $RIBBON" \
+"python $SUBJECTS_DIR/nifti_padding.py $RIBBON $RIBBON_PADDED padding"
 
-cmd "Use script nifti_padding.py on $SUBCORTICAL" \
-"nifti_padding $SUBCORTICAL $SUBCORTICAL_PADDED"
+cmd "Use script $SUBJECTS_DIR/nifti_padding.py on $SUBCORTICAL" \
+"python $SUBJECTS_DIR/nifti_padding.py $SUBCORTICAL $SUBCORTICAL_PADDED padding"
 
 #Necessary for correcting the orientation of the image
 cmd "Convert $RIBBON_PADDED" \
@@ -441,18 +475,34 @@ fi
 #################
 if ((TAG<=2))
 then
-cmd "Mask $T1 with $BRAIN_MASK into $T1_MASKED" \
-"mri_mask $T1 $BRAIN_MASK $T1_MASKED"
+if ((TRANSLATE_T1_NU_AND_WM))
+then
+	cmd "Use script $SUBJECTS_DIR/nifti_padding.py on $T1 to get $T1_TRANSLATED" \
+	"python $SUBJECTS_DIR/nifti_padding.py $T1 $T1_TRANSLATED translate"
+else
+	cmd "Copy $T1 to $T1_TRANSLATED" \
+	"cp $T1 $T1_TRANSLATED"
+fi
+cmd "Mask $T1_TRANSLATED with $BRAIN_MASK into $T1_MASKED" \
+"mri_mask $T1_TRANSLATED $BRAIN_MASK $T1_MASKED"
 fi
 
 # Recompute recon-all steps starting at EM Register up to brain.finalsurfs.mgz
 if ((TAG<=3))
 then
+if ((TRANSLATE_T1_NU_AND_WM))
+then
+	cmd "Use script $SUBJECTS_DIR/nifti_padding.py on $NU to get $NU_TRANSLATED" \
+	"python $SUBJECTS_DIR/nifti_padding.py $NU $NU_TRANSLATED translate"
+else
+	cmd "Copy $NU to $NU_TRANSLATED" \
+	"cp $NU $NU_TRANSLATED"
+fi
 cmd "EM Register: mri_em_register" \
-"mri_em_register -uns 3 -mask $T1_MASKED $NU $RB_ALL $TALAIRACH"
+"mri_em_register -uns 3 -mask $T1_MASKED $NU_TRANSLATED $RB_ALL $TALAIRACH"
 
 cmd "CA Normalize: mri_ca_normalize" \
-"mri_ca_normalize -c $CTRL_PTS -mask $T1_MASKED $NU $RB_ALL $TALAIRACH $NORM"
+"mri_ca_normalize -c $CTRL_PTS -mask $T1_MASKED $NU_TRANSLATED $RB_ALL $TALAIRACH $NORM"
 
 cmd "CA Register: mri_ca_register" \
 "mri_ca_register -nobigventricles -T $TALAIRACH -align-after -mask $T1_MASKED $NORM $RB_ALL $TALAIRACH_M3Z"
@@ -490,8 +540,16 @@ fi
 # Compute WM_EDIT based on BRAIN_FINALSURFS masked by WM_BMASK
 if ((TAG<=5))
 then
-cmd "Concatenate $WM_BMASK with $WM into $WM_CONCAT" \
-"mri_concat --i $WM_BMASK --i $WM --o $WM_CONCAT --sum" #ROI at 378 (128+250)
+if ((TRANSLATE_T1_NU_AND_WM))
+then
+	cmd "Use script $SUBJECTS_DIR/nifti_padding.py on $WM to get $WM_TRANSLATED" \
+	"python $SUBJECTS_DIR/nifti_padding.py $WM $WM_TRANSLATED translate"
+else
+	cmd "Copy $WM to $WM_TRANSLATED" \
+	"cp $WM $WM_TRANSLATED"
+fi
+cmd "Concatenate $WM_BMASK with $WM_TRANSLATED into $WM_CONCAT" \
+"mri_concat --i $WM_BMASK --i $WM_TRANSLATED --o $WM_CONCAT --sum" #ROI at 378 (128+250)
 
 cmd "Binarize $WM_CONCAT at 251 into $WM_BMASK_250" \
 "mri_binarize --i $WM_CONCAT --o $WM_BMASK_250 --match 378"
@@ -532,7 +590,7 @@ then
 
 	# Smooth 1
 	cmd "Smooth lh WM surf" \
-	"mris_smooth -n 3 -nw -seed 1234 $LH_ORIG_NOFIX $LH_SMOOTHW_NOFIX"
+	"mris_smooth -n 1 -nw -seed 1234 $LH_ORIG_NOFIX $LH_SMOOTHW_NOFIX"
 
 	# Inflate 1
 	cmd "Inflate lh WM surf" \
@@ -545,7 +603,9 @@ then
 	# Fix topology
 	cmd "Fix tolpology lh WM surf" \
 	"mris_fix_topology -mgz -sphere qsphere.nofix -inflated inflated.nofix -orig orig.nofix -out orig.premesh -ga -seed 1234 $SUBJID/$OUTPUT_FOLDER lh"
-
+	#-threads 1 #7.4.1: no difference seen; 7.4.0: small differences with different threads ? (https://surfer.nmr.mgh.harvard.edu/fswiki/ReleaseNotes)
+	#Takes $SUBJID/$OUTPUT_FOLDER/mri/wm.mgz and brain.mgz
+	
 	# Remesh
 	cmd "Remesh lh WM surf" \
 	"mris_remesh --remesh --iters 3 --input $LH_ORIG_PREMESH --output $LH_ORIG"
@@ -572,7 +632,7 @@ then
 
 	# Smooth 1
 	cmd "Smooth rh WM surf" \
-	"mris_smooth -n 3 -nw -seed 1234 $RH_ORIG_NOFIX $RH_SMOOTHW_NOFIX"
+	"mris_smooth -n 1 -nw -seed 1234 $RH_ORIG_NOFIX $RH_SMOOTHW_NOFIX"
 
 	# Inflate 1
 	cmd "Inflate rh WM surf" \
@@ -585,7 +645,9 @@ then
 	# Fix topology
 	cmd "Fix tolpology rh WM surf" \
 	"mris_fix_topology -mgz -sphere qsphere.nofix -inflated inflated.nofix -orig orig.nofix -out orig.premesh -ga -seed 1234 $SUBJID/$OUTPUT_FOLDER rh"
-
+	#-threads 1 #7.4.1: no difference seen; 7.4.0: small differences with different threads ? (https://surfer.nmr.mgh.harvard.edu/fswiki/ReleaseNotes)
+	#Takes $SUBJID/$OUTPUT_FOLDER/mri/wm.mgz and brain.mgz
+	
 	# Remesh
 	cmd "Remesh rh WM surf" \
 	"mris_remesh --remesh --iters 3 --input $RH_ORIG_PREMESH --output $RH_ORIG"
