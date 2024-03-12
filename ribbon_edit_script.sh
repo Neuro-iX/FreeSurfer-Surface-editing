@@ -368,6 +368,12 @@ RH_ORIG_PREMESH="$SUBJECTS_DIR/$SUBJID/$OUTPUT_FOLDER/surf/rh.orig.premesh"
 LH_ORIG="$SUBJECTS_DIR/$SUBJID/$OUTPUT_FOLDER/surf/lh.orig"
 RH_ORIG="$SUBJECTS_DIR/$SUBJID/$OUTPUT_FOLDER/surf/rh.orig"
 
+#RJR ADD
+LH_INFLATED2="$SUBJECTS_DIR/$SUBJID/$OUTPUT_FOLDER/surf/lh.inflated2"
+RH_INFLATED2="$SUBJECTS_DIR/$SUBJID/$OUTPUT_FOLDER/surf/rh.inflated2"
+LH_CURV="$SUBJECTS_DIR/$SUBJID/$OUTPUT_FOLDER/surf/lh.curv"
+RH_CURV="$SUBJECTS_DIR/$SUBJID/$OUTPUT_FOLDER/surf/rh.curv"
+
 LH_CORTEX_LABEL="$SUBJECTS_DIR/$SUBJID/$OUTPUT_FOLDER/label/lh.cortex.label"
 RH_CORTEX_LABEL="$SUBJECTS_DIR/$SUBJID/$OUTPUT_FOLDER/label/rh.cortex.label"
 LH_CORTEX_HIPAMYG_LABEL="$SUBJECTS_DIR/$SUBJID/$OUTPUT_FOLDER/label/lh.cortex+hipamyg.label"
@@ -613,6 +619,14 @@ then
 	# Remove intersection
 	cmd "Remove intersection lh" \
 	"mris_remove_intersection $LH_ORIG $LH_ORIG"
+	
+	# INFLATE 2 
+	cmd "inflate to produce sulc file" \
+	"mris_inflate $LH_ORIG $LH_INFLATED2"
+
+	# CALCULATE CURV
+	cmd "Generate curv file from orig" \
+	"mris_place_surface --curv-map $LH_ORIG 2 10 $LH_CURV"
 fi
 
 if ((HEMI<=0))
@@ -655,6 +669,15 @@ then
 	# Remove intersection
 	cmd "Remove intersection rh" \
 	"mris_remove_intersection $RH_ORIG $RH_ORIG"
+	
+	# INFLATE 2 
+	cmd "inflate to produce sulc file" \
+	"mris_inflate $RH_ORIG $RH_INFLATED2"
+
+	# CALCULATE CURV
+	cmd "Generate curv file from orig" \
+	"mris_place_surface --curv-map $RH_ORIG 2 10 $RH_CURV"
+
 fi
 fi
 
