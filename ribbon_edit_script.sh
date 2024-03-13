@@ -419,9 +419,7 @@ fi
 cmd "Compensate for future translation in FreeSurfer" \
 "python $SUBJECTS_DIR/nifti_padding.py $IMAGE $IMAGE_PADDED padding"
 
-#Necessary for correcting the orientation of the image
-cmd "Convert $IMAGE_PADDED" \
-"mri_convert $IMAGE_PADDED $IMAGE_PADDED -rt nearest -ns 1 --conform_min"
+#Do not do mri_convert here (brain gets white)
 
 TRANSLATE_T1_NU_AND_WM=0 #No need to translate anymore: T1w is padded
 
