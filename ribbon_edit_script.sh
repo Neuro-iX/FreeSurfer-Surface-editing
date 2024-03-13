@@ -24,9 +24,10 @@ Export SUBJECTS_DIR and FREESURFER_HOME correctly
 Test if you have access to python: 'which python'
 Install two python libraries: 'pip install nibabel scipy'
 OR use conda environment:
-'conda create --name env_ribbon_edit_script
+conda create --name env_ribbon_edit_script
 conda activate env_ribbon_edit_script
-conda install nibabel scipy -c conda-forge'
+conda install nibabel scipy -c conda-forge
+conda list | grep -E 'nibabel|scipy'
 
 *Freesurfer 'raw' output folder:
 If you want to launch Freesurfer 7.4.1 recon-all pipeline using the script:
