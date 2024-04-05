@@ -8,7 +8,7 @@ Help ()
 builtin echo "
 AUTHOR: Benoît Verreman
 
-LAST UPDATE: 2024-03-11
+LAST UPDATE: 2024-04-05
 
 DESCRIPTION: 
 Use ribbon and subcortical NIFTI files to recompute pial surface,
@@ -47,13 +47,15 @@ $ bash ribbon_edit_script.sh -i 133019_T1w_acpc_dc_restore.nii.gz -s 133019 -r 1
 $ bash ribbon_edit_script.sh -s <subjid> -t 8 -r #start from pial computation step (8), right hemisphere only (r)
 
 PARAMETERS:
--i: Relative or absolute path to T1w image file
 
+HELP
+-h: Print this string, and exit
+
+INPUT FILES
+-i: Relative or absolute path to T1w image file
 -s: Relative or absolute path to subjid folder (Necessary)
 -r: Relative or absolute path to ribbon file
 -c: Relative or absolute path to subcortical file
-
--h: Print this string, and exit
 
 TAG
 -t 0: (ribbons) Start with resizing RIBBON_EDIT and SUBCORTICAL
@@ -67,12 +69,15 @@ TAG
 -t 8: (pial) Start from computing pial surface
 -t 9: (smooth) Start from smoothing pial surface
 
+VALUES
+-p: Give value of PIAL_BORDER_LOW
+
 HEMI
 -r: Compute only right hemisphere surface
 -l: Compute only left hemisphere surface
 
+RESET
 -d: Reset outputs folder and report.sh script
-
 "
 }
 
@@ -87,8 +92,9 @@ OUTPUT_FOLDER="outputs"
 LABELS_SUBCORTICAL="5 15 29 30 32 31"
 LABEL_RIBBON_WM_LH=2
 LABEL_RIBBON_WM_RH=41
+
+CHANGE_AUTODET=1 # Default: Change autodet with parameters bellow or given as parameter
 PIAL_BORDER_LOW=5
-TRANSLATE_T1_NU_AND_WM=0 #Default: Do not translate
 
 #################
 ## Manage flags
@@ -99,7 +105,7 @@ unset -v RIBBON
 unset -v SUBCORTICAL
 
 #If a character is followed by :, then it needs an argument
-VALID_ARGS="i:s:r:c:t:hlrd"
+VALID_ARGS="i:s:r:c:t:p:hlrd"
 
 echo "$VALID_ARGS"
 
@@ -120,6 +126,9 @@ while getopts ${VALID_ARGS} opt; do
         ;;     
     t)
 	TAG=${OPTARG}
+	;;
+    p)
+	PIAL_BORDER_LOW=${OPTARG}
 	;;
     h)
 	Help
@@ -226,8 +235,6 @@ script_nifti_padding()
 if [ ! -f "$SUBJECTS_DIR/nifti_padding.py" ]
 then
 
-TRANSLATE_T1_NU_AND_WM=1 #we suppose that the script is launched for the first time, because the python script has not been created yet
-
 cat > $SUBJECTS_DIR/nifti_padding.py <<EOF
 import os
 import nibabel as nib
@@ -238,7 +245,6 @@ import sys #To add arguments
 # SUBJID directory
 img_in = sys.argv[1]
 img_out = sys.argv[2]
-function = sys.argv[3]
 
 #Load image to be treated
 if not os.path.isfile(img_in):
@@ -246,24 +252,23 @@ if not os.path.isfile(img_in):
 else:
     img = nib.load(img_in)
 
-#Padding function: reshape the image to (311, 311, 311) with a voxel size of (0.7, 0.7, 0.7) and an orientation of 'LAS'
+#Test if dimensions contain both even and odd numbers (need padding)
+def test_dim(img):
+    a,b,c = img.header.get_data_shape()
+    if a%2 == b%2 & b%2 == c%2:
+        return False
+    else:
+        return True
+        
+#Padding function: reshape the image to (max_dim, max_dim, max_dim) with same resolution and an orientation of 'LAS'
 def padding(img, new_name):
-    new_img = nib.processing.conform(img, out_shape=(311, 311, 311), \
-    voxel_size=(0.7, 0.7, 0.7), order=0, cval=0, orientation='LAS', out_class=None)
+    d = max(img.header.get_data_shape())
+    new_img = nib.processing.conform(img, out_shape=(d, d, d), \
+    voxel_size = img.header.get_zooms(), order=0, cval=0, orientation='LAS', out_class=None)
     nib.save(new_img, new_name)
 
-#Translate function: translate input image of 0.35 to the right and 0.35 to the bottom
-def translate(img, new_name):
-    affine = img.affine.copy()
-    affine[0, 3] += 0.35
-    affine[2, 3] -= 0.35
-    new_img = nib.Nifti1Image(img.get_fdata(), affine)
-    nib.save(new_img, new_name)
-    
-if function == 'padding':
+if test_dim(img):    
     padding(img, img_out)
-elif function == 'translate':
-    translate(img, img_out)
 
 EOF
 fi
@@ -329,10 +334,8 @@ SUBCORTICAL_EDIT="$SUBJECTS_DIR/$SUBJID/$OUTPUT_FOLDER/mri/subcortical-edit.mgz"
 SUBCORTICAL_MASK="$SUBJECTS_DIR/$SUBJID/$OUTPUT_FOLDER/mri/subcortical-mask.mgz"
 BRAIN_MASK="$SUBJECTS_DIR/$SUBJID/$OUTPUT_FOLDER/mri/brain-mask.mgz"
 
-T1_TRANSLATED="$SUBJECTS_DIR/$SUBJID/$OUTPUT_FOLDER/mri/T1-translated.mgz"
 T1_MASKED="$SUBJECTS_DIR/$SUBJID/$OUTPUT_FOLDER/mri/T1-masked.mgz"
 
-NU_TRANSLATED="$SUBJECTS_DIR/$SUBJID/$OUTPUT_FOLDER/mri/nu-translated.mgz"
 TALAIRACH="$SUBJECTS_DIR/$SUBJID/$OUTPUT_FOLDER/mri/transforms/talairach.lta"
 NORM="$SUBJECTS_DIR/$SUBJID/$OUTPUT_FOLDER/mri/norm.mgz"
 TALAIRACH_M3Z="$SUBJECTS_DIR/$SUBJID/$OUTPUT_FOLDER/mri/transforms/talairach.m3z"
@@ -343,7 +346,6 @@ ASEG_PRESURF="$SUBJECTS_DIR/$SUBJID/$OUTPUT_FOLDER/mri/aseg.presurf.mgz"
 BRAIN="$SUBJECTS_DIR/$SUBJID/$OUTPUT_FOLDER/mri/brain.mgz"
 BRAIN_FINALSURFS="$SUBJECTS_DIR/$SUBJID/$OUTPUT_FOLDER/mri/brain.finalsurfs.mgz"
 
-WM_TRANSLATED="$SUBJECTS_DIR/$SUBJID/$OUTPUT_FOLDER/mri/wm-translated.mgz"
 WM_BMASK="$SUBJECTS_DIR/$SUBJID/$OUTPUT_FOLDER/mri/wm-bmask.mgz"
 WM_MASK="$SUBJECTS_DIR/$SUBJID/$OUTPUT_FOLDER/mri/wm-mask.mgz"
 WM_CONCAT="$SUBJECTS_DIR/$SUBJID/$OUTPUT_FOLDER/mri/wm-concat.mgz"
@@ -420,21 +422,9 @@ fi
 cmd "Compensate for future translation in FreeSurfer" \
 "python $SUBJECTS_DIR/nifti_padding.py $IMAGE $IMAGE_PADDED padding"
 
-#Do not do mri_convert here (brain gets white)
-
-TRANSLATE_T1_NU_AND_WM=0 #No need to translate anymore: T1w is padded
-
 #-xopts-overwrite is used when expert file already used before
 cmd "Apply recon-all -autorecon 1 and 2 on $IMAGE_PADDED" \
 "recon-all -autorecon1 -autorecon2 -s $SUBJID -i $IMAGE_PADDED -hires -parallel -openmp 4 -expert expert_file.txt -xopts-overwrite" 
-fi
-
-#################
-## TRANSLATE_T1_NU_AND_WM to 0 if a tag is used
-#################
-if ((TAG >= 0))
-then
-TRANSLATE_T1_NU_AND_WM=0
 fi
 
 #################
@@ -480,34 +470,18 @@ fi
 #################
 if ((TAG<=2))
 then
-if ((TRANSLATE_T1_NU_AND_WM))
-then
-	cmd "Use script $SUBJECTS_DIR/nifti_padding.py on $T1 to get $T1_TRANSLATED" \
-	"python $SUBJECTS_DIR/nifti_padding.py $T1 $T1_TRANSLATED translate"
-else
-	cmd "Copy $T1 to $T1_TRANSLATED" \
-	"cp $T1 $T1_TRANSLATED"
-fi
-cmd "Mask $T1_TRANSLATED with $BRAIN_MASK into $T1_MASKED" \
-"mri_mask $T1_TRANSLATED $BRAIN_MASK $T1_MASKED"
+cmd "Mask $T1 with $BRAIN_MASK into $T1_MASKED" \
+"mri_mask $T1 $BRAIN_MASK $T1_MASKED"
 fi
 
 # Recompute recon-all steps starting at EM Register up to brain.finalsurfs.mgz
 if ((TAG<=3))
 then
-if ((TRANSLATE_T1_NU_AND_WM))
-then
-	cmd "Use script $SUBJECTS_DIR/nifti_padding.py on $NU to get $NU_TRANSLATED" \
-	"python $SUBJECTS_DIR/nifti_padding.py $NU $NU_TRANSLATED translate"
-else
-	cmd "Copy $NU to $NU_TRANSLATED" \
-	"cp $NU $NU_TRANSLATED"
-fi
 cmd "EM Register: mri_em_register" \
-"mri_em_register -uns 3 -mask $T1_MASKED $NU_TRANSLATED $RB_ALL $TALAIRACH"
+"mri_em_register -uns 3 -mask $T1_MASKED $NU $RB_ALL $TALAIRACH"
 
 cmd "CA Normalize: mri_ca_normalize" \
-"mri_ca_normalize -c $CTRL_PTS -mask $T1_MASKED $NU_TRANSLATED $RB_ALL $TALAIRACH $NORM"
+"mri_ca_normalize -c $CTRL_PTS -mask $T1_MASKED $NU $RB_ALL $TALAIRACH $NORM"
 
 cmd "CA Register: mri_ca_register" \
 "mri_ca_register -nobigventricles -T $TALAIRACH -align-after -mask $T1_MASKED $NORM $RB_ALL $TALAIRACH_M3Z"
@@ -545,16 +519,8 @@ fi
 # Compute WM_EDIT based on BRAIN_FINALSURFS masked by WM_BMASK
 if ((TAG<=5))
 then
-if ((TRANSLATE_T1_NU_AND_WM))
-then
-	cmd "Use script $SUBJECTS_DIR/nifti_padding.py on $WM to get $WM_TRANSLATED" \
-	"python $SUBJECTS_DIR/nifti_padding.py $WM $WM_TRANSLATED translate"
-else
-	cmd "Copy $WM to $WM_TRANSLATED" \
-	"cp $WM $WM_TRANSLATED"
-fi
-cmd "Concatenate $WM_BMASK with $WM_TRANSLATED into $WM_CONCAT" \
-"mri_concat --i $WM_BMASK --i $WM_TRANSLATED --o $WM_CONCAT --sum" #ROI at 378 (128+250)
+cmd "Concatenate $WM_BMASK with $WM into $WM_CONCAT" \
+"mri_concat --i $WM_BMASK --i $WM --o $WM_CONCAT --sum" #ROI at 378 (128+250)
 
 cmd "Binarize $WM_CONCAT at 251 into $WM_BMASK_250" \
 "mri_binarize --i $WM_CONCAT --o $WM_BMASK_250 --match 378"
@@ -691,11 +657,14 @@ then
 	cmd "Computes stats for lh pial surface" \
 	"mris_autodet_gwstats --o $AUTODET_NEW_GW_STATS_LH --i $BRAIN_FINALSURFS --wm $WM_EDITED --surf $LH_ORIG"
 	
-	# In order to improve pial surface, you can lower 'pial_border_low' to 20 
-	# Change stats
-	cmd "Change stats" \
-	"sed -i'' -e 's/^pial_border_low[^/n]*/pial_border_low $PIAL_BORDER_LOW/' $AUTODET_NEW_GW_STATS_LH"
-	#ex -s -c '%s/^pial_border_low.*/pial_border_low   $PIAL_BORDER_LOW/g|x' $AUTODET_NEW_GW_STATS_LH
+	if ((CHANGE_AUTODET==1))
+	then
+		# In order to improve pial surface, you can lower 'pial_border_low' to 20 
+		# Change stats
+		cmd "Change stats" \
+		"sed -i'' -e 's/^pial_border_low[^/n]*/pial_border_low $PIAL_BORDER_LOW/' $AUTODET_NEW_GW_STATS_LH"
+		#ex -s -c '%s/^pial_border_low.*/pial_border_low   $PIAL_BORDER_LOW/g|x' $AUTODET_NEW_GW_STATS_LH
+	fi
 	
 	# Compute labels for pin-medial-wall
 	cmd "Label2label for lh cortex" \
@@ -713,11 +682,14 @@ then
 	cmd "Computes stats for rh pial surface" \
 	"mris_autodet_gwstats --o $AUTODET_NEW_GW_STATS_RH --i $BRAIN_FINALSURFS --wm $WM_EDITED --surf $RH_ORIG"
 	
-	# In order to improve pial surface, you can lower 'pial_border_low' to 20 	
-	# Change stats
-	cmd "Change stats" \
-	"sed -i'' -e 's/^pial_border_low[^/n]*/pial_border_low $PIAL_BORDER_LOW/' $AUTODET_NEW_GW_STATS_RH"	
-	#ex -s -c '%s/^pial_border_low.*/pial_border_low   $PIAL_BORDER_LOW/g|x' $AUTODET_NEW_GW_STATS_RH
+	if ((CHANGE_AUTODET==1))
+	then
+		# In order to improve pial surface, you can lower 'pial_border_low' to 20 	
+		# Change stats
+		cmd "Change stats" \
+		"sed -i'' -e 's/^pial_border_low[^/n]*/pial_border_low $PIAL_BORDER_LOW/' $AUTODET_NEW_GW_STATS_RH"	
+		#ex -s -c '%s/^pial_border_low.*/pial_border_low   $PIAL_BORDER_LOW/g|x' $AUTODET_NEW_GW_STATS_RH
+	fi
 	
 	# Compute labels for pin-medial-wall
 	cmd "Label2label for rh cortex" \
