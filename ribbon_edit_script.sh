@@ -251,14 +251,6 @@ if not os.path.isfile(img_in):
     raise FileNotFoundError("The following path doesn't exist: " + img_in)
 else:
     img = nib.load(img_in)
-
-#Test if dimensions contain both even and odd numbers (need padding)
-def test_dim(img):
-    a,b,c = img.header.get_data_shape()
-    if a%2 == b%2 & b%2 == c%2:
-        return False
-    else:
-        return True
         
 #Padding function: reshape the image to (max_dim, max_dim, max_dim) with same resolution and an orientation of 'LAS'
 def padding(img, new_name):
@@ -267,8 +259,7 @@ def padding(img, new_name):
     voxel_size = img.header.get_zooms(), order=0, cval=0, orientation='LAS', out_class=None)
     nib.save(new_img, new_name)
 
-if test_dim(img):    
-    padding(img, img_out)
+padding(img, img_out)
 
 EOF
 fi
