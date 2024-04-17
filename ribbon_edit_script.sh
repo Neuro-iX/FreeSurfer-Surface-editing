@@ -8,7 +8,7 @@ Help ()
 builtin echo "
 AUTHOR: Benoît Verreman
 
-LAST UPDATE: 2024-04-05
+LAST UPDATE: 2024-04-16
 
 DESCRIPTION: 
 Use ribbon and subcortical NIFTI files to recompute pial surface,
@@ -42,7 +42,7 @@ Put the script inside <subjid> folder
 Modify the value of some constants in the script if needed: LABELS_SUBCORTICAL, LABEL_RIBBON_WM_LH, LABEL_RIBBON_WM_RH, PIAL_BORDER_LOW
 
 EXAMPLES:
-$ bash ribbon_edit_script.sh -i 133019_T1w_acpc_dc_restore.nii.gz -s 133019 -r 133019_ribbon.nii.gz -c 133019_subcortical.nii.gz
+$ bash ribbon_edit_script.sh -i 133019_T1w_acpc_dc_restore.nii.gz -s 133019 -b 133019_ribbon.nii.gz -c 133019_subcortical.nii.gz
 
 $ bash ribbon_edit_script.sh -s <subjid> -t 8 -r #start from pial computation step (8), right hemisphere only (r)
 
@@ -54,7 +54,7 @@ HELP
 INPUT FILES
 -i: Relative or absolute path to T1w image file
 -s: Relative or absolute path to subjid folder (Necessary)
--r: Relative or absolute path to ribbon file
+-b: Relative or absolute path to ribbon file
 -c: Relative or absolute path to subcortical file
 
 TAG
@@ -66,8 +66,9 @@ TAG
 -t 5: (wm) Start from computing WM based on WM_BMASK
 -t 6: (orig) Start from computing orig surface based on wm from RIBBON_EDIT
 -t 7: (stats) Start from computing stats
--t 8: (pial) Start from computing pial surface
--t 9: (smooth) Start from smoothing pial surface
+-t 8: (brain.finalsurfs-edit) edit brain.finalsurfs with GM from RIBBON_EDIT
+-t 9: (pial) Start from computing pial surface
+-t 10: (smooth) Start from smoothing pial surface
 
 VALUES
 -p: Give value of PIAL_BORDER_LOW
@@ -92,6 +93,8 @@ OUTPUT_FOLDER="outputs"
 LABELS_SUBCORTICAL="5 15 29 30 32 31"
 LABEL_RIBBON_WM_LH=2
 LABEL_RIBBON_WM_RH=41
+LABEL_RIBBON_GM_LH=3
+LABEL_RIBBON_GM_RH=42
 
 CHANGE_AUTODET=1 # Default: Change autodet with parameters bellow or given as parameter
 PIAL_BORDER_LOW=5
@@ -105,7 +108,7 @@ unset -v RIBBON
 unset -v SUBCORTICAL
 
 #If a character is followed by :, then it needs an argument
-VALID_ARGS="i:s:r:c:t:p:hlrd"
+VALID_ARGS="i:s:b:c:t:p:hlrd"
 
 echo "$VALID_ARGS"
 
@@ -118,7 +121,7 @@ while getopts ${VALID_ARGS} opt; do
     s)
         SUBJID=${OPTARG}
         ;;
-    r)
+    b)
         RIBBON=${OPTARG}
         ;;
     c)
@@ -375,6 +378,12 @@ RH_CORTEX_HIPAMYG_LABEL="$SUBJECTS_DIR/$SUBJID/$OUTPUT_FOLDER/label/rh.cortex+hi
 
 AUTODET_NEW_GW_STATS_LH="$SUBJECTS_DIR/$SUBJID/$OUTPUT_FOLDER/surf/autodet-new.gw.stats.lh.dat"
 AUTODET_NEW_GW_STATS_RH="$SUBJECTS_DIR/$SUBJID/$OUTPUT_FOLDER/surf/autodet-new.gw.stats.rh.dat"
+
+GM_BMASK="$SUBJECTS_DIR/$SUBJID/$OUTPUT_FOLDER/mri/gm-bmask.mgz"
+BRAIN_FINALSURFS_EDITED="$SUBJECTS_DIR/$SUBJID/$OUTPUT_FOLDER/mri/brain.finalsurfs_edit.mgz"
+BMASK="$SUBJECTS_DIR/$SUBJID/$OUTPUT_FOLDER/mri/bmask.mgz"
+BRAIN_FINALSURFS_EDITED_NO_CEREB="$SUBJECTS_DIR/$SUBJID/$OUTPUT_FOLDER/mri/brain.finalsurfs_edit_no_cereb.mgz"
+
 LH_RIBBON_EDIT_PIAL="$SUBJECTS_DIR/$SUBJID/$OUTPUT_FOLDER/surf/lh.ribbon_edit.pial"
 RH_RIBBON_EDIT_PIAL="$SUBJECTS_DIR/$SUBJID/$OUTPUT_FOLDER/surf/rh.ribbon_edit.pial"
 
@@ -500,9 +509,9 @@ fi
 #################
 ## Compute wm.mgz : wm-bmask AND if(wm == 250 & wm-bmask), then wm-mask = 250
 #################
-# Extract white matter from ribbon-edit to create wm-bmask.mgz
 if ((TAG<=4))
 then
+# Extract white matter from ribbon-edit to create wm-bmask.mgz
 cmd "Extract WM from $RIBBON_EDIT" \
 "mri_extract_label $RIBBON_EDIT $LABEL_RIBBON_WM_LH $LABEL_RIBBON_WM_RH $WM_BMASK" #0/128 binary mask
 fi
@@ -693,21 +702,47 @@ fi
 fi
 
 #################
-## Compute pial surface: mris_place_surface
+## Edit brain.finalsurfs with GM ribbon
 #################
 if ((TAG<=8))
+then
+# Extract gray matter from ribbon-edit to create gm-bmask.mgz
+cmd "Extract GM from $RIBBON_EDIT" \
+"mri_extract_label $RIBBON_EDIT $LABEL_RIBBON_GM_LH $LABEL_RIBBON_GM_RH $GM_BMASK" #0/128 binary mask
+
+cmd "Replace 128 by 80 into $GM_BMASK" \
+"mri_binarize --i $GM_BMASK --o $GM_BMASK --replace 128 80"
+
+cmd "Concatenate $GM_BMASK with $BRAIN_FINALSURFS into $BRAIN_FINALSURFS_EDITED" \
+"mri_concat --i $GM_BMASK --i $BRAIN_FINALSURFS --o $BRAIN_FINALSURFS_EDITED --max"
+
+# Extract brain from ribbon-edit to create bmask.mgz
+cmd "Extract GM from $RIBBON_EDIT" \
+"mri_extract_label $RIBBON_EDIT $LABEL_RIBBON_GM_LH $LABEL_RIBBON_WM_LH $LABEL_RIBBON_GM_RH $LABEL_RIBBON_WM_RH $BMASK" #0/128 binary mask
+
+cmd "Replace 128 by 80 into $GM_BMASK" \
+"mri_binarize --i $BMASK --o $BMASK --replace 128 1"
+
+cmd "Mask $BRAIN_FINALSURFS_EDITED with $BMASK into $BRAIN_FINALSURFS_EDITED_NO_CEREB" \
+"mri_mask $BRAIN_FINALSURFS_EDITED $BMASK $BRAIN_FINALSURFS_EDITED_NO_CEREB"
+fi
+
+#################
+## Compute pial surface: mris_place_surface
+#################
+if ((TAG<=9))
 then
 if ((HEMI>=0))
 then	
 	cmd "Computes lh pial surface" \
-	"mris_place_surface --i $LH_ORIG --o $LH_RIBBON_EDIT_PIAL --nsmooth 0 --adgws-in $AUTODET_NEW_GW_STATS_LH --pial --lh --repulse-surf $LH_ORIG --invol $BRAIN_FINALSURFS --threads 6 --white-surf $LH_ORIG --pin-medial-wall $LH_CORTEX_LABEL --seg $ASEG_PRESURF --no-rip" #--rip-label $LH_CORTEX_HIPAMYG_LABEL"
+	"mris_place_surface --i $LH_ORIG --o $LH_RIBBON_EDIT_PIAL --nsmooth 0 --adgws-in $AUTODET_NEW_GW_STATS_LH --pial --lh --repulse-surf $LH_ORIG --invol $BRAIN_FINALSURFS_EDITED_NO_CEREB --threads 6 --white-surf $LH_ORIG --pin-medial-wall $LH_CORTEX_LABEL --seg $ASEG_PRESURF --no-rip" #--rip-label $LH_CORTEX_HIPAMYG_LABEL"
 	#"mris_place_surface --i $LH_ORIG --o $LH_RIBBON_EDIT_PIAL --nsmooth 0 --adgws-in $AUTODET_NEW_GW_STATS_LH --pial --lh --repulse-surf $LH_ORIG --invol $BRAIN_FINALSURFS --threads 6 --white-surf $LH_ORIG --pin-medial-wall $LH_CORTEX_LABEL --seg $ASEG_PRESURF --no-rip"
 fi
 
 if ((HEMI<=0))
 then
 	cmd "Computes rh pial surface" \
-	"mris_place_surface --i $RH_ORIG --o $RH_RIBBON_EDIT_PIAL --nsmooth 0 --adgws-in $AUTODET_NEW_GW_STATS_RH --pial --rh --repulse-surf $RH_ORIG --invol $BRAIN_FINALSURFS --threads 6 --white-surf $RH_ORIG --pin-medial-wall $RH_CORTEX_LABEL --seg $ASEG_PRESURF --no-rip" #--rip-label $RH_CORTEX_HIPAMYG_LABEL"
+	"mris_place_surface --i $RH_ORIG --o $RH_RIBBON_EDIT_PIAL --nsmooth 0 --adgws-in $AUTODET_NEW_GW_STATS_RH --pial --rh --repulse-surf $RH_ORIG --invol $BRAIN_FINALSURFS_EDITED_NO_CEREB --threads 6 --white-surf $RH_ORIG --pin-medial-wall $RH_CORTEX_LABEL --seg $ASEG_PRESURF --no-rip" #--rip-label $RH_CORTEX_HIPAMYG_LABEL"
 	#"mris_place_surface --i $RH_ORIG --o $RH_RIBBON_EDIT_PIAL --nsmooth 0 --adgws-in $AUTODET_NEW_GW_STATS_RH --pial --rh --repulse-surf $RH_ORIG --invol $BRAIN_FINALSURFS --threads 6 --white-surf $RH_ORIG --pin-medial-wall $RH_CORTEX_LABEL --seg $ASEG_PRESURF --no-rip"
 fi
 fi
@@ -715,17 +750,20 @@ fi
 #################
 ## Add smoothing to pial surface (mris_place_surface)
 # #################
-if ((TAG<=9))
+#cat << EOF
+#EOF
+if ((TAG<=10))
 then
 if ((HEMI>=0))
 then	
 	cmd "Smooths lh pial surface" \
-	"mris_place_surface --i $LH_RIBBON_EDIT_PIAL --o $LH_RIBBON_EDIT_PIAL_SMOOTH --nsmooth 1 --adgws-in $AUTODET_NEW_GW_STATS_LH --pial --lh --repulse-surf $LH_RIBBON_EDIT_PIAL --invol $BRAIN_FINALSURFS --threads 6 --white-surf $LH_RIBBON_EDIT_PIAL --pin-medial-wall $LH_CORTEX_LABEL --seg $ASEG_PRESURF --no-rip"
+	"mris_place_surface --i $LH_RIBBON_EDIT_PIAL --o $LH_RIBBON_EDIT_PIAL_SMOOTH --nsmooth 1 --adgws-in $AUTODET_NEW_GW_STATS_LH --pial --lh --repulse-surf $LH_RIBBON_EDIT_PIAL --invol $BRAIN_FINALSURFS_EDITED_NO_CEREB --threads 6 --white-surf $LH_RIBBON_EDIT_PIAL --pin-medial-wall $LH_CORTEX_LABEL --seg $ASEG_PRESURF --no-rip"
 fi
 
 if ((HEMI<=0))
 then
 	cmd "Smooths rh pial surface" \
- 	"mris_place_surface --i $RH_RIBBON_EDIT_PIAL --o $RH_RIBBON_EDIT_PIAL_SMOOTH --nsmooth 1 --adgws-in $AUTODET_NEW_GW_STATS_RH --pial --rh --repulse-surf $RH_RIBBON_EDIT_PIAL --invol $BRAIN_FINALSURFS --threads 6 --white-surf $RH_ORIG --pin-medial-wall $RH_CORTEX_LABEL --seg $ASEG_PRESURF --no-rip"
+ 	"mris_place_surface --i $RH_RIBBON_EDIT_PIAL --o $RH_RIBBON_EDIT_PIAL_SMOOTH --nsmooth 1 --adgws-in $AUTODET_NEW_GW_STATS_RH --pial --rh --repulse-surf $RH_RIBBON_EDIT_PIAL --invol $BRAIN_FINALSURFS_EDITED_NO_CEREB --threads 6 --white-surf $RH_ORIG --pin-medial-wall $RH_CORTEX_LABEL --seg $ASEG_PRESURF --no-rip"
 fi
 fi
+
