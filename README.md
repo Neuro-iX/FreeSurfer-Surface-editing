@@ -67,13 +67,13 @@ TAG \
 -t 7: (stats) Start from computing stats \
 -t 8: (brain.finalsurfs-edit) edit brain.finalsurfs with GM from RIBBON_EDIT \
 -t 9: (pial) Start from computing pial surface \
--t 10: (smooth) Start from smoothing pial surface \
+-t 10: (smooth) Start from smoothing pial surface 
 
 VALUES \
 -p: Give value of PIAL_BORDER_LOW
 
 HEMI \
--r: Compute only right hemisphere surface 
+-r: Compute only right hemisphere surface  \
 -l: Compute only left hemisphere surface
 
 RESET \
