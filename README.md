@@ -73,7 +73,7 @@ VALUES \
 -p: Give value of PIAL_BORDER_LOW
 
 HEMI \
--r: Compute only right hemisphere surface \
+-r: Compute only right hemisphere surface 
 -l: Compute only left hemisphere surface
 
 RESET \
