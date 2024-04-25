@@ -814,7 +814,7 @@ then
 	"mris_place_surface --i $LH_ORIG --o $LH_RIBBON_EDIT_PIAL --nsmooth 0 --adgws-in $AUTODET_NEW_GW_STATS_LH --pial --lh --repulse-surf $LH_ORIG --invol $BRAIN_FINALSURFS_NO_CEREB_EDITED --threads 6 --white-surf $LH_ORIG --pin-medial-wall $LH_CORTEX_LABEL --seg $ASEG_PRESURF --no-rip" #--rip-label $LH_CORTEX_HIPAMYG_LABEL"
 	#Second pass
 	cmd "Computes lh pial surface - second pass" \
-	"mris_place_surface --i $LH_RIBBON_EDIT_PIAL --o $LH_RIBBON_EDIT_PIAL_SECOND_PASS --nsmooth 0 --adgws-in $AUTODET_NEW_GW_STATS_LH --pial --lh --repulse-surf $LH_ORIG --invol $BRAIN_FINALSURFS_NO_CEREB_UNIFORM_GM_80 --threads 6 --white-surf $LH_RIBBON_EDIT_PIAL --pin-medial-wall $LH_CORTEX_LABEL --seg $ASEG_PRESURF --no-rip"
+	"mris_place_surface --i $LH_RIBBON_EDIT_PIAL --o $LH_RIBBON_EDIT_PIAL_SECOND_PASS --nsmooth 0 --adgws-in $AUTODET_NEW_GW_STATS_LH --pial --lh --repulse-surf $LH_ORIG --invol $BRAIN_FINALSURFS_NO_CEREB_UNIFORM_GM_80 --threads 6 --white-surf $LH_ORIG --pin-medial-wall $LH_CORTEX_LABEL --seg $ASEG_PRESURF --no-rip"
 fi
 
 if ((HEMI<=0))
@@ -823,7 +823,7 @@ then
 	"mris_place_surface --i $RH_ORIG --o $RH_RIBBON_EDIT_PIAL --nsmooth 0 --adgws-in $AUTODET_NEW_GW_STATS_RH --pial --rh --repulse-surf $RH_ORIG --invol $BRAIN_FINALSURFS_NO_CEREB_EDITED --threads 6 --white-surf $RH_ORIG --pin-medial-wall $RH_CORTEX_LABEL --seg $ASEG_PRESURF --no-rip" #--rip-label $RH_CORTEX_HIPAMYG_LABEL"
 	#"Second pass
 	cmd "Computes rh pial surface - second pass" \
-	"mris_place_surface --i $RH_RIBBON_EDIT_PIAL --o $RH_RIBBON_EDIT_PIAL_SECOND_PASS --nsmooth 0 --adgws-in $AUTODET_NEW_GW_STATS_RH --pial --rh --repulse-surf $RH_ORIG --invol $BRAIN_FINALSURFS_NO_CEREB_UNIFORM_GM_80 --threads 6 --white-surf $RH_RIBBON_EDIT_PIAL --pin-medial-wall $RH_CORTEX_LABEL --seg $ASEG_PRESURF --no-rip"
+	"mris_place_surface --i $RH_RIBBON_EDIT_PIAL --o $RH_RIBBON_EDIT_PIAL_SECOND_PASS --nsmooth 0 --adgws-in $AUTODET_NEW_GW_STATS_RH --pial --rh --repulse-surf $RH_ORIG --invol $BRAIN_FINALSURFS_NO_CEREB_UNIFORM_GM_80 --threads 6 --white-surf $RH_ORIG --pin-medial-wall $RH_CORTEX_LABEL --seg $ASEG_PRESURF --no-rip"
 fi
 fi
 
