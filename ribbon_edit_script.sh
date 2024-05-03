@@ -79,6 +79,9 @@ HEMI
 
 RESET
 -d: Reset outputs folder and report.sh script
+
+TROUBLESHOOTS:
+-Missing argument: check if you put the necessary option flags, and for each flag, if it needs an argument or not.
 "
 }
 
