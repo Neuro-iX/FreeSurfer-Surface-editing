@@ -156,7 +156,7 @@ while getopts ${VALID_ARGS} opt; do
 done
 
 # Test if user provided SUBJID
-: ${SUBJID:?Missing argument --subjid or -s}
+: ${SUBJID:?Missing argument -s}
 
 #################
 ## Remove slaches from $SUBJECTS_DIR and $SUBJID
@@ -482,7 +482,7 @@ Echo "
 if ((FS == 1 && TAG < 0))
 then
 # Test if user provided $IMAGE
-: ${IMAGE:?Missing argument --image or -i}
+: ${IMAGE:?Missing argument -i}
 Echo "# Given image: $IMAGE"
 
 if [ -d "$SUBJECTS_DIR/$SUBJID" ]
@@ -505,7 +505,7 @@ fi
 if ((TAG<=0))
 then
 # Test if user provided RIBBON and SUBCORTICAL
-: ${RIBBON:?Missing argument --ribbon or -r} ${SUBCORTICAL:?Missing argument --subcortical or -c}
+: ${RIBBON:?Missing argument -b} ${SUBCORTICAL:?Missing argument -c}
 Echo "# Given ribbon: $RIBBON"
 Echo "# Given subcortical: $SUBCORTICAL"
 
