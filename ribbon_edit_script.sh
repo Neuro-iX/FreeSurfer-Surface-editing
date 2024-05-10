@@ -8,7 +8,7 @@ Help ()
 builtin echo "
 AUTHOR: Benoît Verreman
 
-LAST UPDATE: 2024-04-25
+LAST UPDATE: 2024-05-10
 
 DESCRIPTION: 
 Use ribbon and subcortical NIFTI files to recompute pial surface,
@@ -448,19 +448,33 @@ RH_CORTEX_LABEL="$SUBJECTS_DIR/$SUBJID/$OUTPUT_FOLDER/label/rh.cortex.label"
 LH_CORTEX_HIPAMYG_LABEL="$SUBJECTS_DIR/$SUBJID/$OUTPUT_FOLDER/label/lh.cortex+hipamyg.label"
 RH_CORTEX_HIPAMYG_LABEL="$SUBJECTS_DIR/$SUBJID/$OUTPUT_FOLDER/label/rh.cortex+hipamyg.label"
 
-GM_BMASK="$SUBJECTS_DIR/$SUBJID/$OUTPUT_FOLDER/mri/gm-bmask.mgz"
-BMASK="$SUBJECTS_DIR/$SUBJID/$OUTPUT_FOLDER/mri/bmask.mgz"
-BRAIN_FINALSURFS_NO_CEREB="$SUBJECTS_DIR/$SUBJID/$OUTPUT_FOLDER/mri/brain.finalsurfs_no_cereb.mgz"
-BRAIN_FINALSURFS_NO_CEREB_UNIFORM_GM_80="$SUBJECTS_DIR/$SUBJID/$OUTPUT_FOLDER/mri/brain.finalsurfs_no_cereb_uniform_gm_80.mgz"
-BRAIN_FINALSURFS_NO_CEREB_EDITED="$SUBJECTS_DIR/$SUBJID/$OUTPUT_FOLDER/mri/brain.finalsurfs_no_cereb_edited.mgz"
+GM_BMASK_LH="$SUBJECTS_DIR/$SUBJID/$OUTPUT_FOLDER/mri/gm-bmask_lh.mgz"
+BMASK_LH="$SUBJECTS_DIR/$SUBJID/$OUTPUT_FOLDER/mri/bmask_lh.mgz"
+BRAIN_FINALSURFS_NO_CEREB_LH="$SUBJECTS_DIR/$SUBJID/$OUTPUT_FOLDER/mri/brain.finalsurfs_no_cereb_lh.mgz"
+BRAIN_FINALSURFS_NO_CEREB_UNIFORM_GM_80_LH="$SUBJECTS_DIR/$SUBJID/$OUTPUT_FOLDER/mri/brain.finalsurfs_no_cereb_uniform_gm_80_lh.mgz"
+BRAIN_FINALSURFS_NO_CEREB_EDITED_LH="$SUBJECTS_DIR/$SUBJID/$OUTPUT_FOLDER/mri/brain.finalsurfs_no_cereb_edited_lh.mgz"
+
+GM_BMASK_RH="$SUBJECTS_DIR/$SUBJID/$OUTPUT_FOLDER/mri/gm-bmask_rh.mgz"
+BMASK_RH="$SUBJECTS_DIR/$SUBJID/$OUTPUT_FOLDER/mri/bmask_rh.mgz"
+BRAIN_FINALSURFS_NO_CEREB_RH="$SUBJECTS_DIR/$SUBJID/$OUTPUT_FOLDER/mri/brain.finalsurfs_no_cereb_rh.mgz"
+BRAIN_FINALSURFS_NO_CEREB_UNIFORM_GM_80_RH="$SUBJECTS_DIR/$SUBJID/$OUTPUT_FOLDER/mri/brain.finalsurfs_no_cereb_uniform_gm_80_rh.mgz"
+BRAIN_FINALSURFS_NO_CEREB_EDITED_RH="$SUBJECTS_DIR/$SUBJID/$OUTPUT_FOLDER/mri/brain.finalsurfs_no_cereb_edited_rh.mgz"
 
 AUTODET_NEW_GW_STATS_LH="$SUBJECTS_DIR/$SUBJID/$OUTPUT_FOLDER/surf/autodet-new.gw.stats.lh.dat"
 AUTODET_NEW_GW_STATS_RH="$SUBJECTS_DIR/$SUBJID/$OUTPUT_FOLDER/surf/autodet-new.gw.stats.rh.dat"
 
 LH_RIBBON_EDIT_PIAL="$SUBJECTS_DIR/$SUBJID/$OUTPUT_FOLDER/surf/lh.ribbon_edit.pial"
 RH_RIBBON_EDIT_PIAL="$SUBJECTS_DIR/$SUBJID/$OUTPUT_FOLDER/surf/rh.ribbon_edit.pial"
-LH_RIBBON_EDIT_PIAL_SECOND_PASS="$SUBJECTS_DIR/$SUBJID/$OUTPUT_FOLDER/surf/lh.ribbon_edit-second-pass.pial"
-RH_RIBBON_EDIT_PIAL_SECOND_PASS="$SUBJECTS_DIR/$SUBJID/$OUTPUT_FOLDER/surf/rh.ribbon_edit-second-pass.pial"
+LH_RIBBON_EDIT_PIAL_SECOND_PASS_i="$SUBJECTS_DIR/$SUBJID/$OUTPUT_FOLDER/surf/lh.ribbon_edit-second-pass_i.pial"
+RH_RIBBON_EDIT_PIAL_SECOND_PASS_i="$SUBJECTS_DIR/$SUBJID/$OUTPUT_FOLDER/surf/rh.ribbon_edit-second-pass_i.pial"
+LH_RIBBON_EDIT_PIAL_SECOND_PASS_r="$SUBJECTS_DIR/$SUBJID/$OUTPUT_FOLDER/surf/lh.ribbon_edit-second-pass_r.pial"
+RH_RIBBON_EDIT_PIAL_SECOND_PASS_r="$SUBJECTS_DIR/$SUBJID/$OUTPUT_FOLDER/surf/rh.ribbon_edit-second-pass_r.pial"
+LH_RIBBON_EDIT_PIAL_SECOND_PASS_i_r="$SUBJECTS_DIR/$SUBJID/$OUTPUT_FOLDER/surf/lh.ribbon_edit-second-pass_i_r.pial"
+RH_RIBBON_EDIT_PIAL_SECOND_PASS_i_r="$SUBJECTS_DIR/$SUBJID/$OUTPUT_FOLDER/surf/rh.ribbon_edit-second-pass_i_r.pial"
+LH_RIBBON_EDIT_PIAL_SECOND_PASS_i_w="$SUBJECTS_DIR/$SUBJID/$OUTPUT_FOLDER/surf/lh.ribbon_edit-second-pass_i_w.pial"
+RH_RIBBON_EDIT_PIAL_SECOND_PASS_i_w="$SUBJECTS_DIR/$SUBJID/$OUTPUT_FOLDER/surf/rh.ribbon_edit-second-pass_i_w.pial"
+LH_RIBBON_EDIT_PIAL_SECOND_PASS_i_w_r="$SUBJECTS_DIR/$SUBJID/$OUTPUT_FOLDER/surf/lh.ribbon_edit-second-pass_i_w_r.pial"
+RH_RIBBON_EDIT_PIAL_SECOND_PASS_i_w_r="$SUBJECTS_DIR/$SUBJID/$OUTPUT_FOLDER/surf/rh.ribbon_edit-second-pass_i_w_r.pial"
 
 LH_RIBBON_EDIT_PIAL_THIRD_PASS_SMOOTH="$SUBJECTS_DIR/$SUBJID/$OUTPUT_FOLDER/surf/lh.ribbon_edit.smooth-third-pass.pial"
 RH_RIBBON_EDIT_PIAL_THIRD_PASS_SMOOTH="$SUBJECTS_DIR/$SUBJID/$OUTPUT_FOLDER/surf/rh.ribbon_edit.smooth-third-pass.pial"
@@ -726,41 +740,69 @@ fi
 #################
 if ((TAG<=7))
 then
-# Extract brain from ribbon-edit to create bmask.mgz (no cerebellum), and use the latter on brain.finalsurfs
-cmd "Extract GM from $RIBBON_EDIT" \
-"mri_extract_label $RIBBON_EDIT $LABEL_RIBBON_GM_LH $LABEL_RIBBON_WM_LH $LABEL_RIBBON_GM_RH $LABEL_RIBBON_WM_RH $BMASK" #0/128 binary mask
+if ((HEMI>=0))
+then
+	# Extract brain from ribbon-edit to create bmask.mgz (no cerebellum), and use the latter on brain.finalsurfs
+	cmd "Extract GM from $RIBBON_EDIT" \
+	"mri_extract_label $RIBBON_EDIT $LABEL_RIBBON_GM_LH $LABEL_RIBBON_WM_LH $BMASK_LH" #0/128 binary mask
 
-cmd "Replace 128 by 1 into $BMASK" \
-"mri_binarize --i $BMASK --o $BMASK --replace 128 1"
+	cmd "Replace 128 by 1 into $BMASK_LH" \
+	"mri_binarize --i $BMASK_LH --o $BMASK_LH --replace 128 1"
 
-cmd "Mask $BRAIN_FINALSURFS with $BMASK into $BRAIN_FINALSURFS_NO_CEREB" \
-"mri_mask $BRAIN_FINALSURFS $BMASK $BRAIN_FINALSURFS_NO_CEREB"
+	cmd "Mask $BRAIN_FINALSURFS with $BMASK_LH into $BRAIN_FINALSURFS_NO_CEREB_LH" \
+	"mri_mask $BRAIN_FINALSURFS $BMASK_LH $BRAIN_FINALSURFS_NO_CEREB_LH"
 
-# Extract gray matter from ribbon-edit to create gm-bmask.mgz, and create with it bf_80
-cmd "Extract GM from $RIBBON_EDIT" \
-"mri_extract_label $RIBBON_EDIT $LABEL_RIBBON_GM_LH $LABEL_RIBBON_GM_RH $GM_BMASK" #0/128 binary mask
+	# Extract gray matter from ribbon-edit to create gm-bmask.mgz, and create with it bf_80
+	cmd "Extract GM from $RIBBON_EDIT" \
+	"mri_extract_label $RIBBON_EDIT $LABEL_RIBBON_GM_LH $GM_BMASK_LH" #0/128 binary mask
 
-cmd "Concatenate $GM_BMASK with $BRAIN_FINALSURFS_NO_CEREB into $BRAIN_FINALSURFS_EDITED" \
-"mri_concat --i $GM_BMASK --i $BRAIN_FINALSURFS_NO_CEREB --o $BRAIN_FINALSURFS_NO_CEREB_UNIFORM_GM_80 --max"
+	cmd "Concatenate $GM_BMASK_LH with $BRAIN_FINALSURFS_NO_CEREB_LH into $BRAIN_FINALSURFS_NO_CEREB_UNIFORM_GM_80_LH" \
+	"mri_concat --i $GM_BMASK_LH --i $BRAIN_FINALSURFS_NO_CEREB_LH --o $BRAIN_FINALSURFS_NO_CEREB_UNIFORM_GM_80_LH --max"
 
-cmd "Replace 128 by 80 into $BRAIN_FINALSURFS_NO_CEREB_UNIFORM_80" \
-"mri_binarize --i $BRAIN_FINALSURFS_NO_CEREB_UNIFORM_GM_80 --o $BRAIN_FINALSURFS_NO_CEREB_UNIFORM_GM_80 --replace 128 80"
+	cmd "Replace 128 by 80 into $BRAIN_FINALSURFS_NO_CEREB_UNIFORM_80_LH" \
+	"mri_binarize --i $BRAIN_FINALSURFS_NO_CEREB_UNIFORM_GM_80_LH --o $BRAIN_FINALSURFS_NO_CEREB_UNIFORM_GM_80_LH --replace 128 80"
 
-# Use script brain-finalsurfs-edit.py to edit brain.finalsurfs.mgz
-cmd "Use script $SUBJECTS_DIR/brain-finalsurfs-edit.py on $BRAIN_FINALSURFS_NO_CEREB with $GM_BMASK" \
-"python $SUBJECTS_DIR/brain-finalsurfs-edit.py $BRAIN_FINALSURFS_NO_CEREB $GM_BMASK $BRAIN_FINALSURFS_NO_CEREB_EDITED"
+	# Use script brain-finalsurfs-edit.py to edit brain.finalsurfs.mgz
+	cmd "Use script $SUBJECTS_DIR/brain-finalsurfs-edit.py on $BRAIN_FINALSURFS_NO_CEREB_LH with $GM_BMASK_LH" \
+	"python $SUBJECTS_DIR/brain-finalsurfs-edit.py $BRAIN_FINALSURFS_NO_CEREB_LH $GM_BMASK_LH $BRAIN_FINALSURFS_NO_CEREB_EDITED_LH"
 fi
+if ((HEMI<=0))
+then
+	cmd "Extract GM from $RIBBON_EDIT" \
+	"mri_extract_label $RIBBON_EDIT $LABEL_RIBBON_GM_RH $LABEL_RIBBON_WM_RH $BMASK_RH" #0/128 binary mask
 
+	cmd "Replace 128 by 1 into $BMASK_RH" \
+	"mri_binarize --i $BMASK_RH --o $BMASK_RH --replace 128 1"
+
+	cmd "Mask $BRAIN_FINALSURFS with $BMASK_RH into $BRAIN_FINALSURFS_NO_CEREB_RH" \
+	"mri_mask $BRAIN_FINALSURFS $BMASK_RH $BRAIN_FINALSURFS_NO_CEREB_RH"
+
+	# Extract gray matter from ribbon-edit to create gm-bmask.mgz, and create with it bf_80
+	cmd "Extract GM from $RIBBON_EDIT" \
+	"mri_extract_label $RIBBON_EDIT $LABEL_RIBBON_GM_RH $GM_BMASK_RH" #0/128 binary mask
+
+	cmd "Concatenate $GM_BMASK_RH with $BRAIN_FINALSURFS_NO_CEREB_RH into $BRAIN_FINALSURFS_NO_CEREB_UNIFORM_GM_80_RH" \
+	"mri_concat --i $GM_BMASK_RH --i $BRAIN_FINALSURFS_NO_CEREB_RH --o $BRAIN_FINALSURFS_NO_CEREB_UNIFORM_GM_80_RH --max"
+
+	cmd "Replace 128 by 80 into $BRAIN_FINALSURFS_NO_CEREB_UNIFORM_80_RH" \
+	"mri_binarize --i $BRAIN_FINALSURFS_NO_CEREB_UNIFORM_GM_80_RH --o $BRAIN_FINALSURFS_NO_CEREB_UNIFORM_GM_80_RH --replace 128 80"
+
+	# Use script brain-finalsurfs-edit.py to edit brain.finalsurfs.mgz
+	cmd "Use script $SUBJECTS_DIR/brain-finalsurfs-edit.py on $BRAIN_FINALSURFS_NO_CEREB_RH with $GM_BMASK_RH" \
+	"python $SUBJECTS_DIR/brain-finalsurfs-edit.py $BRAIN_FINALSURFS_NO_CEREB_RH $GM_BMASK_RH $BRAIN_FINALSURFS_NO_CEREB_EDITED_RH"
+
+fi
+fi
 #################
 ## Compute stats for surface
 #################
 if ((TAG<=8))
 then
 if ((HEMI>=0))
-then
+then	
 	# Compute stats
 	cmd "Computes stats for lh pial surface" \
-	"mris_autodet_gwstats --o $AUTODET_NEW_GW_STATS_LH --i $BRAIN_FINALSURFS_NO_CEREB_EDITED --wm $WM_EDITED --surf $LH_ORIG"
+	"mris_autodet_gwstats --o $AUTODET_NEW_GW_STATS_LH --i $BRAIN_FINALSURFS_NO_CEREB_EDITED_LH --wm $WM_EDITED --surf $LH_ORIG"
 	
 	if ((CHANGE_AUTODET==1))
 	then
@@ -785,7 +827,7 @@ if ((HEMI<=0))
 then
 	# Compute stats
 	cmd "Computes stats for rh pial surface" \
-	"mris_autodet_gwstats --o $AUTODET_NEW_GW_STATS_RH --i $BRAIN_FINALSURFS_NO_CEREB_EDITED --wm $WM_EDITED --surf $RH_ORIG"
+	"mris_autodet_gwstats --o $AUTODET_NEW_GW_STATS_RH --i $BRAIN_FINALSURFS_NO_CEREB_EDITED_RH --wm $WM_EDITED --surf $RH_ORIG"
 	
 	if ((CHANGE_AUTODET==1))
 	then
@@ -814,27 +856,51 @@ then
 if ((HEMI>=0))
 then	
 	cmd "Computes lh pial surface" \
-	"mris_place_surface --i $LH_ORIG --o $LH_RIBBON_EDIT_PIAL --nsmooth 0 --adgws-in $AUTODET_NEW_GW_STATS_LH --pial --lh --repulse-surf $LH_ORIG --invol $BRAIN_FINALSURFS_NO_CEREB_EDITED --threads 6 --white-surf $LH_ORIG --pin-medial-wall $LH_CORTEX_LABEL --seg $ASEG_PRESURF --no-rip" #--rip-label $LH_CORTEX_HIPAMYG_LABEL"
+	"mris_place_surface --i $LH_ORIG --o $LH_RIBBON_EDIT_PIAL --nsmooth 0 --adgws-in $AUTODET_NEW_GW_STATS_LH --pial --lh --repulse-surf $LH_ORIG --invol $BRAIN_FINALSURFS_NO_CEREB_EDITED_LH --threads 6 --white-surf $LH_ORIG --pin-medial-wall $LH_CORTEX_LABEL --seg $ASEG_PRESURF --no-rip" #--rip-label $LH_CORTEX_HIPAMYG_LABEL"
 	#Second pass
 	cmd "Computes lh pial surface - second pass" \
-	"mris_place_surface --i $LH_RIBBON_EDIT_PIAL --o $LH_RIBBON_EDIT_PIAL_SECOND_PASS --nsmooth 0 --adgws-in $AUTODET_NEW_GW_STATS_LH --pial --lh --repulse-surf $LH_ORIG --invol $BRAIN_FINALSURFS_NO_CEREB_UNIFORM_GM_80 --threads 6 --white-surf $LH_ORIG --pin-medial-wall $LH_CORTEX_LABEL --seg $ASEG_PRESURF --no-rip"
+	"mris_place_surface --i $LH_RIBBON_EDIT_PIAL --o $LH_RIBBON_EDIT_PIAL_SECOND_PASS_i --nsmooth 0 --adgws-in $AUTODET_NEW_GW_STATS_LH --pial --lh --repulse-surf $LH_ORIG --invol $BRAIN_FINALSURFS_NO_CEREB_UNIFORM_GM_80_LH --threads 6 --white-surf $LH_ORIG --pin-medial-wall $LH_CORTEX_LABEL --seg $ASEG_PRESURF --no-rip"
+		#Second pass
+	cmd "Computes lh pial surface - second pass" \
+	"mris_place_surface --i $LH_ORIG --o $LH_RIBBON_EDIT_PIAL_SECOND_PASS_r --nsmooth 0 --adgws-in $AUTODET_NEW_GW_STATS_LH --pial --lh --repulse-surf $LH_RIBBON_EDIT_PIAL --invol $BRAIN_FINALSURFS_NO_CEREB_UNIFORM_GM_80_LH --threads 6 --white-surf $LH_ORIG --pin-medial-wall $LH_CORTEX_LABEL --seg $ASEG_PRESURF --no-rip"
+		#Second pass
+	cmd "Computes lh pial surface - second pass" \
+	"mris_place_surface --i $LH_RIBBON_EDIT_PIAL --o $LH_RIBBON_EDIT_PIAL_SECOND_PASS_i_r --nsmooth 0 --adgws-in $AUTODET_NEW_GW_STATS_LH --pial --lh --repulse-surf $LH_RIBBON_EDIT_PIAL --invol $BRAIN_FINALSURFS_NO_CEREB_UNIFORM_GM_80_LH --threads 6 --white-surf $LH_ORIG --pin-medial-wall $LH_CORTEX_LABEL --seg $ASEG_PRESURF --no-rip"
+		#Second pass
+	cmd "Computes lh pial surface - second pass" \
+	"mris_place_surface --i $LH_RIBBON_EDIT_PIAL --o $LH_RIBBON_EDIT_PIAL_SECOND_PASS_i_w --nsmooth 0 --adgws-in $AUTODET_NEW_GW_STATS_LH --pial --lh --repulse-surf $LH_ORIG --invol $BRAIN_FINALSURFS_NO_CEREB_UNIFORM_GM_80_LH --threads 6 --white-surf $LH_RIBBON_EDIT_PIAL --pin-medial-wall $LH_CORTEX_LABEL --seg $ASEG_PRESURF --no-rip"
+		#Second pass
+	cmd "Computes lh pial surface - second pass" \
+	"mris_place_surface --i $LH_RIBBON_EDIT_PIAL --o $LH_RIBBON_EDIT_PIAL_SECOND_PASS_i_w_r --nsmooth 0 --adgws-in $AUTODET_NEW_GW_STATS_LH --pial --lh --repulse-surf $LH_RIBBON_EDIT_PIAL --invol $BRAIN_FINALSURFS_NO_CEREB_UNIFORM_GM_80_LH --threads 6 --white-surf $LH_RIBBON_EDIT_PIAL --pin-medial-wall $LH_CORTEX_LABEL --seg $ASEG_PRESURF --no-rip"
 fi
 
 if ((HEMI<=0))
 then
 	cmd "Computes rh pial surface" \
-	"mris_place_surface --i $RH_ORIG --o $RH_RIBBON_EDIT_PIAL --nsmooth 0 --adgws-in $AUTODET_NEW_GW_STATS_RH --pial --rh --repulse-surf $RH_ORIG --invol $BRAIN_FINALSURFS_NO_CEREB_EDITED --threads 6 --white-surf $RH_ORIG --pin-medial-wall $RH_CORTEX_LABEL --seg $ASEG_PRESURF --no-rip" #--rip-label $RH_CORTEX_HIPAMYG_LABEL"
+	"mris_place_surface --i $RH_ORIG --o $RH_RIBBON_EDIT_PIAL --nsmooth 0 --adgws-in $AUTODET_NEW_GW_STATS_RH --pial --rh --repulse-surf $RH_ORIG --invol $BRAIN_FINALSURFS_NO_CEREB_EDITED_RH --threads 6 --white-surf $RH_ORIG --pin-medial-wall $RH_CORTEX_LABEL --seg $ASEG_PRESURF --no-rip" #--rip-label $RH_CORTEX_HIPAMYG_LABEL"
 	#"Second pass
 	cmd "Computes rh pial surface - second pass" \
-	"mris_place_surface --i $RH_RIBBON_EDIT_PIAL --o $RH_RIBBON_EDIT_PIAL_SECOND_PASS --nsmooth 0 --adgws-in $AUTODET_NEW_GW_STATS_RH --pial --rh --repulse-surf $RH_ORIG --invol $BRAIN_FINALSURFS_NO_CEREB_UNIFORM_GM_80 --threads 6 --white-surf $RH_ORIG --pin-medial-wall $RH_CORTEX_LABEL --seg $ASEG_PRESURF --no-rip"
+	"mris_place_surface --i $RH_RIBBON_EDIT_PIAL --o $RH_RIBBON_EDIT_PIAL_SECOND_PASS_i --nsmooth 0 --adgws-in $AUTODET_NEW_GW_STATS_RH --pial --rh --repulse-surf $RH_ORIG --invol $BRAIN_FINALSURFS_NO_CEREB_UNIFORM_GM_80_RH--threads 6 --white-surf $RH_ORIG --pin-medial-wall $RH_CORTEX_LABEL --seg $ASEG_PRESURF --no-rip"
+		#"Second pass
+	cmd "Computes rh pial surface - second pass" \
+	"mris_place_surface --i $RH_ORIG --o $RH_RIBBON_EDIT_PIAL_SECOND_PASS_r --nsmooth 0 --adgws-in $AUTODET_NEW_GW_STATS_RH --pial --rh --repulse-surf $RH_RIBBON_EDIT_PIAL --invol $BRAIN_FINALSURFS_NO_CEREB_UNIFORM_GM_80_RH --threads 6 --white-surf $RH_ORIG --pin-medial-wall $RH_CORTEX_LABEL --seg $ASEG_PRESURF --no-rip"
+		#"Second pass
+	cmd "Computes rh pial surface - second pass" \
+	"mris_place_surface --i $RH_RIBBON_EDIT_PIAL --o $RH_RIBBON_EDIT_PIAL_SECOND_PASS_i_r --nsmooth 0 --adgws-in $AUTODET_NEW_GW_STATS_RH --pial --rh --repulse-surf $RH_RIBBON_EDIT_PIAL --invol $BRAIN_FINALSURFS_NO_CEREB_UNIFORM_GM_80_RH --threads 6 --white-surf $RH_ORIG --pin-medial-wall $RH_CORTEX_LABEL --seg $ASEG_PRESURF --no-rip"
+		#"Second pass
+	cmd "Computes rh pial surface - second pass" \
+	"mris_place_surface --i $RH_RIBBON_EDIT_PIAL --o $RH_RIBBON_EDIT_PIAL_SECOND_PASS_i_w --nsmooth 0 --adgws-in $AUTODET_NEW_GW_STATS_RH --pial --rh --repulse-surf $RH_ORIG --invol $BRAIN_FINALSURFS_NO_CEREB_UNIFORM_GM_80_RH --threads 6 --white-surf $RH_RIBBON_EDIT_PIAL --pin-medial-wall $RH_CORTEX_LABEL --seg $ASEG_PRESURF --no-rip"
+		#"Second pass
+	cmd "Computes rh pial surface - second pass" \
+	"mris_place_surface --i $RH_RIBBON_EDIT_PIAL --o $RH_RIBBON_EDIT_PIAL_SECOND_PASS_i_w_r --nsmooth 0 --adgws-in $AUTODET_NEW_GW_STATS_RH --pial --rh --repulse-surf $RH_RIBBON_EDIT_PIAL --invol $BRAIN_FINALSURFS_NO_CEREB_UNIFORM_GM_80_RH --threads 6 --white-surf $RH_RIBBON_EDIT_PIAL --pin-medial-wall $RH_CORTEX_LABEL --seg $ASEG_PRESURF --no-rip"
 fi
 fi
 
 #################
 ## Add smoothing to pial surface (mris_place_surface)
 # #################
-#cat << EOF
-#EOF
+cat << EOF
+
 if ((TAG<=10))
 then
 if ((HEMI>=0))
@@ -849,4 +915,4 @@ then
  	"mris_place_surface --i $RH_RIBBON_EDIT_PIAL_SECOND_PASS --o $RH_RIBBON_EDIT_PIAL_THIRD_PASS_SMOOTH --nsmooth 1 --adgws-in $AUTODET_NEW_GW_STATS_RH --pial --rh --repulse-surf $RH_RIBBON_EDIT_PIAL_SECOND_PASS --invol $BRAIN_FINALSURFS_NO_CEREB_EDITED --threads 6 --white-surf $RH_ORIG --pin-medial-wall $RH_CORTEX_LABEL --seg $ASEG_PRESURF --no-rip"
 fi
 fi
-
+EOF
