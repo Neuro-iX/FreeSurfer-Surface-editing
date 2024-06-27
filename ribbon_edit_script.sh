@@ -987,7 +987,7 @@ do
  	cmd "${H[$i]} APas-to-ASeg" \
  	"mri_surf2volseg --o $ASEG --i $ASEG_PRESURF_HYPOS --fix-presurf-with-ribbon $RIBBON_EDIT --threads 1 --${H[$i]}-cortex-mask ${CORTEX_LABEL[$i]} --${H[$i]}-white ${ORIG[$i]} --${H[$i]}-pial ${RIBBON_EDIT_PIAL[$i]} --${H[$i]}"
  	cmd "${H[$i]} AParc-to-ASeg aparc" \
- 	"mri_surf2volseg --o $APARC_PLUS_ASEG --label-cortex --i $ASEG --threads 1 --${H[$i]}-annot ${APARC_ANNOT 2000[$i]} --${H[$i]}-cortex-mask ${CORTEX_LABEL[$i]} --${H[$i]}-white ${ORIG[$i]} --${H[$i]}-pial ${RIBBON_EDIT_PIAL[$i]} --${H[$i]}"
+ 	"mri_surf2volseg --o $APARC_PLUS_ASEG --label-cortex --i $ASEG --threads 1 --${H[$i]}-annot ${APARC_ANNOT[$i]} 2000 --${H[$i]}-cortex-mask ${CORTEX_LABEL[$i]} --${H[$i]}-white ${ORIG[$i]} --${H[$i]}-pial ${RIBBON_EDIT_PIAL[$i]} --${H[$i]}"
  	cmd "${H[$i]} AParc-to-ASeg aparc.a2009s" \
  	"mri_surf2volseg --o $APARC_A2009S_ASEG --label-cortex --i $ASEG --threads 1 --${H[$i]}-annot ${APARC_A2009S_ANNOT[$i]} 12100 --${H[$i]}-cortex-mask ${CORTEX_LABEL[$i]} --${H[$i]}-white ${ORIG[$i]} --${H[$i]}-pial ${RIBBON_EDIT_PIAL[$i]} --${H[$i]}"
  	cmd "${H[$i]} AParc-to-ASeg aparc.DKTatlas" \
