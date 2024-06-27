@@ -404,7 +404,7 @@ declare -a FOLDING_ATLAS_ACFB40=("$FREESURFER_HOME/average/lh.folding.atlas.acfb
 declare -a DKAPARC_ATLAS_ACFB40=("$FREESURFER_HOME/average/lh.DKaparc.atlas.acfb40.noaparc.i12.2016-08-02.gcs" "$FREESURFER_HOME/average/rh.DKaparc.atlas.acfb40.noaparc.i12.2016-08-02.gcs")
 
 RAWAVG="$SUBJECTS_DIR/$SUBJID/mri/rawavg.mgz"
-ORIG="$SUBJECTS_DIR/$SUBJID/mri/orig.mgz"
+ORIG_VOLUME="$SUBJECTS_DIR/$SUBJID/mri/orig.mgz"
 
 
 #ADDED for mri_segstats
@@ -968,8 +968,8 @@ do
  	"cp $RAWAVG $RAWAVG_MASKED"
  	cmd "${H[$i]} Mask $RAWAVG_MASKED with $BRAIN_MASK into $RAWAVG_MASKED" \
 "mri_mask $RAWAVG_MASKED $BRAIN_MASK $RAWAVG_MASKED"
- 	cmd "${H[$i]} Copy $ORIG to $ORIG_MASKED" \
- 	"cp $ORIG $ORIG_MASKED"
+ 	cmd "${H[$i]} Copy $ORIG_VOLUME to $ORIG_MASKED" \
+ 	"cp $ORIG_VOLUME $ORIG_MASKED"
  	cmd "${H[$i]} Mask $ORIG_MASKED with $BRAIN_MASK into $ORIG_MASKED" \
 "mri_mask $ORIG_MASKED $BRAIN_MASK $ORIG_MASKED"
  	cmd "${H[$i]} Change SUBJECTS_DIR to SUBJECTS_DIR/SUBJID" \
