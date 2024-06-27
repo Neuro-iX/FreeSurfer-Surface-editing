@@ -874,7 +874,7 @@ do
 		continue;
 	else	
 	cmd "${H[$i]} Computes pial surface" \
-	"mris_place_surface --i ${ORIG[$i]} --o ${RIBBON_EDIT_PIAL[$i]} --nsmooth 0 --adgws-in ${AUTODET_NEW_GW_STATS[$i]} --pial --${H[$i]} --repulse-surf ${ORIG[$i]} --invol ${BRAIN_FINALSURFS_NO_CEREB_EDITED[$i]} --threads 6 --white-surf ${ORIG[$i]} --pin-medial-wall ${CORTEX_LABEL[$i]} --seg ${ASEG_PRESURF[$i]} --no-rip" #--rip-label $LH_CORTEX_HIPAMYG_LABEL"
+	"mris_place_surface --i ${ORIG[$i]} --o ${RIBBON_EDIT_PIAL[$i]} --nsmooth 0 --adgws-in ${AUTODET_NEW_GW_STATS[$i]} --pial --${H[$i]} --repulse-surf ${ORIG[$i]} --invol ${BRAIN_FINALSURFS_NO_CEREB_EDITED[$i]} --threads 6 --white-surf ${ORIG[$i]} --pin-medial-wall ${CORTEX_LABEL[$i]} --seg $ASEG_PRESURF --no-rip" #--rip-label $LH_CORTEX_HIPAMYG_LABEL"
 	#Second pass
 	cmd "${H[$i]} Computes pial surface - second pass" \
 	"mris_place_surface --i ${RIBBON_EDIT_PIAL[$i]} --o ${RIBBON_EDIT_PIAL_SECOND_PASS_i[$i]} --nsmooth 0 --adgws-in ${AUTODET_NEW_GW_STATS[$i]} --pial --${H[$i]} --repulse-surf ${ORIG[$i]} --invol ${BRAIN_FINALSURFS_NO_CEREB_UNIFORM_GM_80[$i]} --threads 6 --white-surf ${ORIG[$i]} --pin-medial-wall ${CORTEX_LABEL[$i]} --seg $ASEG_PRESURF --no-rip"
@@ -917,20 +917,15 @@ do
 	cmd "${H[$i]} Copy pial surface to ${PIAL[$i]}" \
 	"cp ${RIBBON_EDIT_PIAL_THIRD_PASS_SMOOTH[$i]} ${PIAL[$i]}" 
 	fi
-done
-fi
-
-#################
-## Add last steps of autorecon3: stats, aseg, labels
-# #################
-if ((TAG<=11))
-then
-for (( i=0; i<2; i++ ));
-do
-	if ((HEMI>=0 && HEMI!=i)); #Cases when the current hemi ($i) is not to be processed
-	then
-		continue;
-	else
+	
+	
+	
+	
+	
+	
+	
+	
+	
  	cmd "${H[$i]} pial curv" \
  	"mris_place_surface --curv-map ${PIAL[$i]} 2 10 ${PIAL_CURV[$i]}"
  	cmd "${H[$i]} pial area" \
@@ -985,7 +980,26 @@ do
  	cmd "${H[$i]} Relabel Hypointensities" \
  	"mri_relabel_hypointensities -${H[$i]} $ASEG_PRESURF $O/surf $ASEG_PRESURF_HYPOS"
  	cmd "${H[$i]} APas-to-ASeg" \
- 	"mri_surf2volseg --o $ASEG --i $ASEG_PRESURF_HYPOS --fix-presurf-with-ribbon $RIBBON_EDIT --threads 1 --${H[$i]}-cortex-mask ${CORTEX_LABEL[$i]} --${H[$i]}-white ${ORIG[$i]} --${H[$i]}-pial ${RIBBON_EDIT_PIAL[$i]} --${H[$i]}"
+ 	"mri_surf2volseg --o $ASEG --i $ASEG_PRESURF_HYPOS --fix-presurf-with-ribbon $RIBBON_EDIT --threads 1 --${H[$i]}-cortex-mask ${CORTEX_LABEL[$i]} --${H[$i]}-white ${ORIG[$i]} --${H[$i]}-pial ${RIBBON_EDIT_PIAL[$i]} --${H[$i]}"	
+	
+done
+fi
+
+
+ 	
+#################
+## Add last steps of autorecon3: stats, aseg, labels
+# #################
+if ((TAG<=11))
+then
+for (( i=0; i<2; i++ ));
+do
+	if ((HEMI>=0 && HEMI!=i)); #Cases when the current hemi ($i) is not to be processed
+	then
+		continue;
+	else
+	echo "$APARC_PLUS_ASEG"
+	echo "${H[$i]}"
  	cmd "${H[$i]} AParc-to-ASeg aparc" \
  	"mri_surf2volseg --o $APARC_PLUS_ASEG --label-cortex --i $ASEG --threads 1 --${H[$i]}-annot ${APARC_ANNOT[$i]} 2000 --${H[$i]}-cortex-mask ${CORTEX_LABEL[$i]} --${H[$i]}-white ${ORIG[$i]} --${H[$i]}-pial ${RIBBON_EDIT_PIAL[$i]} --${H[$i]}"
  	cmd "${H[$i]} AParc-to-ASeg aparc.a2009s" \
