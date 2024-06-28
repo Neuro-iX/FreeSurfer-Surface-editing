@@ -909,7 +909,7 @@ do
 		continue;
 	else		
 	cmd "${H[$i]} Smooths pial surface" \
-	"mris_place_surface --i ${RIBBON_EDIT_PIAL_SECOND_PASS_i_w[$i]} --o ${RIBBON_EDIT_PIAL_THIRD_PASS_SMOOTH[$i]} --nsmooth 1 --adgws-in ${AUTODET_NEW_GW_STATS[$i]} --pial --${H[$i]} --repulse-surf ${RIBBON_EDIT_PIAL_SECOND_PASS_i_w[$i]} --invol $BRAIN_FINALSURFS_NO_CEREB_EDITED --threads 6 --white-surf ${ORIG[$i]} --pin-medial-wall ${CORTEX_LABEL[$i]} --seg $ASEG_PRESURF --no-rip" #--rip-label --rip-bg
+	"mris_place_surface --i ${RIBBON_EDIT_PIAL_SECOND_PASS_i_w[$i]} --o ${RIBBON_EDIT_PIAL_THIRD_PASS_SMOOTH[$i]} --nsmooth 1 --adgws-in ${AUTODET_NEW_GW_STATS[$i]} --pial --${H[$i]} --repulse-surf ${RIBBON_EDIT_PIAL_SECOND_PASS_i_w[$i]} --invol ${BRAIN_FINALSURFS_NO_CEREB_EDITED[$i]} --threads 6 --white-surf ${ORIG[$i]} --pin-medial-wall ${CORTEX_LABEL[$i]} --seg $ASEG_PRESURF --no-rip" #--rip-label --rip-bg
 	
 	cmd "${H[$i]} Copy white surface to ${WHITE[$i]}" \
 	"cp ${ORIG[$i]} ${WHITE[$i]}" 
@@ -1049,7 +1049,7 @@ do
  	cmd "${H[$i]} mri_label2label entorhinal_exvivo" \
  	"mri_label2label --srcsubject fsaverage --srclabel $SUBJECTS_DIR/fsaverage/label/${H[$i]}.entorhinal_exvivo.label --trgsubject $SUBJID/$OUTPUT_FOLDER --trglabel ${ENTORHINAL_EXVIVO_LABEL[$i]} --hemi ${H[$i]} --regmethod surface"
  	cmd "${H[$i]} mri_label2label perirhinal_exvivo" \
- 	"mri_label2label --srcsubject fsaverage --srclabel $SUBJECTS_DIR/fsaverage/label/${H[$i]}.perirhinal_exvivo.label --trgsubject $SUBJID/$OUTPUT_FOLDER --trglabel vPERIRHINAL_EXVIVO_LABEL --hemi ${H[$i]} --regmethod surface"
+ 	"mri_label2label --srcsubject fsaverage --srclabel $SUBJECTS_DIR/fsaverage/label/${H[$i]}.perirhinal_exvivo.label --trgsubject $SUBJID/$OUTPUT_FOLDER --trglabel ${PERIRHINAL_EXVIVO_LABEL[$i]} --hemi ${H[$i]} --regmethod surface"
  	cmd "${H[$i]} mri_label2label fg1_mpm_vpnl" \
  	"mri_label2label --srcsubject fsaverage --srclabel $SUBJECTS_DIR/fsaverage/label/${H[$i]}.FG1.mpm.vpnl.label --trgsubject $SUBJID/$OUTPUT_FOLDER --trglabel ${FG1_MPM_VPNL_LABEL[$i]} --hemi ${H[$i]} --regmethod surface"
  	cmd "${H[$i]} mri_label2label fg2_mpm_vpnl" \
@@ -1110,6 +1110,23 @@ do
  	"mris_anatomical_stats -th3 -mgz -noglobal -f ${BA_EXVIVO_STATS[$i]} -b -a ${BA_EXVIVO_ANNOT[$i]} -c $BA_EXVIVO_CTAB $SUBJID/$OUTPUT_FOLDER ${H[$i]} white"
  	cmd "${H[$i]}mris_anatomical_stats ctab thresh" \
  	"mris_anatomical_stats -th3 -mgz -f ${BA_EXVIVO_THRESH_STATS[$i]} -noglobal -b -a ${BA_EXVIVO_THRESH_ANNOT[$i]} -c $BA_EXVIVO_THRESH_CTAB $SUBJID/$OUTPUT_FOLDER ${H[$i]} white"
+	fi
+done
+fi
+
+#################
+## BONUS FOR TESTING SOMETHING ALONE (using -t 12)
+# #################
+if ((TAG<=12))
+then
+for (( i=0; i<2; i++ ));
+do
+	if ((HEMI>=0 && HEMI!=i)); #Cases when the current hemi ($i) is not to be processed
+	then
+		continue;
+	else
+	echo "..." #Put your command lines here
+	
 	fi
 done
 fi
