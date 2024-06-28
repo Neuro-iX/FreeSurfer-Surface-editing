@@ -8,7 +8,7 @@ Help ()
 builtin echo "
 AUTHOR: Benoît Verreman
 
-LAST UPDATE: 2024-06-27
+LAST UPDATE: 2024-06-28
 
 DESCRIPTION: 
 Use ribbon and subcortical NIFTI files to recompute pial surface,
@@ -436,6 +436,11 @@ ASEG_PRESURF="$O/mri/aseg.presurf.mgz"
 BRAIN="$O/mri/brain.mgz"
 BRAIN_FINALSURFS="$O/mri/brain.finalsurfs.mgz"
 
+WM_BMASK_LH="$O/mri/wm-bmask-lh.mgz"
+WM_BMASK_RH="$O/mri/wm-bmask-rh.mgz"
+GM_BMASK_LH="$O/mri/gm-bmask-lh.mgz"
+GM_BMASK_RH="$O/mri/gm-bmask-rh.mgz"
+
 WM_BMASK="$O/mri/wm-bmask.mgz"
 WM_MASK="$O/mri/wm-mask.mgz"
 WM_CONCAT="$O/mri/wm-concat.mgz"
@@ -675,6 +680,37 @@ cmd "CC Segment: mri_cc" \
 
 cmd "Merge ASeg" \
 "cp $ASEG_AUTO $ASEG_PRESURF"
+fi
+
+#################
+## Compute wm.mgz : wm-bmask AND if(wm == 250 & wm-bmask), then wm-mask = 250
+#################
+if ((TAG<=4))
+then
+## ADDED aseg.presurf.mgz correction based on ribbon-edit.mgz
+
+# Extract WM lh from ribbon-edit to create wm-bmask-lh.mgz
+#cmd "Extract WM lh from $RIBBON_EDIT" \
+#"mri_extract_label $RIBBON_EDIT ${LABEL_RIBBON_WM[0]} $WM_BMASK_LH" #0/128 binary mask
+
+# Extract GM lh from ribbon-edit to create gm-bmask-lh.mgz
+#cmd "Extract GM lh from $RIBBON_EDIT" \
+#"mri_extract_label $RIBBON_EDIT ${LABEL_RIBBON_WM[0]} $GM_BMASK_LH" #0/128 binary mask
+
+# Extract WM rh from ribbon-edit to create wm-bmask-lh.mgz
+#cmd "Extract WM rh from $RIBBON_EDIT" \
+#"mri_extract_label $RIBBON_EDIT ${LABEL_RIBBON_WM[1]} $WM_BMASK_RH" #0/128 binary mask
+
+# Extract GM rh from ribbon-edit to create gm-bmask-lh.mgz
+#cmd "Extract GM lh from $RIBBON_EDIT" \
+#"mri_extract_label $RIBBON_EDIT ${LABEL_RIBBON_WM[1]} $GM_BMASK_RH" #0/128 binary mask
+
+
+
+
+#cmd "Concatenate $WM_BMASK with $WM into $WM_CONCAT" \
+#"mri_concat --i $WM_BMASK --i $WM --o $WM_CONCAT --sum" #ROI at 378 (128+250)
+
 
 cmd "Intensity Normalize" \
 "mri_normalize -seed 1234 -mprage -noconform -aseg $ASEG_PRESURF -mask $T1_MASKED $NORM $BRAIN"
@@ -685,13 +721,11 @@ cmd "Mask BFS" \
 #OR
 #cmd "Copy" \
 #"cp $BRAIN $BRAIN_FINALSURFS"
-fi
 
-#################
-## Compute wm.mgz : wm-bmask AND if(wm == 250 & wm-bmask), then wm-mask = 250
-#################
-if ((TAG<=4))
-then
+
+
+
+
 # Extract white matter from ribbon-edit to create wm-bmask.mgz
 cmd "Extract WM from $RIBBON_EDIT" \
 "mri_extract_label $RIBBON_EDIT ${LABEL_RIBBON_WM[0]} ${LABEL_RIBBON_WM[1]} $WM_BMASK" #0/128 binary mask
@@ -875,21 +909,11 @@ do
 	else	
 	cmd "${H[$i]} Computes pial surface" \
 	"mris_place_surface --i ${ORIG[$i]} --o ${RIBBON_EDIT_PIAL[$i]} --nsmooth 0 --adgws-in ${AUTODET_NEW_GW_STATS[$i]} --pial --${H[$i]} --repulse-surf ${ORIG[$i]} --invol ${BRAIN_FINALSURFS_NO_CEREB_EDITED[$i]} --threads 6 --white-surf ${ORIG[$i]} --pin-medial-wall ${CORTEX_LABEL[$i]} --seg $ASEG_PRESURF --no-rip" #--rip-label $LH_CORTEX_HIPAMYG_LABEL"
-	#Second pass
-	cmd "${H[$i]} Computes pial surface - second pass" \
-	"mris_place_surface --i ${RIBBON_EDIT_PIAL[$i]} --o ${RIBBON_EDIT_PIAL_SECOND_PASS_i[$i]} --nsmooth 0 --adgws-in ${AUTODET_NEW_GW_STATS[$i]} --pial --${H[$i]} --repulse-surf ${ORIG[$i]} --invol ${BRAIN_FINALSURFS_NO_CEREB_UNIFORM_GM_80[$i]} --threads 6 --white-surf ${ORIG[$i]} --pin-medial-wall ${CORTEX_LABEL[$i]} --seg $ASEG_PRESURF --no-rip"
-		#Second pass
-	cmd "${H[$i]} Computes pial surface - second pass" \
-	"mris_place_surface --i ${ORIG[$i]} --o ${RIBBON_EDIT_PIAL_SECOND_PASS_r[$i]} --nsmooth 0 --adgws-in ${AUTODET_NEW_GW_STATS[$i]} --pial --${H[$i]} --repulse-surf ${RIBBON_EDIT_PIAL[$i]} --invol ${BRAIN_FINALSURFS_NO_CEREB_UNIFORM_GM_80[$i]} --threads 6 --white-surf ${ORIG[$i]} --pin-medial-wall ${CORTEX_LABEL[$i]} --seg $ASEG_PRESURF --no-rip"
-		#Second pass
-	cmd "${H[$i]} Computes pial surface - second pass" \
-	"mris_place_surface --i ${RIBBON_EDIT_PIAL[$i]} --o ${RIBBON_EDIT_PIAL_SECOND_PASS_i_r[$i]} --nsmooth 0 --adgws-in ${AUTODET_NEW_GW_STATS[$i]} --pial --${H[$i]} --repulse-surf ${RIBBON_EDIT_PIAL[$i]} --invol ${BRAIN_FINALSURFS_NO_CEREB_UNIFORM_GM_80[$i]} --threads 6 --white-surf ${ORIG[$i]} --pin-medial-wall ${CORTEX_LABEL[$i]} --seg $ASEG_PRESURF --no-rip"
-		#Second pass BEST RESULT (i_w)
+	
+	#Second pass BEST RESULT (i_w)
 	cmd "${H[$i]} Computes pial surface - second pass" \
 	"mris_place_surface --i ${RIBBON_EDIT_PIAL[$i]} --o ${RIBBON_EDIT_PIAL_SECOND_PASS_i_w[$i]} --nsmooth 0 --adgws-in ${AUTODET_NEW_GW_STATS[$i]} --pial --${H[$i]} --repulse-surf ${ORIG[$i]} --invol ${BRAIN_FINALSURFS_NO_CEREB_UNIFORM_GM_80[$i]} --threads 6 --white-surf ${RIBBON_EDIT_PIAL[$i]} --pin-medial-wall ${CORTEX_LABEL[$i]} --seg $ASEG_PRESURF --no-rip"
-		#Second pass
-	cmd "${H[$i]} Computes pial surface - second pass" \
-	"mris_place_surface --i ${RIBBON_EDIT_PIAL[$i]} --o ${RIBBON_EDIT_PIAL_SECOND_PASS_i_w_r[$i]} --nsmooth 0 --adgws-in ${AUTODET_NEW_GW_STATS[$i]} --pial --${H[$i]} --repulse-surf ${RIBBON_EDIT_PIAL[$i]} --invol ${BRAIN_FINALSURFS_NO_CEREB_UNIFORM_GM_80[$i]} --threads 6 --white-surf ${RIBBON_EDIT_PIAL[$i]} --pin-medial-wall ${CORTEX_LABEL[$i]} --seg $ASEG_PRESURF --no-rip"
+
 	fi
 done
 fi
@@ -897,8 +921,8 @@ fi
 #################
 ## Add smoothing to pial surface (mris_place_surface)
 # #################
-cat << EOF
-EOF
+#cat << EOF
+#EOF
 
 if ((TAG<=10))
 then
@@ -931,7 +955,7 @@ do
 	then
 		continue;
 	else
- 	cmd "${H[$i]} pial curv" \
+	cmd "${H[$i]} pial curv" \
  	"mris_place_surface --curv-map ${PIAL[$i]} 2 10 ${PIAL_CURV[$i]}"
  	cmd "${H[$i]} pial area" \
  	"mris_place_surface --area-map ${PIAL[$i]} ${PIAL_AREA[$i]}"
@@ -945,8 +969,9 @@ do
 	#Copies only for next command line (mris_volmask searching for surf/rh.white and surf/rh.pial)
 	cmd "${H[$i]} Copy ${ORIG[$i]} to ${WHITE[$i]}" \
 	"cp ${ORIG[$i]} ${WHITE[$i]}"
+
  	cmd "${H[$i]} Cortical ribbon mask" \
- 	"mris_volmask --aseg_name aseg.presurf --label_left_white ${LABEL_RIBBON_WM[0]} --label_left_ribbon ${LABEL_RIBBON_GM[0]} --label_right_white ${LABEL_RIBBON_WM[1]} --label_right_ribbon ${LABEL_RIBBON_GM[1]} --save_ribbon --out_root ribbon_script_${H[$i]} --${H[$i]}-only $SUBJID/$OUTPUT_FOLDER" #Searching for surf/rh.white and surf/rh.pial, and --surf_white and --surf_pial don't help, optional arg: --${H[$i]}-only
+ 	"mris_volmask --aseg_name aseg.presurf --label_left_white ${LABEL_RIBBON_WM[0]} --label_left_ribbon ${LABEL_RIBBON_GM[0]} --label_right_white ${LABEL_RIBBON_WM[1]} --label_right_ribbon ${LABEL_RIBBON_GM[1]} --save_ribbon --out_root ribbon_script_${H[$i]} --${H[$i]}-only $SUBJID/$OUTPUT_FOLDER" #Searching for surf/rh.white and surf/rh.pial, and --surf_white and --surf_pial don't help, can use arg 
 	#cmd "Copy $RH_SMOOTHW_NOFIX to $RH_SMOOTHW" \
 	#"cp $RH_SMOOTHW_NOFIX $RH_SMOOTHW"
   	#cmd "Inflation2 rh" \
@@ -961,7 +986,8 @@ do
  	"mris_ca_label -l ${CORTEX_LABEL[$i]} -aseg $ASEG_PRESURF -seed 1234 $SUBJID/$OUTPUT_FOLDER ${H[$i]} ${SPHERE_REG[$i]} ${DKAPARC_ATLAS_ACFB40[$i]} ${APARC_ANNOT[$i]}"
  	cmd "${H[$i]} Cortical Parc 2" \
  	"mris_ca_label -l ${CORTEX_LABEL[$i]} -aseg $ASEG_PRESURF -seed 1234 $SUBJID/$OUTPUT_FOLDER ${H[$i]} ${SPHERE_REG[$i]} ${CD_APARC_ATLAS[$i]} ${CD_APARC_ANNOT[$i]}"
- 	#Use surf/rh.smoothwm and surf/rh.sphere.reg
+ 		
+	#Use surf/rh.smoothwm and surf/rh.sphere.reg
  	cmd "${H[$i]} Cortical Parc 3" \
  	"mris_ca_label -l ${CORTEX_LABEL[$i]} -aseg $ASEG_PRESURF -seed 1234 $SUBJID/$OUTPUT_FOLDER ${H[$i]} ${SPHERE_REG[$i]} ${DKT_APARC_ATLAS[$i]} ${DKT_APARC_ANNOT[$i]}"
  	cmd "${H[$i]} Copy $RAWAVG to $RAWAVG_MASKED" \
@@ -986,7 +1012,134 @@ do
  	"mri_relabel_hypointensities -${H[$i]} $ASEG_PRESURF $O/surf $ASEG_PRESURF_HYPOS"
  	cmd "${H[$i]} APas-to-ASeg" \
  	"mri_surf2volseg --o $ASEG --i $ASEG_PRESURF_HYPOS --fix-presurf-with-ribbon $RIBBON_EDIT --threads 1 --${H[$i]}-cortex-mask ${CORTEX_LABEL[$i]} --${H[$i]}-white ${ORIG[$i]} --${H[$i]}-pial ${RIBBON_EDIT_PIAL[$i]} --${H[$i]}"
+ 	
+ 	
  	cmd "${H[$i]} AParc-to-ASeg aparc" \
+ 	"mri_surf2volseg --o $APARC_PLUS_ASEG --label-cortex --i $ASEG --threads 1 --${H[$i]}-annot ${APARC_ANNOT[$i]} 2000 --${H[$i]}-cortex-mask ${CORTEX_LABEL[$i]} --${H[$i]}-white ${ORIG[$i]} --${H[$i]}-pial ${RIBBON_EDIT_PIAL[$i]} --${H[$i]}"
+ 	cmd "${H[$i]} AParc-to-ASeg aparc.a2009s" \
+ 	"mri_surf2volseg --o $APARC_A2009S_ASEG --label-cortex --i $ASEG --threads 1 --${H[$i]}-annot ${APARC_A2009S_ANNOT[$i]} 12100 --${H[$i]}-cortex-mask ${CORTEX_LABEL[$i]} --${H[$i]}-white ${ORIG[$i]} --${H[$i]}-pial ${RIBBON_EDIT_PIAL[$i]} --${H[$i]}"
+ 	cmd "${H[$i]} AParc-to-ASeg aparc.DKTatlas" \
+ 	"mri_surf2volseg --o $APARC_DKT_ATLAS_ASEG --label-cortex --i $ASEG --threads 1 --${H[$i]}-annot ${DKT_APARC_ANNOT[$i]} 2000 --${H[$i]}-cortex-mask ${CORTEX_LABEL[$i]} --${H[$i]}-white ${ORIG[$i]} --${H[$i]}-pial ${RIBBON_EDIT_PIAL[$i]} --${H[$i]}"
+
+ 	cmd "${H[$i]} WMParc" \
+ 	"mri_surf2volseg --o $WMPARC --label-wm --i $APARC_PLUS_ASEG --threads 1 --${H[$i]}-annot ${APARC_ANNOT[$i]} 4000 --${H[$i]}-cortex-mask ${CORTEX_LABEL[$i]} --${H[$i]}-white ${ORIG[$i]} --${H[$i]}-pial ${RIBBON_EDIT_PIAL[$i]} --${H[$i]}"	
+ 	
+	cmd "${H[$i]} Copy $TALAIRACH_XFM to $TALAIRACH_XFM_COPY" \
+	"cp $TALAIRACH_XFM $TALAIRACH_XFM_COPY"
+ 	cmd "${H[$i]} WMParc stats" \
+ 	"mri_segstats --seed 1234 --seg $WMPARC --sum $WMPARC_STATS --pv $NORM --excludeid 0 --brainmask $BRAIN_FINALSURFS --in $NORM --in-intensity-name norm --in-intensity-units MR --subject $SUBJID/$OUTPUT_FOLDER --surf-wm-vol --ctab $WMPARC_STATS_LUT --etiv --no-global-stats"
+ 	#Needs mri/transforms/talairach.xfm
+ 	
+ 	cmd "${H[$i]} Change SUBJID" \
+ 	"export SUBJID=$SUBJID/$OUTPUT_FOLDER"
+ 	cmd "${H[$i]} Parcellation Stats White" \
+ 	"mris_anatomical_stats -th3 -mgz -noglobal -cortex ${CORTEX_LABEL[$i]} -f ${APARC_STATS[$i]} -b -a ${APARC_ANNOT[$i]} -c $APARC_ANNOT_CTAB $SUBJID ${H[$i]} white"
+ 	cmd "${H[$i]} Parcellation Stats Pial" \
+ 	"mris_anatomical_stats -th3 -mgz -noglobal -cortex ${CORTEX_LABEL[$i]} -f ${APARC_PIAL_STATS[$i]} -b -a ${APARC_ANNOT[$i]} -c $APARC_ANNOT_CTAB $SUBJID ${H[$i]} pial"
+ 	cmd "${H[$i]} Parcellation Stats 2 " \
+ 	"mris_anatomical_stats -th3 -mgz -noglobal -cortex ${CORTEX_LABEL[$i]} -f ${APARC_A2009S_STATS[$i]} -b -a ${APARC_A2009S_ANNOT[$i]} -c $APARC_A2009S_CTAB $SUBJID ${H[$i]} white"
+ 	cmd "${H[$i]} Parcellation Stats 3" \
+ 	"mris_anatomical_stats -th3 -mgz -noglobal -cortex ${CORTEX_LABEL[$i]} -f ${DKT_APARC_STATS[$i]} -b -a ${DKT_APARC_ANNOT[$i]} -c $DKT_APARC_CTAB $SUBJID ${H[$i]} white"
+ 	cmd "${H[$i]} Change back SUBJID" \
+ 	"export SUBJID=`echo "$SUBJID" | cut -d/ -f1-1`"
+ 	
+ 	cmd "ASeg Stats" \
+ 	"mri_segstats --seed 1234 --seg $ASEG --sum $ASEG_STATS --pv $NORM --empty --brainmask $BRAIN_FINALSURFS --brain-vol-from-seg --excludeid 0 --excl-ctxgmwm --supratent --subcortgray --in $NORM --in-intensity-name norm --in-intensity-units MR --etiv --euler --ctab $ASEG_STATS_LUT --subject $SUBJID/$OUTPUT_FOLDER --no-global-stats"
+ 	
+ 	cmd "Create Symlink of $FSAVERAGE folder in SUBJECTS_DIR" \
+ 	"ln -s $FSAVERAGE $SUBJECTS_DIR"
+ 	
+ 	cmd "${H[$i]} BA_exvivo Labels" \
+ 	"mri_label2label --srcsubject fsaverage --srclabel $SUBJECTS_DIR/fsaverage/label/${H[$i]}.BA1_exvivo.label --trgsubject $SUBJID/$OUTPUT_FOLDER --trglabel ${BA1_EXVIVO_LABEL[$i]} --hemi ${H[$i]} --regmethod surface"
+ 	cmd "${H[$i]} mri_label2label BA2_exvivo" \
+ 	"mri_label2label --srcsubject fsaverage --srclabel $SUBJECTS_DIR/fsaverage/label/${H[$i]}.BA2_exvivo.label --trgsubject $SUBJID/$OUTPUT_FOLDER --trglabel ${BA2_EXVIVO_LABEL[$i]} --hemi ${H[$i]} --regmethod surface"
+ 	
+ 	cmd "${H[$i]} mri_label2label BA3a_exvivo" \
+ 	"mri_label2label --srcsubject fsaverage --srclabel $SUBJECTS_DIR/fsaverage/label/${H[$i]}.BA3a_exvivo.label --trgsubject $SUBJID/$OUTPUT_FOLDER --trglabel ${BA3A_EXVIVO_LABEL[$i]} --hemi ${H[$i]} --regmethod surface"
+ 	cmd "${H[$i]} mri_label2label BA3b_exvivo" \
+ 	"mri_label2label --srcsubject fsaverage --srclabel $SUBJECTS_DIR/fsaverage/label/${H[$i]}.BA3b_exvivo.label --trgsubject $SUBJID/$OUTPUT_FOLDER --trglabel ${BA3B_EXVIVO_LABEL[$i]} --hemi ${H[$i]} --regmethod surface"
+ 	cmd "${H[$i]} mri_label2label BA4a_exvivo" \
+ 	"mri_label2label --srcsubject fsaverage --srclabel $SUBJECTS_DIR/fsaverage/label/${H[$i]}.BA4a_exvivo.label --trgsubject $SUBJID/$OUTPUT_FOLDER --trglabel ${BA4A_EXVIVO_LABEL[$i]} --hemi ${H[$i]} --regmethod surface"
+ 	cmd "${H[$i]} mri_label2label BA4p_exvivo" \
+ 	"mri_label2label --srcsubject fsaverage --srclabel $SUBJECTS_DIR/fsaverage/label/${H[$i]}.BA4p_exvivo.label --trgsubject $SUBJID/$OUTPUT_FOLDER --trglabel ${BA4P_EXVIVO_LABEL[$i]} --hemi ${H[$i]} --regmethod surface"
+ 	cmd "${H[$i]} mri_label2label BA6_exvivo" \
+ 	"mri_label2label --srcsubject fsaverage --srclabel $SUBJECTS_DIR/fsaverage/label/${H[$i]}.BA6_exvivo.label --trgsubject $SUBJID/$OUTPUT_FOLDER --trglabel ${BA6_EXVIVO_LABEL[$i]} --hemi ${H[$i]} --regmethod surface"
+ 	cmd "${H[$i]} mri_label2label BA44_exvivo" \
+ 	"mri_label2label --srcsubject fsaverage --srclabel $SUBJECTS_DIR/fsaverage/label/${H[$i]}.BA44_exvivo.label --trgsubject $SUBJID/$OUTPUT_FOLDER --trglabel ${BA44_EXVIVO_LABEL[$i]} --hemi ${H[$i]} --regmethod surface"
+ 	cmd "${H[$i]}  mri_label2label BA45_exvivo" \
+ 	"mri_label2label --srcsubject fsaverage --srclabel $SUBJECTS_DIR/fsaverage/label/${H[$i]}.BA45_exvivo.label --trgsubject $SUBJID/$OUTPUT_FOLDER --trglabel ${BA45_EXVIVO_LABEL[$i]} --hemi ${H[$i]} --regmethod surface"
+ 	cmd "${H[$i]} mri_label2label V1_exvivo" \
+ 	"mri_label2label --srcsubject fsaverage --srclabel $SUBJECTS_DIR/fsaverage/label/${H[$i]}.V1_exvivo.label --trgsubject $SUBJID/$OUTPUT_FOLDER --trglabel ${V1_EXVIVO_LABEL[$i]} --hemi ${H[$i]} --regmethod surface"
+ 	cmd "${H[$i]} mri_label2label V2_exvivo" \
+ 	"mri_label2label --srcsubject fsaverage --srclabel $SUBJECTS_DIR/fsaverage/label/${H[$i]}.V2_exvivo.label --trgsubject $SUBJID/$OUTPUT_FOLDER --trglabel ${V2_EXVIVO_LABEL[$i]} --hemi ${H[$i]} --regmethod surface"
+ 	cmd "${H[$i]} mri_label2label MT_exvivo" \
+ 	"mri_label2label --srcsubject fsaverage --srclabel $SUBJECTS_DIR/fsaverage/label/${H[$i]}.MT_exvivo.label --trgsubject $SUBJID/$OUTPUT_FOLDER --trglabel ${MT_EXVIVO_LABEL[$i]} --hemi ${H[$i]} --regmethod surface"
+ 	cmd "${H[$i]} mri_label2label entorhinal_exvivo" \
+ 	"mri_label2label --srcsubject fsaverage --srclabel $SUBJECTS_DIR/fsaverage/label/${H[$i]}.entorhinal_exvivo.label --trgsubject $SUBJID/$OUTPUT_FOLDER --trglabel ${ENTORHINAL_EXVIVO_LABEL[$i]} --hemi ${H[$i]} --regmethod surface"
+ 	cmd "${H[$i]} mri_label2label perirhinal_exvivo" \
+ 	"mri_label2label --srcsubject fsaverage --srclabel $SUBJECTS_DIR/fsaverage/label/${H[$i]}.perirhinal_exvivo.label --trgsubject $SUBJID/$OUTPUT_FOLDER --trglabel ${PERIRHINAL_EXVIVO_LABEL[$i]} --hemi ${H[$i]} --regmethod surface"
+ 	cmd "${H[$i]} mri_label2label fg1_mpm_vpnl" \
+ 	"mri_label2label --srcsubject fsaverage --srclabel $SUBJECTS_DIR/fsaverage/label/${H[$i]}.FG1.mpm.vpnl.label --trgsubject $SUBJID/$OUTPUT_FOLDER --trglabel ${FG1_MPM_VPNL_LABEL[$i]} --hemi ${H[$i]} --regmethod surface"
+ 	cmd "${H[$i]} mri_label2label fg2_mpm_vpnl" \
+ 	"mri_label2label --srcsubject fsaverage --srclabel $SUBJECTS_DIR/fsaverage/label/${H[$i]}.FG2.mpm.vpnl.label --trgsubject $SUBJID/$OUTPUT_FOLDER --trglabel ${FG2_MPM_VPNL_LABEL[$i]} --hemi ${H[$i]} --regmethod surface"
+ 	cmd "${H[$i]} mri_label2label fg3_mpm_vpnl" \
+ 	"mri_label2label --srcsubject fsaverage --srclabel $SUBJECTS_DIR/fsaverage/label/${H[$i]}.FG3.mpm.vpnl.label --trgsubject $SUBJID/$OUTPUT_FOLDER --trglabel ${FG3_MPM_VPNL_LABEL[$i]} --hemi ${H[$i]} --regmethod surface"
+ 	cmd "${H[$i]} mri_label2label fg4_mpm_vpnl" \
+ 	"mri_label2label --srcsubject fsaverage --srclabel $SUBJECTS_DIR/fsaverage/label/${H[$i]}.FG4.mpm.vpnl.label --trgsubject $SUBJID/$OUTPUT_FOLDER --trglabel ${FG4_MPM_VPNL_LABEL[$i]} --hemi ${H[$i]} --regmethod surface"
+ 	cmd "${H[$i]} mri_label2label h0c1_mpm_vpnl" \
+ 	"mri_label2label --srcsubject fsaverage --srclabel $SUBJECTS_DIR/fsaverage/label/${H[$i]}.hOc1.mpm.vpnl.label --trgsubject $SUBJID/$OUTPUT_FOLDER --trglabel ${H0C1_MPM_VPNL_LABEL[$i]} --hemi ${H[$i]} --regmethod surface"
+ 	cmd "${H[$i]} mri_label2label h0c2_mpm_vpnl" \
+ 	"mri_label2label --srcsubject fsaverage --srclabel $SUBJECTS_DIR/fsaverage/label/${H[$i]}.hOc2.mpm.vpnl.label --trgsubject $SUBJID/$OUTPUT_FOLDER --trglabel ${H0C2_MPM_VPNL_LABEL[$i]} --hemi ${H[$i]} --regmethod surface"
+ 	cmd "${H[$i]} mri_label2label h0c3v_mpm_vpnl" \
+ 	"mri_label2label --srcsubject fsaverage --srclabel $SUBJECTS_DIR/fsaverage/label/${H[$i]}.hOc3v.mpm.vpnl.label --trgsubject $SUBJID/$OUTPUT_FOLDER --trglabel ${H0C3V_MPM_VPNL_LABEL[$i]} --hemi ${H[$i]} --regmethod surface"
+ 	cmd "${H[$i]} mri_label2label h0c4v_mpm_vpnl" \
+ 	"mri_label2label --srcsubject fsaverage --srclabel $SUBJECTS_DIR/fsaverage/label/${H[$i]}.hOc4v.mpm.vpnl.label --trgsubject $SUBJID/$OUTPUT_FOLDER --trglabel ${H0C4V_MPM_VPNL_LABEL[$i]} --hemi ${H[$i]} --regmethod surface"
+ 	
+ 	cmd "${H[$i]} mri_label2label ctab" \
+ 	"mris_label2annot --s $SUBJID/$OUTPUT_FOLDER --ctab $COLORTABLE_VPNL_TXT --hemi ${H[$i]} --a mpm.vpnl --maxstatwinner --noverbose --l ${FG1_MPM_VPNL_LABEL[$i]} --l ${FG2_MPM_VPNL_LABEL[$i]} --l ${FG3_MPM_VPNL_LABEL[$i]} --l ${FG4_MPM_VPNL_LABEL[$i]} --l ${H0C1_MPM_VPNL_LABEL[$i]} --l ${H0C2_MPM_VPNL_LABEL[$i]} --l ${H0C3V_MPM_VPNL_LABEL[$i]} --l ${H0C4V_MPM_VPNL_LABEL[$i]}"
+ 	
+ 	cmd "${H[$i]} mri_label2label ba1_exvivo_thresh" \
+ 	"mri_label2label --srcsubject fsaverage --srclabel $SUBJECTS_DIR/fsaverage/label/${H[$i]}.BA1_exvivo.thresh.label --trgsubject $SUBJID/$OUTPUT_FOLDER --trglabel ${BA1_EXVIVO_THRESH_LABEL[$i]} --hemi ${H[$i]} --regmethod surface"
+ 	cmd "${H[$i]} mri_label2label ba2_exvivo_thresh" \
+ 	"mri_label2label --srcsubject fsaverage --srclabel $SUBJECTS_DIR/fsaverage/label/${H[$i]}.BA2_exvivo.thresh.label --trgsubject $SUBJID/$OUTPUT_FOLDER --trglabel ${BA2_EXVIVO_THRESH_LABEL[$i]} --hemi ${H[$i]} --regmethod surface"
+ 	
+ 	cmd "${H[$i]} mri_label2label ba3a_exvivo_thresh" \
+ 	"mri_label2label --srcsubject fsaverage --srclabel $SUBJECTS_DIR/fsaverage/label/${H[$i]}.BA3a_exvivo.thresh.label --trgsubject $SUBJID/$OUTPUT_FOLDER --trglabel ${BA3A_EXVIVO_THRESH_LABEL[$i]} --hemi ${H[$i]} --regmethod surface"
+ 	cmd "${H[$i]} mri_label2label ba3b_exvivo_thresh" \
+ 	"mri_label2label --srcsubject fsaverage --srclabel $SUBJECTS_DIR/fsaverage/label/${H[$i]}.BA3b_exvivo.thresh.label --trgsubject $SUBJID/$OUTPUT_FOLDER --trglabel ${BA3B_EXVIVO_THRESH_LABEL[$i]} --hemi ${H[$i]} --regmethod surface"
+ 	cmd "${H[$i]} mri_label2label ba4a_exvivo_thresh" \
+ 	"mri_label2label --srcsubject fsaverage --srclabel $SUBJECTS_DIR/fsaverage/label/${H[$i]}.BA4a_exvivo.thresh.label --trgsubject $SUBJID/$OUTPUT_FOLDER --trglabel ${BA4A_EXVIVO_THRESH_LABEL[$i]} --hemi ${H[$i]} --regmethod surface"
+ 	cmd "${H[$i]} mri_label2label ba4p_exvivo_thresh" \
+ 	"mri_label2label --srcsubject fsaverage --srclabel $SUBJECTS_DIR/fsaverage/label/${H[$i]}.BA4p_exvivo.thresh.label --trgsubject $SUBJID/$OUTPUT_FOLDER --trglabel ${BA4P_EXVIVO_THRESH_LABEL[$i]} --hemi ${H[$i]} --regmethod surface"
+ 	cmd "${H[$i]} mri_label2label ba6_exvivo_thresh" \
+ 	"mri_label2label --srcsubject fsaverage --srclabel $SUBJECTS_DIR/fsaverage/label/${H[$i]}.BA6_exvivo.thresh.label --trgsubject $SUBJID/$OUTPUT_FOLDER --trglabel ${BA6_EXVIVO_THRESH_LABEL[$i]} --hemi ${H[$i]} --regmethod surface"
+ 	cmd "${H[$i]} mri_label2label ba44_exvivo_thresh" \
+ 	"mri_label2label --srcsubject fsaverage --srclabel $SUBJECTS_DIR/fsaverage/label/${H[$i]}.BA44_exvivo.thresh.label --trgsubject $SUBJID/$OUTPUT_FOLDER --trglabel ${BA44_EXVIVO_THRESH_LABEL[$i]} --hemi ${H[$i]} --regmethod surface"
+ 	cmd "${H[$i]} mri_label2label ba45_exvivo_thresh" \
+ 	"mri_label2label --srcsubject fsaverage --srclabel $SUBJECTS_DIR/fsaverage/label/${H[$i]}.BA45_exvivo.thresh.label --trgsubject $SUBJID/$OUTPUT_FOLDER --trglabel ${BA45_EXVIVO_THRESH_LABEL[$i]} --hemi ${H[$i]} --regmethod surface"
+ 	cmd "${H[$i]} mri_label2label v1_exvivo_thresh" \
+ 	"mri_label2label --srcsubject fsaverage --srclabel $SUBJECTS_DIR/fsaverage/label/${H[$i]}.V1_exvivo.thresh.label --trgsubject $SUBJID/$OUTPUT_FOLDER --trglabel ${V1_EXVIVO_THRESH_LABEL[$i]} --hemi ${H[$i]} --regmethod surface "
+ 	cmd "${H[$i]} mri_label2label v2_exvivo_thresh" \
+ 	"mri_label2label --srcsubject fsaverage --srclabel $SUBJECTS_DIR/fsaverage/label/${H[$i]}.V2_exvivo.thresh.label --trgsubject $SUBJID/$OUTPUT_FOLDER --trglabel ${V2_EXVIVO_THRESH_LABEL[$i]} --hemi ${H[$i]} --regmethod surface"
+ 	cmd "${H[$i]} mri_label2label mt_exvivo_thresh" \
+ 	"mri_label2label --srcsubject fsaverage --srclabel $SUBJECTS_DIR/fsaverage/label/${H[$i]}.MT_exvivo.thresh.label --trgsubject $SUBJID/$OUTPUT_FOLDER --trglabel ${MT_EXVIVO_THRESH_LABEL[$i]} --hemi ${H[$i]} --regmethod surface"
+ 	cmd "${H[$i]} mri_label2label entorhinal_exvivo_thresh" \
+ 	"mri_label2label --srcsubject fsaverage --srclabel $SUBJECTS_DIR/fsaverage/label/${H[$i]}.entorhinal_exvivo.thresh.label --trgsubject $SUBJID/$OUTPUT_FOLDER --trglabel ${ENTORHINAL_EXVIVO_THRESH_LABEL[$i]} --hemi ${H[$i]} --regmethod surface"
+ 	cmd "${H[$i]} mri_label2label perirhinal_exvivo_thresh" \
+ 	"mri_label2label --srcsubject fsaverage --srclabel $SUBJECTS_DIR/fsaverage/label/${H[$i]}.perirhinal_exvivo.thresh.label --trgsubject $SUBJID/$OUTPUT_FOLDER --trglabel ${PERIRHINAL_EXVIVO_THRESH_LABEL[$i]} --hemi ${H[$i]} --regmethod surface"
+ 	
+ 	cmd "${H[$i]} mri_label2label ctab" \
+ 	"mris_label2annot --s $SUBJID/$OUTPUT_FOLDER --hemi ${H[$i]} --ctab $COLORTABLE_BA_TXT --l ${BA1_EXVIVO_LABEL[$i]} --l ${BA2_EXVIVO_LABEL[$i]} --l ${BA3A_EXVIVO_LABEL[$i]} --l ${BA3B_EXVIVO_LABEL[$i]} --l ${BA4A_EXVIVO_LABEL[$i]} --l ${BA4P_EXVIVO_LABEL[$i]} --l ${BA6_EXVIVO_LABEL[$i]} --l ${BA44_EXVIVO_LABEL[$i]} --l ${BA45_EXVIVO_LABEL[$i]} --l ${V1_EXVIVO_LABEL[$i]} --l ${V2_EXVIVO_LABEL[$i]} --l ${MT_EXVIVO_LABEL[$i]} --l ${PERIRHINAL_EXVIVO_LABEL[$i]} --l ${ENTORHINAL_EXVIVO_LABEL[$i]} --a BA_exvivo --maxstatwinner --noverbose"
+ 	
+ 	cmd "${H[$i]} mri_label2label ctab thresh" \
+ 	"mris_label2annot --s $SUBJID/$OUTPUT_FOLDER --hemi ${H[$i]} --ctab $COLORTABLE_BA_TXT --l ${BA1_EXVIVO_THRESH_LABEL[$i]} --l ${BA2_EXVIVO_THRESH_LABEL[$i]} --l ${BA3A_EXVIVO_THRESH_LABEL[$i]} --l ${BA3B_EXVIVO_THRESH_LABEL[$i]} --l ${BA4A_EXVIVO_THRESH_LABEL[$i]} --l ${BA4P_EXVIVO_THRESH_LABEL[$i]} --l ${BA6_EXVIVO_THRESH_LABEL[$i]} --l ${BA44_EXVIVO_THRESH_LABEL[$i]} --l ${BA45_EXVIVO_THRESH_LABEL[$i]} --l ${V1_EXVIVO_THRESH_LABEL[$i]} --l ${V2_EXVIVO_THRESH_LABEL[$i]} --l ${MT_EXVIVO_THRESH_LABEL[$i]} --l ${PERIRHINAL_EXVIVO_THRESH_LABEL[$i]} --l ${ENTORHINAL_EXVIVO_THRESH_LABEL[$i]} --a BA_exvivo.thresh --maxstatwinner --noverbose"
+
+ 	cmd "${H[$i]} mris_anatomical_stats ctab" \
+ 	"mris_anatomical_stats -th3 -mgz -noglobal -f ${BA_EXVIVO_STATS[$i]} -b -a ${BA_EXVIVO_ANNOT[$i]} -c $BA_EXVIVO_CTAB $SUBJID/$OUTPUT_FOLDER ${H[$i]} white"
+ 	cmd "${H[$i]}mris_anatomical_stats ctab thresh" \
+ 	"mris_anatomical_stats -th3 -mgz -f ${BA_EXVIVO_THRESH_STATS[$i]} -noglobal -b -a ${BA_EXVIVO_THRESH_ANNOT[$i]} -c $BA_EXVIVO_THRESH_CTAB $SUBJID/$OUTPUT_FOLDER ${H[$i]} white"
+	
+	cmd "${H[$i]} AParc-to-ASeg aparc" \
  	"mri_surf2volseg --o $APARC_PLUS_ASEG --label-cortex --i $ASEG --threads 1 --${H[$i]}-annot ${APARC_ANNOT[$i]} 2000 --${H[$i]}-cortex-mask ${CORTEX_LABEL[$i]} --${H[$i]}-white ${ORIG[$i]} --${H[$i]}-pial ${RIBBON_EDIT_PIAL[$i]} --${H[$i]}"
  	cmd "${H[$i]} AParc-to-ASeg aparc.a2009s" \
  	"mri_surf2volseg --o $APARC_A2009S_ASEG --label-cortex --i $ASEG --threads 1 --${H[$i]}-annot ${APARC_A2009S_ANNOT[$i]} 12100 --${H[$i]}-cortex-mask ${CORTEX_LABEL[$i]} --${H[$i]}-white ${ORIG[$i]} --${H[$i]}-pial ${RIBBON_EDIT_PIAL[$i]} --${H[$i]}"
@@ -1115,7 +1268,7 @@ done
 fi
 
 #################
-## BONUS FOR TESTING SOMETHING ALONE (using -t 12)
+## BONUS FOR TESTING SOMETHING ALONE: use tag -t 12
 # #################
 if ((TAG<=12))
 then
@@ -1125,8 +1278,10 @@ do
 	then
 		continue;
 	else
-	echo "..." #Put your command lines here
-	
+	echo "..." #Put your command lines below
+
+	#cmd "Concatenate ribbon_script_lh.mgz with ribbon_script_rh.mgz into ribbon_script.mgz" \
+	#"mri_concat --i $O/mri/ribbon_script_lh.mgz --i $O/mri/ribbon_script_rh.mgz --o $O/mri/ribbon_script.mgz --sum"
 	fi
 done
 fi
