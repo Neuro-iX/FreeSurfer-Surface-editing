@@ -8,7 +8,7 @@ Help ()
 builtin echo "
 AUTHOR: Benoît Verreman
 
-LAST UPDATE: 2024-06-28
+LAST UPDATE: 2024-07-04
 
 DESCRIPTION: 
 Use ribbon and subcortical NIFTI files to recompute pial surface,
@@ -206,6 +206,7 @@ fi
 
 script_nifti_padding
 script_brain-finalsurfs-edit
+script_edit_aseg_presurf_based_on_ribbon
 script_expert_file
 
 }
@@ -341,6 +342,128 @@ EOF
 fi
 }
 
+#################
+## Create a python script "edit_aseg_presurf_based_on_ribbon.py"
+#################
+script_edit_aseg_presurf_based_on_ribbon()
+{
+if [ ! -f "$SUBJECTS_DIR/edit_aseg_presurf_based_on_ribbon.py" ]
+then
+
+cat > $SUBJECTS_DIR/edit_aseg_presurf_based_on_ribbon.py <<EOF
+####
+#Correcting aseg.presurf based on ribbon-edit
+####
+
+import os
+import nibabel as nib
+import nibabel.processing #Used in nib.processing.conform
+import scipy.ndimage #Used in nib.processing.conform
+import sys #To add arguments
+import copy
+import numpy
+
+#Outside parameters
+path_aseg = sys.argv[1] #Path to aseg.presurf.old.mgz
+path_ribbon = sys.argv[2] #Path to ribbon-edit.mgz
+path_out = sys.argv[3] #Path to output aseg.presurf.mgz
+
+### Get images
+if not os.path.isfile(path_aseg):
+    raise FileNotFoundError("Make sure the following path is correct: " + path_aseg)
+else:
+    img_aseg = nib.load(path_aseg)
+
+if not os.path.isfile(path_ribbon):
+    raise FileNotFoundError("Make sure the following path is correct: " + path_ribbon)
+else:
+    img_ribbon = nib.load(path_ribbon)
+    
+### Get data
+data_aseg = img_aseg.get_fdata() #Not to be edited
+data_ribbon = img_ribbon.get_fdata() #Not to be edited
+
+### Copy aseg
+data_new_aseg = copy.deepcopy(data_aseg) #Copy to be edited
+
+### Get dimensions
+(a,b,c)=img_aseg.header.get_data_shape()
+
+# 2 = lh WM
+# 41 = rh WM
+
+# 3 = lg GM
+# 42 = rh GM
+
+# 12 = lh putamen
+# 51 = rh putamen
+
+# 17 = lh hippocampus
+# 53 = rh hippocampus
+
+# 18 = lh amygdala
+# 54 = rh amygdala
+
+### Get neighbors
+motion = numpy.transpose(numpy.indices((3,3,3)) - 1).reshape(-1, 3)
+
+list_putamen_lh=[]
+list_putamen_rh=[]
+list_hippocampus_lh=[]
+list_hippocampus_rh=[]
+list_amygdala_lh=[]
+list_amygdala_rh=[]
+
+### Modify GM and WM based on ribbon
+for x in range(a):
+    for y in range(b):
+        for z in range(c):
+            if int(data_ribbon[x,y,z]) == 0:
+                if (int(data_aseg[x,y,z]) == 2) or (int(data_aseg[x,y,z]) == 3) or (int(data_aseg[x,y,z]) == 41) or (int(data_aseg[x,y,z]) == 42):
+                    data_new_aseg[x,y,z]=0
+            if int(data_ribbon[x,y,z]) == 2:
+                if (int(data_aseg[x,y,z]) == 0) or (int(data_aseg[x,y,z]) == 3) or (int(data_aseg[x,y,z]) == 41) or (int(data_aseg[x,y,z]) == 42):
+                    data_new_aseg[x,y,z]=2
+            if int(data_ribbon[x,y,z]) == 3:
+                if (int(data_aseg[x,y,z]) == 0) or (int(data_aseg[x,y,z]) == 2) or (int(data_aseg[x,y,z]) == 41) or (int(data_aseg[x,y,z]) == 42):
+                    data_new_aseg[x,y,z]=3
+            if int(data_ribbon[x,y,z]) == 41:
+                if (int(data_aseg[x,y,z]) == 0) or (int(data_aseg[x,y,z]) == 2) or (int(data_aseg[x,y,z]) == 3) or (int(data_aseg[x,y,z]) == 42):
+                    data_new_aseg[x,y,z]=41
+            if int(data_ribbon[x,y,z]) == 42:
+                if (int(data_aseg[x,y,z]) == 0) or (int(data_aseg[x,y,z]) == 2) or (int(data_aseg[x,y,z]) == 3) or (int(data_aseg[x,y,z]) == 41):
+                    data_new_aseg[x,y,z]=42
+            if (int(data_aseg[x,y,z]) == 12) or (int(data_aseg[x,y,z]) == 51): #Putamen
+            	
+            if (int(data_aseg[x,y,z]) == 18) or (int(data_aseg[x,y,z]) == 54): #Amygdala
+            if (int(data_aseg[x,y,z]) == 17) or (int(data_aseg[x,y,z]) == 53): #Hippocampus
+            	
+
+# erode Putamen out of GM, dilate hippocampus and amygdala into GM        
+for x in range(a):
+    for y in range(b):
+        for z in range(c):
+            if (int(data_aseg[x,y,z]) == 12) or (int(data_aseg[x,y,z]) == 51): #Putamen
+                n_coordinates = motion + [[x, y, z]]
+                for (k,n,m) in n_coordinates:
+                    if (int(data_ribbon[k,n,m]) == 3): #If we have GM next to putamen, erode putamen to WM
+                        data_new_aseg[x,y,z]=2
+                        continue
+                    if (int(data_ribbon[k,n,m]) == 42):
+                        data_new_aseg[x,y,z]=41
+                continue
+            if (int(data_aseg[x,y,z]) == 18) or (int(data_aseg[x,y,z]) == 54) or (int(data_aseg[x,y,z]) == 17) or (int(data_aseg[x,y,z]) == 53): #Amygdala or Hippocampus
+                n_coordinates = motion + [[x, y, z]]
+                for (k,n,m) in n_coordinates:
+                    if (int(data_ribbon[k,n,m]) == 3) or (int(data_ribbon[k,n,m]) == 42): #If we have GM next to A or H, dilate it
+                        data_new_aseg[k,n,m]=int(data_aseg[x,y,z])
+
+### Save new aseg
+img_new_aseg = nib.Nifti1Image(data_new_aseg, img_aseg.affine.copy())
+nib.save(img_new_aseg, path_out)
+EOF
+fi
+}
 
 #################
 ## Create an expert_file.txt for FreeSurfer
@@ -431,6 +554,7 @@ NORM="$O/mri/norm.mgz"
 TALAIRACH_M3Z="$O/mri/transforms/talairach.m3z"
 ASEG_AUTO_NOCCSEG="$O/mri/aseg.auto_noCCseg.mgz"
 ASEG_AUTO="$O/mri/aseg.auto.mgz"
+ASEG_PRESURF_NOFIX="$O/mri/aseg.presurf.nofix.mgz"
 ASEG_PRESURF="$O/mri/aseg.presurf.mgz"
 
 BRAIN="$O/mri/brain.mgz"
@@ -678,8 +802,7 @@ cmd "Subcortical Segment: mri_ca_label" \
 cmd "CC Segment: mri_cc" \
 "mri_cc -aseg aseg.auto_noCCseg.mgz -o aseg.auto.mgz -lta $CC_UP $SUBJID/$OUTPUT_FOLDER" # Function "mri_cc" add "mri/" to $ASEG_AUTO_NOCCSEG and $ASEG_AUTO
 
-cmd "Merge ASeg" \
-"cp $ASEG_AUTO $ASEG_PRESURF"
+
 fi
 
 #################
@@ -687,44 +810,22 @@ fi
 #################
 if ((TAG<=4))
 then
+cmd "Merge ASeg" \
+"cp $ASEG_AUTO $ASEG_PRESURF_NOFIX"
+
 ## ADDED aseg.presurf.mgz correction based on ribbon-edit.mgz
+cmd "Use script $SUBJECTS_DIR/edit_aseg_presurf_based_on_ribbon.py on $ASEG_PRESURF_NOFIX" \
+"python $SUBJECTS_DIR/edit_aseg_presurf_based_on_ribbon.py $ASEG_PRESURF_NOFIX $RIBBON_EDIT $ASEG_PRESURF"
 
-# Extract WM lh from ribbon-edit to create wm-bmask-lh.mgz
-#cmd "Extract WM lh from $RIBBON_EDIT" \
-#"mri_extract_label $RIBBON_EDIT ${LABEL_RIBBON_WM[0]} $WM_BMASK_LH" #0/128 binary mask
-
-# Extract GM lh from ribbon-edit to create gm-bmask-lh.mgz
-#cmd "Extract GM lh from $RIBBON_EDIT" \
-#"mri_extract_label $RIBBON_EDIT ${LABEL_RIBBON_WM[0]} $GM_BMASK_LH" #0/128 binary mask
-
-# Extract WM rh from ribbon-edit to create wm-bmask-lh.mgz
-#cmd "Extract WM rh from $RIBBON_EDIT" \
-#"mri_extract_label $RIBBON_EDIT ${LABEL_RIBBON_WM[1]} $WM_BMASK_RH" #0/128 binary mask
-
-# Extract GM rh from ribbon-edit to create gm-bmask-lh.mgz
-#cmd "Extract GM lh from $RIBBON_EDIT" \
-#"mri_extract_label $RIBBON_EDIT ${LABEL_RIBBON_WM[1]} $GM_BMASK_RH" #0/128 binary mask
-
-
-
-
-#cmd "Concatenate $WM_BMASK with $WM into $WM_CONCAT" \
-#"mri_concat --i $WM_BMASK --i $WM --o $WM_CONCAT --sum" #ROI at 378 (128+250)
-
-
+#BRAIN_FINALSURFS
 cmd "Intensity Normalize" \
 "mri_normalize -seed 1234 -mprage -noconform -aseg $ASEG_PRESURF -mask $T1_MASKED $NORM $BRAIN"
 
-#Not needed
 cmd "Mask BFS" \
 "mri_mask -T 5 $BRAIN $T1_MASKED $BRAIN_FINALSURFS"
 #OR
 #cmd "Copy" \
 #"cp $BRAIN $BRAIN_FINALSURFS"
-
-
-
-
 
 # Extract white matter from ribbon-edit to create wm-bmask.mgz
 cmd "Extract WM from $RIBBON_EDIT" \
@@ -1253,16 +1354,7 @@ do
  	cmd "${H[$i]} mri_label2label perirhinal_exvivo_thresh" \
  	"mri_label2label --srcsubject fsaverage --srclabel $SUBJECTS_DIR/fsaverage/label/${H[$i]}.perirhinal_exvivo.thresh.label --trgsubject $SUBJID/$OUTPUT_FOLDER --trglabel ${PERIRHINAL_EXVIVO_THRESH_LABEL[$i]} --hemi ${H[$i]} --regmethod surface"
  	
- 	cmd "${H[$i]} mri_label2label ctab" \
- 	"mris_label2annot --s $SUBJID/$OUTPUT_FOLDER --hemi ${H[$i]} --ctab $COLORTABLE_BA_TXT --l ${BA1_EXVIVO_LABEL[$i]} --l ${BA2_EXVIVO_LABEL[$i]} --l ${BA3A_EXVIVO_LABEL[$i]} --l ${BA3B_EXVIVO_LABEL[$i]} --l ${BA4A_EXVIVO_LABEL[$i]} --l ${BA4P_EXVIVO_LABEL[$i]} --l ${BA6_EXVIVO_LABEL[$i]} --l ${BA44_EXVIVO_LABEL[$i]} --l ${BA45_EXVIVO_LABEL[$i]} --l ${V1_EXVIVO_LABEL[$i]} --l ${V2_EXVIVO_LABEL[$i]} --l ${MT_EXVIVO_LABEL[$i]} --l ${PERIRHINAL_EXVIVO_LABEL[$i]} --l ${ENTORHINAL_EXVIVO_LABEL[$i]} --a BA_exvivo --maxstatwinner --noverbose"
- 	
- 	cmd "${H[$i]} mri_label2label ctab thresh" \
- 	"mris_label2annot --s $SUBJID/$OUTPUT_FOLDER --hemi ${H[$i]} --ctab $COLORTABLE_BA_TXT --l ${BA1_EXVIVO_THRESH_LABEL[$i]} --l ${BA2_EXVIVO_THRESH_LABEL[$i]} --l ${BA3A_EXVIVO_THRESH_LABEL[$i]} --l ${BA3B_EXVIVO_THRESH_LABEL[$i]} --l ${BA4A_EXVIVO_THRESH_LABEL[$i]} --l ${BA4P_EXVIVO_THRESH_LABEL[$i]} --l ${BA6_EXVIVO_THRESH_LABEL[$i]} --l ${BA44_EXVIVO_THRESH_LABEL[$i]} --l ${BA45_EXVIVO_THRESH_LABEL[$i]} --l ${V1_EXVIVO_THRESH_LABEL[$i]} --l ${V2_EXVIVO_THRESH_LABEL[$i]} --l ${MT_EXVIVO_THRESH_LABEL[$i]} --l ${PERIRHINAL_EXVIVO_THRESH_LABEL[$i]} --l ${ENTORHINAL_EXVIVO_THRESH_LABEL[$i]} --a BA_exvivo.thresh --maxstatwinner --noverbose"
 
- 	cmd "${H[$i]} mris_anatomical_stats ctab" \
- 	"mris_anatomical_stats -th3 -mgz -noglobal -f ${BA_EXVIVO_STATS[$i]} -b -a ${BA_EXVIVO_ANNOT[$i]} -c $BA_EXVIVO_CTAB $SUBJID/$OUTPUT_FOLDER ${H[$i]} white"
- 	cmd "${H[$i]}mris_anatomical_stats ctab thresh" \
- 	"mris_anatomical_stats -th3 -mgz -f ${BA_EXVIVO_THRESH_STATS[$i]} -noglobal -b -a ${BA_EXVIVO_THRESH_ANNOT[$i]} -c $BA_EXVIVO_THRESH_CTAB $SUBJID/$OUTPUT_FOLDER ${H[$i]} white"
 	fi
 done
 fi
@@ -1280,8 +1372,21 @@ do
 	else
 	echo "..." #Put your command lines below
 
-	#cmd "Concatenate ribbon_script_lh.mgz with ribbon_script_rh.mgz into ribbon_script.mgz" \
-	#"mri_concat --i $O/mri/ribbon_script_lh.mgz --i $O/mri/ribbon_script_rh.mgz --o $O/mri/ribbon_script.mgz --sum"
+	 	cmd "Change name of ${BA_EXVIVO_ANNOT[$i]} if already exists" \
+ 	"if [ -f ${BA_EXVIVO_ANNOT[$i]} ]; then mv ${BA_EXVIVO_ANNOT[$i]} ${BA_EXVIVO_ANNOT[$i]}_old_$(date +%F_%H-%M-%S); fi"
+ 	cmd "${H[$i]} mri_label2label ctab" \
+ 	"mris_label2annot --s $SUBJID/$OUTPUT_FOLDER --hemi ${H[$i]} --ctab $COLORTABLE_BA_TXT --l ${BA1_EXVIVO_LABEL[$i]} --l ${BA2_EXVIVO_LABEL[$i]} --l ${BA3A_EXVIVO_LABEL[$i]} --l ${BA3B_EXVIVO_LABEL[$i]} --l ${BA4A_EXVIVO_LABEL[$i]} --l ${BA4P_EXVIVO_LABEL[$i]} --l ${BA6_EXVIVO_LABEL[$i]} --l ${BA44_EXVIVO_LABEL[$i]} --l ${BA45_EXVIVO_LABEL[$i]} --l ${V1_EXVIVO_LABEL[$i]} --l ${V2_EXVIVO_LABEL[$i]} --l ${MT_EXVIVO_LABEL[$i]} --l ${PERIRHINAL_EXVIVO_LABEL[$i]} --l ${ENTORHINAL_EXVIVO_LABEL[$i]} --a BA_exvivo --maxstatwinner --noverbose"
+ 	
+ 	cmd "Change name of ${BA_EXVIVO_THRESH_ANNOT[$i]} if already exists" \
+ 	"if [ -f ${BA_EXVIVO_THRESH_ANNOT[$i]} ]; then mv ${BA_EXVIVO_THRESH_ANNOT[$i]} ${BA_EXVIVO_THRESH_ANNOT[$i]}_old_$(date +%F_%H-%M-%S); fi"
+ 	cmd "${H[$i]} mri_label2label ctab thresh" \
+ 	"mris_label2annot --s $SUBJID/$OUTPUT_FOLDER --hemi ${H[$i]} --ctab $COLORTABLE_BA_TXT --l ${BA1_EXVIVO_THRESH_LABEL[$i]} --l ${BA2_EXVIVO_THRESH_LABEL[$i]} --l ${BA3A_EXVIVO_THRESH_LABEL[$i]} --l ${BA3B_EXVIVO_THRESH_LABEL[$i]} --l ${BA4A_EXVIVO_THRESH_LABEL[$i]} --l ${BA4P_EXVIVO_THRESH_LABEL[$i]} --l ${BA6_EXVIVO_THRESH_LABEL[$i]} --l ${BA44_EXVIVO_THRESH_LABEL[$i]} --l ${BA45_EXVIVO_THRESH_LABEL[$i]} --l ${V1_EXVIVO_THRESH_LABEL[$i]} --l ${V2_EXVIVO_THRESH_LABEL[$i]} --l ${MT_EXVIVO_THRESH_LABEL[$i]} --l ${PERIRHINAL_EXVIVO_THRESH_LABEL[$i]} --l ${ENTORHINAL_EXVIVO_THRESH_LABEL[$i]} --a BA_exvivo.thresh --maxstatwinner --noverbose"
+
+ 	cmd "${H[$i]} mris_anatomical_stats ctab" \
+ 	"mris_anatomical_stats -th3 -mgz -noglobal -f ${BA_EXVIVO_STATS[$i]} -b -a ${BA_EXVIVO_ANNOT[$i]} -c $BA_EXVIVO_CTAB $SUBJID/$OUTPUT_FOLDER ${H[$i]} white"
+ 	
+ 	cmd "${H[$i]}mris_anatomical_stats ctab thresh" \
+ 	"mris_anatomical_stats -th3 -mgz -f ${BA_EXVIVO_THRESH_STATS[$i]} -noglobal -b -a ${BA_EXVIVO_THRESH_ANNOT[$i]} -c $BA_EXVIVO_THRESH_CTAB $SUBJID/$OUTPUT_FOLDER ${H[$i]} white"
 	fi
 done
 fi
