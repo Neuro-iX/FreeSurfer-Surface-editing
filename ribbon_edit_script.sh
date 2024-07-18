@@ -8,7 +8,7 @@ Help ()
 builtin echo "
 AUTHOR: Benoît Verreman
 
-LAST UPDATE: 2024-07-04
+LAST UPDATE: 2024-07-18
 
 DESCRIPTION: 
 Use ribbon and subcortical NIFTI files to recompute pial surface,
@@ -963,7 +963,7 @@ done
 fi
 
 #################
-## Compute stats for surface
+## Compute stats, labels and aparc, to prepare for surface computation 
 #################
 if ((TAG<=8))
 then
@@ -993,6 +993,14 @@ do
 	# Compute labels to remove HIPOCAMPUS AND AMYGDALA from pial surface in mris_place_surface
 	cmd "${H[$i]} Label2label for cortex" \
 	"mri_label2label --label-cortex ${ORIG[$i]} $ASEG_PRESURF 1 ${CORTEX_HIPAMYG_LABEL[$i]}"
+	
+	# Compute APARC cortical parcellation for --aparc option in mris_place_surface
+	cmd "${H[$i]} Sphere" \
+ 	"mris_sphere -seed 1234 ${INFLATED[$i]} ${SPHERE[$i]}"
+ 	cmd "${H[$i]} Surf Reg" \
+ 	"mris_register -curv ${SPHERE[$i]} ${FOLDING_ATLAS_ACFB40[$i]} ${SPHERE_REG[$i]}"
+ 	cmd "${H[$i]} Cortical Parc" \
+ 	"mris_ca_label -l ${CORTEX_LABEL[$i]} -aseg $ASEG_PRESURF -seed 1234 $SUBJID/$OUTPUT_FOLDER ${H[$i]} ${SPHERE_REG[$i]} ${DKAPARC_ATLAS_ACFB40[$i]} ${APARC_ANNOT[$i]}"
 	fi
 done
 fi
@@ -1009,11 +1017,11 @@ do
 		continue;
 	else	
 	cmd "${H[$i]} Computes pial surface" \
-	"mris_place_surface --i ${ORIG[$i]} --o ${RIBBON_EDIT_PIAL[$i]} --nsmooth 0 --adgws-in ${AUTODET_NEW_GW_STATS[$i]} --pial --${H[$i]} --repulse-surf ${ORIG[$i]} --invol ${BRAIN_FINALSURFS_NO_CEREB_EDITED[$i]} --threads 6 --white-surf ${ORIG[$i]} --pin-medial-wall ${CORTEX_LABEL[$i]} --seg $ASEG_PRESURF --no-rip" #--rip-label $LH_CORTEX_HIPAMYG_LABEL"
+	"mris_place_surface --i ${ORIG[$i]} --o ${RIBBON_EDIT_PIAL[$i]}_with_aparc --nsmooth 0 --adgws-in ${AUTODET_NEW_GW_STATS[$i]} --pial --${H[$i]} --repulse-surf ${ORIG[$i]} --invol ${BRAIN_FINALSURFS_NO_CEREB_EDITED[$i]} --threads 6 --white-surf ${ORIG[$i]} --pin-medial-wall ${CORTEX_LABEL[$i]} --seg $ASEG_PRESURF --no-rip --aparc ${APARC_ANNOT[$i]}" #--rip-label $LH_CORTEX_HIPAMYG_LABEL"
 	
 	#Second pass BEST RESULT (i_w)
 	cmd "${H[$i]} Computes pial surface - second pass" \
-	"mris_place_surface --i ${RIBBON_EDIT_PIAL[$i]} --o ${RIBBON_EDIT_PIAL_SECOND_PASS_i_w[$i]} --nsmooth 0 --adgws-in ${AUTODET_NEW_GW_STATS[$i]} --pial --${H[$i]} --repulse-surf ${ORIG[$i]} --invol ${BRAIN_FINALSURFS_NO_CEREB_UNIFORM_GM_80[$i]} --threads 6 --white-surf ${RIBBON_EDIT_PIAL[$i]} --pin-medial-wall ${CORTEX_LABEL[$i]} --seg $ASEG_PRESURF --no-rip"
+	"mris_place_surface --i ${RIBBON_EDIT_PIAL[$i]} --o ${RIBBON_EDIT_PIAL_SECOND_PASS_i_w[$i]}_with_aparc --nsmooth 0 --adgws-in ${AUTODET_NEW_GW_STATS[$i]} --pial --${H[$i]} --repulse-surf ${ORIG[$i]} --invol ${BRAIN_FINALSURFS_NO_CEREB_UNIFORM_GM_80[$i]} --threads 6 --white-surf ${RIBBON_EDIT_PIAL[$i]} --pin-medial-wall ${CORTEX_LABEL[$i]} --seg $ASEG_PRESURF --no-rip --aparc ${APARC_ANNOT[$i]}"
 
 	fi
 done
@@ -1077,20 +1085,13 @@ do
 	#"cp $RH_SMOOTHW_NOFIX $RH_SMOOTHW"
   	#cmd "Inflation2 rh" \
  	#"mris_inflate -n 30 $RH_SMOOTHW $RH_INFLATED"
-  	cmd "${H[$i]} Sphere" \
- 	"mris_sphere -seed 1234 ${INFLATED[$i]} ${SPHERE[$i]}"
- 	cmd "${H[$i]} Surf Reg" \
- 	"mris_register -curv ${SPHERE[$i]} ${FOLDING_ATLAS_ACFB40[$i]} ${SPHERE_REG[$i]}"
- 	
- 	
- 	cmd "${H[$i]} Cortical Parc" \
- 	"mris_ca_label -l ${CORTEX_LABEL[$i]} -aseg $ASEG_PRESURF -seed 1234 $SUBJID/$OUTPUT_FOLDER ${H[$i]} ${SPHERE_REG[$i]} ${DKAPARC_ATLAS_ACFB40[$i]} ${APARC_ANNOT[$i]}"
+
  	cmd "${H[$i]} Cortical Parc 2" \
  	"mris_ca_label -l ${CORTEX_LABEL[$i]} -aseg $ASEG_PRESURF -seed 1234 $SUBJID/$OUTPUT_FOLDER ${H[$i]} ${SPHERE_REG[$i]} ${CD_APARC_ATLAS[$i]} ${CD_APARC_ANNOT[$i]}"
- 		
 	#Use surf/rh.smoothwm and surf/rh.sphere.reg
  	cmd "${H[$i]} Cortical Parc 3" \
  	"mris_ca_label -l ${CORTEX_LABEL[$i]} -aseg $ASEG_PRESURF -seed 1234 $SUBJID/$OUTPUT_FOLDER ${H[$i]} ${SPHERE_REG[$i]} ${DKT_APARC_ATLAS[$i]} ${DKT_APARC_ANNOT[$i]}"
+ 	
  	cmd "${H[$i]} Copy $RAWAVG to $RAWAVG_MASKED" \
  	"cp $RAWAVG $RAWAVG_MASKED"
  	cmd "${H[$i]} Mask $RAWAVG_MASKED with $BRAIN_MASK into $RAWAVG_MASKED" \
@@ -1099,6 +1100,7 @@ do
  	"cp $ORIG_VOLUME $ORIG_MASKED"
  	cmd "${H[$i]} Mask $ORIG_MASKED with $BRAIN_MASK into $ORIG_MASKED" \
 "mri_mask $ORIG_MASKED $BRAIN_MASK $ORIG_MASKED"
+
  	cmd "${H[$i]} Change SUBJECTS_DIR to SUBJECTS_DIR/SUBJID" \
  	"export SUBJECTS_DIR=$SUBJECTS_DIR/$SUBJID"
  	cmd "${H[$i]} WM/GM Contrast" \
