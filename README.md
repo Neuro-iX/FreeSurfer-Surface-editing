@@ -1,4 +1,7 @@
 # FreeSurfer Surface editing
+
+[![DOI](https://zenodo.org/badge/665245427.svg)](https://zenodo.org/doi/10.5281/zenodo.12784724)
+
 This repository contains:
 - **ribbon_edit_script.sh**: \
 This shell script reuses Freesurfer 7.4.1 recon-all pipeline to correct the white and pial surfaces based on manually curated ribbon and subcortical files.
