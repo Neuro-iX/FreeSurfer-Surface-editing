@@ -8,7 +8,7 @@ Help ()
 builtin echo "
 AUTHOR: Benoît Verreman
 
-LAST UPDATE: 2024-07-18
+LAST UPDATE: 2024-08-01
 
 DESCRIPTION: 
 Use ribbon and subcortical NIFTI files to recompute pial surface,
@@ -389,74 +389,81 @@ data_new_aseg = copy.deepcopy(data_aseg) #Copy to be edited
 ### Get dimensions
 (a,b,c)=img_aseg.header.get_data_shape()
 
-# 2 = lh WM
-# 41 = rh WM
+### Create labels class
+class L:
+    r_ce = 45 # right cerebellum exterior (in ribbon)
 
-# 3 = lg GM
-# 42 = rh GM
+    l_wm = 2 # lh white matter
+    r_wm = 41 # rh white matter
+    
+    l_gm = 3 # lh gray matter
+    r_gm = 42 # rh gray matter
+    
+    l_p = 12 # lh putamen
+    r_p = 51 # rh putamen
+    
+    l_v = 28 # lh ventralDC
+    r_v = 60 # rh ventralDC
+    
+    l_h = 17 # lh hippocampus
+    r_h = 53 # rh hippocampus
+    
+    l_a = 18 # lh amygdala
+    r_a = 54 # rh amygdala
+    
+    l_cc = 8 # lh cerebellum cortex
+    r_cc = 47 # rh cerebellum cortex
 
-# 12 = lh putamen
-# 51 = rh putamen
-
-# 17 = lh hippocampus
-# 53 = rh hippocampus
-
-# 18 = lh amygdala
-# 54 = rh amygdala
-
-### Get neighbors
+### Get neighbours matrix
 motion = numpy.transpose(numpy.indices((3,3,3)) - 1).reshape(-1, 3)
+motion = numpy.delete(motion,int(len(motion)/2),axis=0) #remove [0 0 0]
 
-list_putamen_lh=[]
-list_putamen_rh=[]
-list_hippocampus_lh=[]
-list_hippocampus_rh=[]
-list_amygdala_lh=[]
-list_amygdala_rh=[]
+### Instantiate lists
+list_P_V=[] #Will contain couple (label,[x,y,z]) for putamen and ventralDC erosion (neighbouring GM)
+list_H_A=[] #Will contain couple (label,[x,y,z]) for hippocampus and amygdala dilation in GM
 
-### Modify GM and WM based on ribbon
+### Modify BG, WM, GM and subcortical structures based on ribbon
 for x in range(a):
     for y in range(b):
         for z in range(c):
-            if int(data_ribbon[x,y,z]) == 0:
-                if (int(data_aseg[x,y,z]) == 2) or (int(data_aseg[x,y,z]) == 3) or (int(data_aseg[x,y,z]) == 41) or (int(data_aseg[x,y,z]) == 42):
-                    data_new_aseg[x,y,z]=0
-            if int(data_ribbon[x,y,z]) == 2:
-                if (int(data_aseg[x,y,z]) == 0) or (int(data_aseg[x,y,z]) == 3) or (int(data_aseg[x,y,z]) == 41) or (int(data_aseg[x,y,z]) == 42):
-                    data_new_aseg[x,y,z]=2
-            if int(data_ribbon[x,y,z]) == 3:
-                if (int(data_aseg[x,y,z]) == 0) or (int(data_aseg[x,y,z]) == 2) or (int(data_aseg[x,y,z]) == 41) or (int(data_aseg[x,y,z]) == 42):
-                    data_new_aseg[x,y,z]=3
-            if int(data_ribbon[x,y,z]) == 41:
-                if (int(data_aseg[x,y,z]) == 0) or (int(data_aseg[x,y,z]) == 2) or (int(data_aseg[x,y,z]) == 3) or (int(data_aseg[x,y,z]) == 42):
-                    data_new_aseg[x,y,z]=41
-            if int(data_ribbon[x,y,z]) == 42:
-                if (int(data_aseg[x,y,z]) == 0) or (int(data_aseg[x,y,z]) == 2) or (int(data_aseg[x,y,z]) == 3) or (int(data_aseg[x,y,z]) == 41):
-                    data_new_aseg[x,y,z]=42
-            if (int(data_aseg[x,y,z]) == 12) or (int(data_aseg[x,y,z]) == 51): #Putamen
-            	
-            if (int(data_aseg[x,y,z]) == 18) or (int(data_aseg[x,y,z]) == 54): #Amygdala
-            if (int(data_aseg[x,y,z]) == 17) or (int(data_aseg[x,y,z]) == 53): #Hippocampus
-            	
+            ribbon_voxel = int(data_ribbon[x,y,z])
+            aseg_voxel = int(data_aseg[x,y,z])
+            
+            if aseg_voxel in [L.l_h,L.r_h,L.l_a,L.r_a]: 
+            	list_H_A.append((aseg_voxel,[x,y,z])) #Used for hippocampus and amygdala dilation in GM
 
-# erode Putamen out of GM, dilate hippocampus and amygdala into GM        
-for x in range(a):
-    for y in range(b):
-        for z in range(c):
-            if (int(data_aseg[x,y,z]) == 12) or (int(data_aseg[x,y,z]) == 51): #Putamen
-                n_coordinates = motion + [[x, y, z]]
-                for (k,n,m) in n_coordinates:
-                    if (int(data_ribbon[k,n,m]) == 3): #If we have GM next to putamen, erode putamen to WM
-                        data_new_aseg[x,y,z]=2
-                        continue
-                    if (int(data_ribbon[k,n,m]) == 42):
-                        data_new_aseg[x,y,z]=41
-                continue
-            if (int(data_aseg[x,y,z]) == 18) or (int(data_aseg[x,y,z]) == 54) or (int(data_aseg[x,y,z]) == 17) or (int(data_aseg[x,y,z]) == 53): #Amygdala or Hippocampus
-                n_coordinates = motion + [[x, y, z]]
-                for (k,n,m) in n_coordinates:
-                    if (int(data_ribbon[k,n,m]) == 3) or (int(data_ribbon[k,n,m]) == 42): #If we have GM next to A or H, dilate it
-                        data_new_aseg[k,n,m]=int(data_aseg[x,y,z])
+            elif aseg_voxel in [L.l_p,L.r_p,L.l_v,L.r_v]: 
+            	list_P_V.append((aseg_voxel,[x,y,z])) #Used for putamen and ventralDC erosion (neighbouring GM)
+            	
+            if aseg_voxel != ribbon_voxel: #Voxel for which label may have to be changed
+                match aseg_voxel:
+                    case 0 | L.l_wm | L.r_wm | L.l_gm | L.r_gm: #Aseg voxel in BG, WM or GM
+                        if ribbon_voxel != L.r_ce: #right-cerebellum-exterior label not in aseg.presurf.nofix
+                            data_new_aseg[x,y,z] = ribbon_voxel
+                    case L.l_cc | L.r_cc if ribbon_voxel in [L.l_wm,L.r_wm,L.l_gm,L.r_gm]: # Correcting cerebellum cortex respective to wm and gm in ribbon
+                        data_new_aseg[x,y,z] = ribbon_voxel
+                    case L.l_p | L.r_p | L.l_v | L.r_v if ribbon_voxel in [0,L.l_gm,L.r_gm]: #putamen and ventralDC should not be in GM or BG of ribbon
+                        data_new_aseg[x,y,z] = ribbon_voxel
+                        list_P_V.pop()
+                        
+                    case L.l_h | L.r_h | L.l_a | L.r_a if ribbon_voxel in [0,L.l_wm,L.r_wm]: #hippocampus and amygdala should not be in WM or BG of ribbon
+                        data_new_aseg[x,y,z] = ribbon_voxel
+                        list_H_A.pop()
+
+### Dilate hippocampus and amygdala into GM
+for (label,[x,y,z]) in list_H_A:
+    n_coordinates = motion + [[x, y, z]]
+    for (k,n,m) in n_coordinates:
+        if int(data_new_aseg[k,n,m]) in [L.l_gm,L.r_gm]: #Neighbour in GM should be changed to label (of hippocampus or amygdala)
+            data_new_aseg[k,n,m] = label
+        
+### Erode Putamen and VentralDC bordering GM
+for (label,[x,y,z]) in list_P_V:
+    n_coordinates = motion + [[x, y, z]]
+    for (k,n,m) in n_coordinates:
+        ribbon_voxel = int(data_ribbon[k,n,m])
+        if ribbon_voxel in [L.l_gm,L.r_gm]: 
+            data_new_aseg[x,y,z] = ribbon_voxel - 1 #neigbour is GM, so change voxel to WM
 
 ### Save new aseg
 img_new_aseg = nib.Nifti1Image(data_new_aseg, img_aseg.affine.copy())
@@ -591,6 +598,7 @@ declare -a CORTEX_LABEL=("$O/label/lh.cortex.label" "$O/label/rh.cortex.label")
 declare -a CORTEX_HIPAMYG_LABEL=("$O/label/lh.cortex+hipamyg.label" "$O/label/rh.cortex+hipamyg.label")
 
 declare -a GM_BMASK=("$O/mri/gm-bmask_lh.mgz" "$O/mri/gm-bmask_rh.mgz")
+declare -a WM_BMASK=("$O/mri/wm-bmask_lh.mgz" "$O/mri/wm-bmask_rh.mgz")
 declare -a BMASK=("$O/mri/bmask_lh.mgz" "$O/mri/bmask_rh.mgz")
 declare -a BRAIN_FINALSURFS_NO_CEREB=("$O/mri/brain.finalsurfs_no_cereb_lh.mgz" "$O/mri/brain.finalsurfs_no_cereb_rh.mgz")
 declare -a BRAIN_FINALSURFS_NO_CEREB_UNIFORM_GM_80=("$O/mri/brain.finalsurfs_no_cereb_uniform_gm_80_lh.mgz" "$O/mri/brain.finalsurfs_no_cereb_uniform_gm_80_rh.mgz")
@@ -1017,11 +1025,15 @@ do
 		continue;
 	else	
 	cmd "${H[$i]} Computes pial surface" \
-	"mris_place_surface --i ${ORIG[$i]} --o ${RIBBON_EDIT_PIAL[$i]}_with_aparc --nsmooth 0 --adgws-in ${AUTODET_NEW_GW_STATS[$i]} --pial --${H[$i]} --repulse-surf ${ORIG[$i]} --invol ${BRAIN_FINALSURFS_NO_CEREB_EDITED[$i]} --threads 6 --white-surf ${ORIG[$i]} --pin-medial-wall ${CORTEX_LABEL[$i]} --seg $ASEG_PRESURF --no-rip --aparc ${APARC_ANNOT[$i]}" #--rip-label $LH_CORTEX_HIPAMYG_LABEL"
+	"mris_place_surface --i ${ORIG[$i]} --o ${RIBBON_EDIT_PIAL[$i]} --nsmooth 0 --adgws-in ${AUTODET_NEW_GW_STATS[$i]} --pial --${H[$i]} --repulse-surf ${ORIG[$i]} --invol ${BRAIN_FINALSURFS_NO_CEREB_EDITED[$i]} --threads 6 --white-surf ${ORIG[$i]} --pin-medial-wall ${CORTEX_LABEL[$i]} --seg $ASEG_PRESURF --no-rip" #--rip-label $LH_CORTEX_HIPAMYG_LABEL" --aparc ${APARC_ANNOT[$i]} #--rip-bg isn't recognised
+	
+	### BONUS: aparc option
+	cmd "${H[$i]} Computes pial surface" \
+	"mris_place_surface --i ${ORIG[$i]} --o ${RIBBON_EDIT_PIAL[$i]}_with_aparc --nsmooth 0 --adgws-in ${AUTODET_NEW_GW_STATS[$i]} --pial --${H[$i]} --repulse-surf ${ORIG[$i]} --invol ${BRAIN_FINALSURFS_NO_CEREB_EDITED[$i]} --threads 6 --white-surf ${ORIG[$i]} --pin-medial-wall ${CORTEX_LABEL[$i]} --seg $ASEG_PRESURF --no-rip --aparc ${APARC_ANNOT[$i]}" #--rip-label $LH_CORTEX_HIPAMYG_LABEL" --aparc ${APARC_ANNOT[$i]} #--rip-bg isn't recognised
 	
 	#Second pass BEST RESULT (i_w)
 	cmd "${H[$i]} Computes pial surface - second pass" \
-	"mris_place_surface --i ${RIBBON_EDIT_PIAL[$i]} --o ${RIBBON_EDIT_PIAL_SECOND_PASS_i_w[$i]}_with_aparc --nsmooth 0 --adgws-in ${AUTODET_NEW_GW_STATS[$i]} --pial --${H[$i]} --repulse-surf ${ORIG[$i]} --invol ${BRAIN_FINALSURFS_NO_CEREB_UNIFORM_GM_80[$i]} --threads 6 --white-surf ${RIBBON_EDIT_PIAL[$i]} --pin-medial-wall ${CORTEX_LABEL[$i]} --seg $ASEG_PRESURF --no-rip --aparc ${APARC_ANNOT[$i]}"
+	"mris_place_surface --i ${RIBBON_EDIT_PIAL[$i]} --o ${RIBBON_EDIT_PIAL_SECOND_PASS_i_w[$i]}_with_aparc --nsmooth 0 --adgws-in ${AUTODET_NEW_GW_STATS[$i]} --pial --${H[$i]} --repulse-surf ${ORIG[$i]} --invol ${BRAIN_FINALSURFS_NO_CEREB_UNIFORM_GM_80[$i]} --threads 6 --white-surf ${RIBBON_EDIT_PIAL[$i]} --pin-medial-wall ${CORTEX_LABEL[$i]} --seg $ASEG_PRESURF --no-rip" #--aparc ${APARC_ANNOT[$i]}" #--rip-bg isn't recognised
 
 	fi
 done
@@ -1042,13 +1054,7 @@ do
 		continue;
 	else		
 	cmd "${H[$i]} Smooths pial surface" \
-	"mris_place_surface --i ${RIBBON_EDIT_PIAL_SECOND_PASS_i_w[$i]} --o ${RIBBON_EDIT_PIAL_THIRD_PASS_SMOOTH[$i]} --nsmooth 1 --adgws-in ${AUTODET_NEW_GW_STATS[$i]} --pial --${H[$i]} --repulse-surf ${RIBBON_EDIT_PIAL_SECOND_PASS_i_w[$i]} --invol ${BRAIN_FINALSURFS_NO_CEREB_EDITED[$i]} --threads 6 --white-surf ${ORIG[$i]} --pin-medial-wall ${CORTEX_LABEL[$i]} --seg $ASEG_PRESURF --no-rip" #--rip-label --rip-bg
-	
-	cmd "${H[$i]} Copy white surface to ${WHITE[$i]}" \
-	"cp ${ORIG[$i]} ${WHITE[$i]}" 
-	
-	cmd "${H[$i]} Copy pial surface to ${PIAL[$i]}" \
-	"cp ${RIBBON_EDIT_PIAL_THIRD_PASS_SMOOTH[$i]} ${PIAL[$i]}" 
+	"mris_place_surface --i ${RIBBON_EDIT_PIAL_SECOND_PASS_i_w[$i]} --o ${RIBBON_EDIT_PIAL_THIRD_PASS_SMOOTH[$i]} --nsmooth 1 --adgws-in ${AUTODET_NEW_GW_STATS[$i]} --pial --${H[$i]} --repulse-surf ${RIBBON_EDIT_PIAL_SECOND_PASS_i_w[$i]} --invol ${BRAIN_FINALSURFS_NO_CEREB_EDITED[$i]} --threads 6 --white-surf ${ORIG[$i]} --pin-medial-wall ${CORTEX_LABEL[$i]} --seg $ASEG_PRESURF --no-rip" #--rip-label #--rip-bg isn't recognised
 	fi
 done
 fi
@@ -1064,6 +1070,13 @@ do
 	then
 		continue;
 	else
+	# Copies to have the right names for the next functions
+	cmd "${H[$i]} Copy white surface to ${WHITE[$i]}" \
+	"cp ${ORIG[$i]} ${WHITE[$i]}" 
+	cmd "${H[$i]} Copy pial surface to ${PIAL[$i]}" \
+	"cp ${RIBBON_EDIT_PIAL_THIRD_PASS_SMOOTH[$i]} ${PIAL[$i]}" 
+	
+	# Compute the stats
 	cmd "${H[$i]} pial curv" \
  	"mris_place_surface --curv-map ${PIAL[$i]} 2 10 ${PIAL_CURV[$i]}"
  	cmd "${H[$i]} pial area" \
@@ -1074,10 +1087,6 @@ do
  	
  	cmd "${H[$i]} Curvature Stats" \
  	"mris_curvature_stats -m --writeCurvatureFiles -G -o ${CURV_STATS[$i]} -F smoothwm $SUBJID/$OUTPUT_FOLDER ${H[$i]} curv sulc"
-	
-	#Copies only for next command line (mris_volmask searching for surf/rh.white and surf/rh.pial)
-	cmd "${H[$i]} Copy ${ORIG[$i]} to ${WHITE[$i]}" \
-	"cp ${ORIG[$i]} ${WHITE[$i]}"
 
  	cmd "${H[$i]} Cortical ribbon mask" \
  	"mris_volmask --aseg_name aseg.presurf --label_left_white ${LABEL_RIBBON_WM[0]} --label_left_ribbon ${LABEL_RIBBON_GM[0]} --label_right_white ${LABEL_RIBBON_WM[1]} --label_right_ribbon ${LABEL_RIBBON_GM[1]} --save_ribbon --out_root ribbon_script_${H[$i]} --${H[$i]}-only $SUBJID/$OUTPUT_FOLDER" #Searching for surf/rh.white and surf/rh.pial, and --surf_white and --surf_pial don't help, can use arg 
@@ -1356,7 +1365,21 @@ do
  	cmd "${H[$i]} mri_label2label perirhinal_exvivo_thresh" \
  	"mri_label2label --srcsubject fsaverage --srclabel $SUBJECTS_DIR/fsaverage/label/${H[$i]}.perirhinal_exvivo.thresh.label --trgsubject $SUBJID/$OUTPUT_FOLDER --trglabel ${PERIRHINAL_EXVIVO_THRESH_LABEL[$i]} --hemi ${H[$i]} --regmethod surface"
  	
+	cmd "Change name of ${BA_EXVIVO_ANNOT[$i]} if already exists" \
+ 	"if [ -f ${BA_EXVIVO_ANNOT[$i]} ]; then mv ${BA_EXVIVO_ANNOT[$i]} ${BA_EXVIVO_ANNOT[$i]}_old_$(date +%F_%H-%M-%S); fi"
+ 	cmd "${H[$i]} mri_label2label ctab" \
+ 	"mris_label2annot --s $SUBJID/$OUTPUT_FOLDER --hemi ${H[$i]} --ctab $COLORTABLE_BA_TXT --l ${BA1_EXVIVO_LABEL[$i]} --l ${BA2_EXVIVO_LABEL[$i]} --l ${BA3A_EXVIVO_LABEL[$i]} --l ${BA3B_EXVIVO_LABEL[$i]} --l ${BA4A_EXVIVO_LABEL[$i]} --l ${BA4P_EXVIVO_LABEL[$i]} --l ${BA6_EXVIVO_LABEL[$i]} --l ${BA44_EXVIVO_LABEL[$i]} --l ${BA45_EXVIVO_LABEL[$i]} --l ${V1_EXVIVO_LABEL[$i]} --l ${V2_EXVIVO_LABEL[$i]} --l ${MT_EXVIVO_LABEL[$i]} --l ${PERIRHINAL_EXVIVO_LABEL[$i]} --l ${ENTORHINAL_EXVIVO_LABEL[$i]} --a BA_exvivo --maxstatwinner --noverbose"
+ 	
+ 	cmd "Change name of ${BA_EXVIVO_THRESH_ANNOT[$i]} if already exists" \
+ 	"if [ -f ${BA_EXVIVO_THRESH_ANNOT[$i]} ]; then mv ${BA_EXVIVO_THRESH_ANNOT[$i]} ${BA_EXVIVO_THRESH_ANNOT[$i]}_old_$(date +%F_%H-%M-%S); fi"
+ 	cmd "${H[$i]} mri_label2label ctab thresh" \
+ 	"mris_label2annot --s $SUBJID/$OUTPUT_FOLDER --hemi ${H[$i]} --ctab $COLORTABLE_BA_TXT --l ${BA1_EXVIVO_THRESH_LABEL[$i]} --l ${BA2_EXVIVO_THRESH_LABEL[$i]} --l ${BA3A_EXVIVO_THRESH_LABEL[$i]} --l ${BA3B_EXVIVO_THRESH_LABEL[$i]} --l ${BA4A_EXVIVO_THRESH_LABEL[$i]} --l ${BA4P_EXVIVO_THRESH_LABEL[$i]} --l ${BA6_EXVIVO_THRESH_LABEL[$i]} --l ${BA44_EXVIVO_THRESH_LABEL[$i]} --l ${BA45_EXVIVO_THRESH_LABEL[$i]} --l ${V1_EXVIVO_THRESH_LABEL[$i]} --l ${V2_EXVIVO_THRESH_LABEL[$i]} --l ${MT_EXVIVO_THRESH_LABEL[$i]} --l ${PERIRHINAL_EXVIVO_THRESH_LABEL[$i]} --l ${ENTORHINAL_EXVIVO_THRESH_LABEL[$i]} --a BA_exvivo.thresh --maxstatwinner --noverbose"
 
+ 	cmd "${H[$i]} mris_anatomical_stats ctab" \
+ 	"mris_anatomical_stats -th3 -mgz -noglobal -f ${BA_EXVIVO_STATS[$i]} -b -a ${BA_EXVIVO_ANNOT[$i]} -c $BA_EXVIVO_CTAB $SUBJID/$OUTPUT_FOLDER ${H[$i]} white"
+ 	
+ 	cmd "${H[$i]}mris_anatomical_stats ctab thresh" \
+ 	"mris_anatomical_stats -th3 -mgz -f ${BA_EXVIVO_THRESH_STATS[$i]} -noglobal -b -a ${BA_EXVIVO_THRESH_ANNOT[$i]} -c $BA_EXVIVO_THRESH_CTAB $SUBJID/$OUTPUT_FOLDER ${H[$i]} white"
 	fi
 done
 fi
@@ -1373,22 +1396,6 @@ do
 		continue;
 	else
 	echo "..." #Put your command lines below
-
-	 	cmd "Change name of ${BA_EXVIVO_ANNOT[$i]} if already exists" \
- 	"if [ -f ${BA_EXVIVO_ANNOT[$i]} ]; then mv ${BA_EXVIVO_ANNOT[$i]} ${BA_EXVIVO_ANNOT[$i]}_old_$(date +%F_%H-%M-%S); fi"
- 	cmd "${H[$i]} mri_label2label ctab" \
- 	"mris_label2annot --s $SUBJID/$OUTPUT_FOLDER --hemi ${H[$i]} --ctab $COLORTABLE_BA_TXT --l ${BA1_EXVIVO_LABEL[$i]} --l ${BA2_EXVIVO_LABEL[$i]} --l ${BA3A_EXVIVO_LABEL[$i]} --l ${BA3B_EXVIVO_LABEL[$i]} --l ${BA4A_EXVIVO_LABEL[$i]} --l ${BA4P_EXVIVO_LABEL[$i]} --l ${BA6_EXVIVO_LABEL[$i]} --l ${BA44_EXVIVO_LABEL[$i]} --l ${BA45_EXVIVO_LABEL[$i]} --l ${V1_EXVIVO_LABEL[$i]} --l ${V2_EXVIVO_LABEL[$i]} --l ${MT_EXVIVO_LABEL[$i]} --l ${PERIRHINAL_EXVIVO_LABEL[$i]} --l ${ENTORHINAL_EXVIVO_LABEL[$i]} --a BA_exvivo --maxstatwinner --noverbose"
- 	
- 	cmd "Change name of ${BA_EXVIVO_THRESH_ANNOT[$i]} if already exists" \
- 	"if [ -f ${BA_EXVIVO_THRESH_ANNOT[$i]} ]; then mv ${BA_EXVIVO_THRESH_ANNOT[$i]} ${BA_EXVIVO_THRESH_ANNOT[$i]}_old_$(date +%F_%H-%M-%S); fi"
- 	cmd "${H[$i]} mri_label2label ctab thresh" \
- 	"mris_label2annot --s $SUBJID/$OUTPUT_FOLDER --hemi ${H[$i]} --ctab $COLORTABLE_BA_TXT --l ${BA1_EXVIVO_THRESH_LABEL[$i]} --l ${BA2_EXVIVO_THRESH_LABEL[$i]} --l ${BA3A_EXVIVO_THRESH_LABEL[$i]} --l ${BA3B_EXVIVO_THRESH_LABEL[$i]} --l ${BA4A_EXVIVO_THRESH_LABEL[$i]} --l ${BA4P_EXVIVO_THRESH_LABEL[$i]} --l ${BA6_EXVIVO_THRESH_LABEL[$i]} --l ${BA44_EXVIVO_THRESH_LABEL[$i]} --l ${BA45_EXVIVO_THRESH_LABEL[$i]} --l ${V1_EXVIVO_THRESH_LABEL[$i]} --l ${V2_EXVIVO_THRESH_LABEL[$i]} --l ${MT_EXVIVO_THRESH_LABEL[$i]} --l ${PERIRHINAL_EXVIVO_THRESH_LABEL[$i]} --l ${ENTORHINAL_EXVIVO_THRESH_LABEL[$i]} --a BA_exvivo.thresh --maxstatwinner --noverbose"
-
- 	cmd "${H[$i]} mris_anatomical_stats ctab" \
- 	"mris_anatomical_stats -th3 -mgz -noglobal -f ${BA_EXVIVO_STATS[$i]} -b -a ${BA_EXVIVO_ANNOT[$i]} -c $BA_EXVIVO_CTAB $SUBJID/$OUTPUT_FOLDER ${H[$i]} white"
- 	
- 	cmd "${H[$i]}mris_anatomical_stats ctab thresh" \
- 	"mris_anatomical_stats -th3 -mgz -f ${BA_EXVIVO_THRESH_STATS[$i]} -noglobal -b -a ${BA_EXVIVO_THRESH_ANNOT[$i]} -c $BA_EXVIVO_THRESH_CTAB $SUBJID/$OUTPUT_FOLDER ${H[$i]} white"
 	fi
 done
 fi
