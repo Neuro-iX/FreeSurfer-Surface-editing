@@ -8,7 +8,7 @@ Help ()
 builtin echo "
 AUTHOR: Benoît Verreman
 
-LAST UPDATE: 2024-08-01
+LAST UPDATE: 2024-08-09
 
 DESCRIPTION: 
 Use ribbon and subcortical NIFTI files to recompute pial surface,
@@ -45,7 +45,9 @@ Modify the value of some constants in the script if needed: LABELS_SUBCORTICAL, 
 EXAMPLES:
 $ bash ribbon_edit_script.sh -i 133019_T1w_acpc_dc_restore.nii.gz -s 133019 -b 133019_ribbon.nii.gz -c 133019_subcortical.nii.gz
 
-$ bash ribbon_edit_script.sh -s <subjid> -t 8 -r #start from pial computation step (8), right hemisphere only (r)
+$ bash ribbon_edit_script.sh -s <subjid> -t 8 -r ### start from pial computation step (8), right hemisphere only (r)
+
+$ bash ribbon_edit_script.sh -f <FOLDER_DATASET> -i * -r ### whole folder (f), apply recon-all (-i *), right hemisphere only (r)
 
 PARAMETERS:
 
@@ -82,6 +84,15 @@ HEMI
 RESET
 -d: Reset outputs folder and report.sh script
 
+WHOLE FOLDER
+-f: Execute the script for each subfolder in given folder. 
+Each subfolder name will be used as SUBJID and the given folder will be SUBJECTS_DIR.
+Each subfolder should contain:
+	- a ribbon file with a name containing 'ribbon' (the only one)
+	- a subcortical file with a name containing 'subcortical' (the only one)
+	- a T1 image (containing 'T1') if '-i *' is used as an option (execute recon-all)
+	IF NOT: each subfolder should contain recon-all output (mri folder at least)
+
 TROUBLESHOOTS:
 -Missing argument: check if you put the necessary option flags, and for each flag, if it needs an argument or not.
 "
@@ -91,16 +102,17 @@ TROUBLESHOOTS:
 ## Default global variables
 #################
 current_date_time=$(date)
-TAG=-1 # Start from beginning
-HEMI=-1 # Both hemispheres
-FS=0 # Default: No recon-all
+TAG=-1 # Start from beginning (option -t not used)
+HEMI=-1 # Both hemispheres (option -r or -l not used)
+FS=0 # Default: No recon-all (option -i not used)
+MULTICASE=0 # Default: Only one case (option -f not used)
 OUTPUT_FOLDER="outputs"
 LABELS_SUBCORTICAL="5 15 29 30 32 31"
 declare -a H=("lh" "rh") #Left then Right hemispheres
 declare -a LABEL_RIBBON_WM=("2" "41")
 declare -a LABEL_RIBBON_GM=("3" "42")
 
-CHANGE_AUTODET=1 # Default: Change autodet with parameters bellow or given as parameter
+CHANGE_AUTODET=1 # Default: Change autodet with parameters bellow or given as option
 PIAL_BORDER_LOW=5
 
 #################
@@ -111,8 +123,8 @@ unset -v SUBJID
 unset -v RIBBON
 unset -v SUBCORTICAL
 
-#If a character is followed by :, then it needs an argument
-VALID_ARGS="i:s:b:c:t:p:hlrd"
+#If a character is followed by :, then it needs an argument just after
+VALID_ARGS="i:s:b:c:t:p:f:hlrd"
 
 while getopts ${VALID_ARGS} opt; do
   case ${opt} in
@@ -134,6 +146,10 @@ while getopts ${VALID_ARGS} opt; do
 	;;
     p)
 	PIAL_BORDER_LOW=${OPTARG}
+	;;
+    f)
+	SUBJECTS_DIR=${OPTARG}
+	MULTICASE=1
 	;;
     h)
 	Help
@@ -159,26 +175,41 @@ while getopts ${VALID_ARGS} opt; do
   esac
 done
 
-# Test if user provided SUBJID
-: ${SUBJID:?Missing argument -s}
-
 #################
-## Remove slaches from $SUBJECTS_DIR and $SUBJID
+## Remove last character of $SUBJECTS_DIR if /
 #################
 export var="${SUBJECTS_DIR: -1}"
 if [[ "$var" == "/" ]]; then
 export SUBJECTS_DIR="${SUBJECTS_DIR:0:-1}"
 fi
 
+
+#################
+## Main function
+#################
+main()
+{
+
+#################
+## Remove slaches from $SUBJID
+#################
+
+# Test if user provided SUBJID (with -s, or used -f)
+: ${SUBJID:?Missing argument -s}
+
+#remove last / if any
 export var="${SUBJID: -1}"
 if [[ "$var" == "/" ]]; then
 export SUBJID="${SUBJID:0:-1}"
 fi
 
+#remove first character if /
 export var="${SUBJID:0:1}"
 if [[ "$var" == "/" ]]; then
 export SUBJID="${SUBJID:1}"
 fi
+	
+O="$SUBJECTS_DIR/$SUBJID/$OUTPUT_FOLDER"
 
 #################
 ## Set default permission of working directory to a+rwx
@@ -191,7 +222,7 @@ fi
 #################
 Echo ()
 {
-    builtin echo "$@" | tee -a $SUBJECTS_DIR/report.sh
+    builtin echo "$@" | tee -a $SUBJECTS_DIR/$SUBJID/report.sh
 }
 
 #################
@@ -199,39 +230,38 @@ Echo ()
 #################
 CreateScripts()
 {
-if [ ! -f "$SUBJECTS_DIR/report.sh" ]
+if [ ! -f "$SUBJECTS_DIR/$SUBJID/report.sh" ]
 then
 Echo "#!/bin/bash"
 fi
-
-script_nifti_padding
-script_brain-finalsurfs-edit
-script_edit_aseg_presurf_based_on_ribbon
-script_expert_file
-
 }
 
 CreateFolders()
 {
-if [ ! -d "$SUBJECTS_DIR/$SUBJID/$OUTPUT_FOLDER" ]
+if [ ! -d "$O" ]
 then
-	cmd "Create $SUBJECTS_DIR/$SUBJID/$OUTPUT_FOLDER" \
-	"mkdir $SUBJECTS_DIR/$SUBJID/$OUTPUT_FOLDER;
-	mkdir $SUBJECTS_DIR/$SUBJID/$OUTPUT_FOLDER/scripts;
-	mkdir $SUBJECTS_DIR/$SUBJID/$OUTPUT_FOLDER/surf;
-	mkdir $SUBJECTS_DIR/$SUBJID/$OUTPUT_FOLDER/mri;
-	mkdir $SUBJECTS_DIR/$SUBJID/$OUTPUT_FOLDER/mri/transforms;
-	mkdir $SUBJECTS_DIR/$SUBJID/$OUTPUT_FOLDER/label;
-	mkdir $SUBJECTS_DIR/$SUBJID/$OUTPUT_FOLDER/stats;"
+	cmd "Create $O" \
+	"mkdir $O;
+	mkdir $O/scripts;
+	mkdir $O/surf;
+	mkdir $O/mri;
+	mkdir $O/mri/transforms;
+	mkdir $O/label;
+	mkdir $O/stats;"
+	
+	script_nifti_padding
+	script_brain-finalsurfs-edit
+	script_edit_aseg_presurf_based_on_ribbon
+	script_expert_file
 fi
 }
 
 Delete()
 {
-cmd "Reset $SUBJECTS_DIR/$SUBJID/$OUTPUT_FOLDER" \
-"rm -r $SUBJECTS_DIR/$SUBJID/$OUTPUT_FOLDER;"
+cmd "Reset $O" \
+"rm -r $O;"
 
-rm $SUBJECTS_DIR/report.sh
+rm $O/report.sh
 }
 
 #################
@@ -239,10 +269,10 @@ rm $SUBJECTS_DIR/report.sh
 #################
 script_nifti_padding()
 {
-if [ ! -f "$SUBJECTS_DIR/nifti_padding.py" ]
+if [ ! -f "$O/nifti_padding.py" ]
 then
 
-cat > $SUBJECTS_DIR/nifti_padding.py <<EOF
+cat > $O/nifti_padding.py <<EOF
 import os
 import nibabel as nib
 import nibabel.processing #Used in nib.processing.conform
@@ -277,10 +307,10 @@ fi
 #################
 script_brain-finalsurfs-edit()
 {
-if [ ! -f "$SUBJECTS_DIR/brain-finalsurfs-edit.py" ]
+if [ ! -f "$O/brain-finalsurfs-edit.py" ]
 then
 
-cat > $SUBJECTS_DIR/brain-finalsurfs-edit.py <<EOF
+cat > $O/brain-finalsurfs-edit.py <<EOF
 import os
 import numpy as np #To compute motion
 import nibabel as nib #To edit MRI images
@@ -347,10 +377,10 @@ fi
 #################
 script_edit_aseg_presurf_based_on_ribbon()
 {
-if [ ! -f "$SUBJECTS_DIR/edit_aseg_presurf_based_on_ribbon.py" ]
+if [ ! -f "$O/edit_aseg_presurf_based_on_ribbon.py" ]
 then
 
-cat > $SUBJECTS_DIR/edit_aseg_presurf_based_on_ribbon.py <<EOF
+cat > $O/edit_aseg_presurf_based_on_ribbon.py <<EOF
 ####
 #Correcting aseg.presurf based on ribbon-edit
 ####
@@ -502,8 +532,6 @@ $2"
 fi
 eval $2
 }
-
-O="$SUBJECTS_DIR/$SUBJID/$OUTPUT_FOLDER"
 
 #################
 ## Input files
@@ -738,7 +766,7 @@ then
 fi
 
 cmd "Compensate for future translation in FreeSurfer" \
-"python $SUBJECTS_DIR/nifti_padding.py $IMAGE $IMAGE_PADDED padding"
+"python $O/nifti_padding.py $IMAGE $IMAGE_PADDED padding"
 
 #-xopts-overwrite is used when expert file already used before
 cmd "Apply recon-all -autorecon 1 and 2 on $IMAGE_PADDED" \
@@ -757,11 +785,11 @@ Echo "# Given subcortical: $SUBCORTICAL"
 
 CreateFolders
 
-cmd "Use script $SUBJECTS_DIR/nifti_padding.py on $RIBBON" \
-"python $SUBJECTS_DIR/nifti_padding.py $RIBBON $RIBBON_PADDED padding"
+cmd "Use script $O/nifti_padding.py on $RIBBON" \
+"python $O/nifti_padding.py $RIBBON $RIBBON_PADDED padding"
 
-cmd "Use script $SUBJECTS_DIR/nifti_padding.py on $SUBCORTICAL" \
-"python $SUBJECTS_DIR/nifti_padding.py $SUBCORTICAL $SUBCORTICAL_PADDED padding"
+cmd "Use script $O/nifti_padding.py on $SUBCORTICAL" \
+"python $O/nifti_padding.py $SUBCORTICAL $SUBCORTICAL_PADDED padding"
 
 #Necessary for correcting the orientation of the image
 cmd "Convert $RIBBON_PADDED" \
@@ -822,8 +850,8 @@ cmd "Merge ASeg" \
 "cp $ASEG_AUTO $ASEG_PRESURF_NOFIX"
 
 ## ADDED aseg.presurf.mgz correction based on ribbon-edit.mgz
-cmd "Use script $SUBJECTS_DIR/edit_aseg_presurf_based_on_ribbon.py on $ASEG_PRESURF_NOFIX" \
-"python $SUBJECTS_DIR/edit_aseg_presurf_based_on_ribbon.py $ASEG_PRESURF_NOFIX $RIBBON_EDIT $ASEG_PRESURF"
+cmd "Use script $O/edit_aseg_presurf_based_on_ribbon.py on $ASEG_PRESURF_NOFIX" \
+"python $O/edit_aseg_presurf_based_on_ribbon.py $ASEG_PRESURF_NOFIX $RIBBON_EDIT $ASEG_PRESURF"
 
 #BRAIN_FINALSURFS
 cmd "Intensity Normalize" \
@@ -964,8 +992,8 @@ do
 	"mri_binarize --i ${BRAIN_FINALSURFS_NO_CEREB_UNIFORM_GM_80[$i]} --o ${BRAIN_FINALSURFS_NO_CEREB_UNIFORM_GM_80[$i]} --replace 128 80"
 
 	# Use script brain-finalsurfs-edit.py to edit brain.finalsurfs.mgz
-	cmd "${H[$i]} Use script $SUBJECTS_DIR/brain-finalsurfs-edit.py on ${BRAIN_FINALSURFS_NO_CEREB[$i]} with ${GM_BMASK[$i]}" \
-	"python $SUBJECTS_DIR/brain-finalsurfs-edit.py ${BRAIN_FINALSURFS_NO_CEREB[$i]} ${GM_BMASK[$i]} ${BRAIN_FINALSURFS_NO_CEREB_EDITED[$i]}"
+	cmd "${H[$i]} Use script $O/brain-finalsurfs-edit.py on ${BRAIN_FINALSURFS_NO_CEREB[$i]} with ${GM_BMASK[$i]}" \
+	"python $O/brain-finalsurfs-edit.py ${BRAIN_FINALSURFS_NO_CEREB[$i]} ${GM_BMASK[$i]} ${BRAIN_FINALSURFS_NO_CEREB_EDITED[$i]}"
 	fi
 done
 fi
@@ -1399,3 +1427,37 @@ do
 	fi
 done
 fi
+
+} ### END OF MAIN FUNCTION
+
+
+
+
+if ((MULTICASE==0)); # ONLY ONE IMAGE; don't forget to export SUBJECTS_DIR
+then
+	main
+	
+elif ((MULTICASE==1)); # SEVERAL IMAGES IN SUBJECTS_DIR GIVEN WITH -f
+then
+for SUBJID in $SUBJECTS_DIR/*/;
+do
+	if ((FS==1)); # -i was used, need T1 for each subfolder
+	then
+		IMAGE="$(find $SUBJID -maxdepth 1 -name "*T1*")"
+	fi
+        RIBBON="$(find $SUBJID -maxdepth 1 -name "*ribbon*")"
+        SUBCORTICAL="$(find $SUBJID -maxdepth 1 -name "*subcortical*")"
+        
+        #remove last character if /
+	export var="${SUBJID: -1}"
+	if [[ "$var" == "/" ]]; then
+	export SUBJID="${SUBJID:0:-1}"
+	fi
+	
+	#Get string after last /
+        SUBJID=$(echo ${SUBJID##*/})
+        
+	main
+done
+fi
+
