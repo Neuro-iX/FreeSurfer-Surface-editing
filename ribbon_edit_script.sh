@@ -8,7 +8,7 @@ Help ()
 builtin echo "
 AUTHOR: Benoît Verreman
 
-LAST UPDATE: 2024-08-09
+LAST UPDATE: 2024-08-13
 
 DESCRIPTION: 
 Use ribbon and subcortical NIFTI files to recompute pial surface,
@@ -111,6 +111,7 @@ LABELS_SUBCORTICAL="5 15 29 30 32 31"
 declare -a H=("lh" "rh") #Left then Right hemispheres
 declare -a LABEL_RIBBON_WM=("2" "41")
 declare -a LABEL_RIBBON_GM=("3" "42")
+declare -i N_PARALLEL_COMPUTING=3 #Number of images computed in parallel at the same time
 
 CHANGE_AUTODET=1 # Default: Change autodet with parameters bellow or given as option
 PIAL_BORDER_LOW=5
@@ -1423,7 +1424,8 @@ do
 	then
 		continue;
 	else
-	echo "..." #Put your command lines below
+	echo "counter=${counter}" #Put your command lines below
+	#sleep 5
 	fi
 done
 fi
@@ -1439,25 +1441,31 @@ then
 	
 elif ((MULTICASE==1)); # SEVERAL IMAGES IN SUBJECTS_DIR GIVEN WITH -f
 then
-for SUBJID in $SUBJECTS_DIR/*/;
+declare -i counter=-1
+for SUB in $SUBJECTS_DIR/*/;
 do
 	if ((FS==1)); # -i was used, need T1 for each subfolder
 	then
-		IMAGE="$(find $SUBJID -maxdepth 1 -name "*T1*")"
+		IMAGE="$(find $SUB -maxdepth 1 -name "*T1*")"
 	fi
-        RIBBON="$(find $SUBJID -maxdepth 1 -name "*ribbon*")"
-        SUBCORTICAL="$(find $SUBJID -maxdepth 1 -name "*subcortical*")"
+        RIBBON="$(find $SUB -maxdepth 1 -name "*ribbon*")"
+        SUBCORTICAL="$(find $SUB -maxdepth 1 -name "*subcortical*")"
         
         #remove last character if /
-	export var="${SUBJID: -1}"
+	export var="${SUB: -1}"
 	if [[ "$var" == "/" ]]; then
-	export SUBJID="${SUBJID:0:-1}"
+	export SUB="${SUB:0:-1}"
 	fi
 	
 	#Get string after last /
-        SUBJID=$(echo ${SUBJID##*/})
+        SUBJID="$(echo ${SUB##*/})"
         
-	main
+        counter+=1
+	main & #Launch computation in parallel
+	if ((counter%N_PARALLEL_COMPUTING==(N_PARALLEL_COMPUTING-1))); 
+	then
+		wait
+	fi
 done
 fi
 
