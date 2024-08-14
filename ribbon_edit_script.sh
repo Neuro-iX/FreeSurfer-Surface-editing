@@ -534,9 +534,9 @@ fi
 eval $2
 if [ $? -ne 0 ]; then
   Echo "#---------------------------------
-ERROR AT: 
+ERROR DETECTED 
 #---------------------------------
-$2"
+"
   exit 1
 fi
 }
@@ -1195,7 +1195,7 @@ do
  	"mri_segstats --seed 1234 --seg $ASEG --sum $ASEG_STATS --pv $NORM --empty --brainmask $BRAIN_FINALSURFS --brain-vol-from-seg --excludeid 0 --excl-ctxgmwm --supratent --subcortgray --in $NORM --in-intensity-name norm --in-intensity-units MR --etiv --euler --ctab $ASEG_STATS_LUT --subject $SUBJID/$OUTPUT_FOLDER --no-global-stats"
  	
  	cmd "Create Symlink of $FSAVERAGE folder in SUBJECTS_DIR" \
- 	"ln -s $FSAVERAGE $SUBJECTS_DIR"
+ 	"if [ ! -d "$FSAVERAGE" ]; then ln -s $FSAVERAGE $SUBJECTS_DIR; fi"
  	
  	cmd "${H[$i]} BA_exvivo Labels" \
  	"mri_label2label --srcsubject fsaverage --srclabel $SUBJECTS_DIR/fsaverage/label/${H[$i]}.BA1_exvivo.label --trgsubject $SUBJID/$OUTPUT_FOLDER --trglabel ${BA1_EXVIVO_LABEL[$i]} --hemi ${H[$i]} --regmethod surface"
@@ -1466,7 +1466,7 @@ do
 	
 	#Get string after last /
         SUBJID="$(echo ${SUB##*/})"
-        if ((SUBJID=="fsaverage")); then #fsaverage is created automatically by freesurfer recon-all pipeline, should be skipped by this script
+        if ((SUBJID=="fsaverage")); then #fsaverage is a symlink of freesurfer own data, should be skipped by this script
         	continue
         fi
         
