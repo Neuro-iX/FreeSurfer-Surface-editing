@@ -223,7 +223,7 @@ O="$SUBJECTS_DIR/$SUBJID/$OUTPUT_FOLDER"
 #################
 Echo ()
 {
-    builtin echo "$@" | tee -a $SUBJECTS_DIR/$SUBJID/report.sh
+    builtin echo "$@" | tee -a $O/report.sh
 }
 
 #################
@@ -231,7 +231,7 @@ Echo ()
 #################
 CreateScripts()
 {
-if [ ! -f "$SUBJECTS_DIR/$SUBJID/report.sh" ]
+if [ ! -f "$O/report.sh" ]
 then
 Echo "#!/bin/bash"
 fi
@@ -747,7 +747,7 @@ Echo "
 #*******************
 #*******************
 #*******************
-# New invocation of ribbon_edit_script.sh
+# New invocation of ribbon_edit_script.sh: $current_date_time
 
 # Given subjid: $SUBJID"
 
