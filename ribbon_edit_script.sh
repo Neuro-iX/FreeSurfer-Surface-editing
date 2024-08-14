@@ -532,6 +532,13 @@ else
 $2"
 fi
 eval $2
+if [ $? -ne 0 ]; then
+  Echo "#---------------------------------
+ERROR AT: 
+#---------------------------------
+$2"
+  exit 1
+fi
 }
 
 #################
@@ -1062,7 +1069,7 @@ do
 	
 	#Second pass BEST RESULT (i_w)
 	cmd "${H[$i]} Computes pial surface - second pass" \
-	"mris_place_surface --i ${RIBBON_EDIT_PIAL[$i]} --o ${RIBBON_EDIT_PIAL_SECOND_PASS_i_w[$i]}_with_aparc --nsmooth 0 --adgws-in ${AUTODET_NEW_GW_STATS[$i]} --pial --${H[$i]} --repulse-surf ${ORIG[$i]} --invol ${BRAIN_FINALSURFS_NO_CEREB_UNIFORM_GM_80[$i]} --threads 6 --white-surf ${RIBBON_EDIT_PIAL[$i]} --pin-medial-wall ${CORTEX_LABEL[$i]} --seg $ASEG_PRESURF --no-rip" #--aparc ${APARC_ANNOT[$i]}" #--rip-bg isn't recognised
+	"mris_place_surface --i ${RIBBON_EDIT_PIAL[$i]} --o ${RIBBON_EDIT_PIAL_SECOND_PASS_i_w[$i]} --nsmooth 0 --adgws-in ${AUTODET_NEW_GW_STATS[$i]} --pial --${H[$i]} --repulse-surf ${ORIG[$i]} --invol ${BRAIN_FINALSURFS_NO_CEREB_UNIFORM_GM_80[$i]} --threads 6 --white-surf ${RIBBON_EDIT_PIAL[$i]} --pin-medial-wall ${CORTEX_LABEL[$i]} --seg $ASEG_PRESURF --no-rip" #--aparc ${APARC_ANNOT[$i]}" #--rip-bg isn't recognised
 
 	fi
 done
@@ -1459,9 +1466,14 @@ do
 	
 	#Get string after last /
         SUBJID="$(echo ${SUB##*/})"
+        if ((SUBJID=="fsaverage")); then #fsaverage is created automatically by freesurfer recon-all pipeline, should be skipped by this script
+        	continue
+        fi
         
         counter+=1
 	main & #Launch computation in parallel
+	#echo $! #Get job PID
+	#jobs -l #Get job ID
 	if ((counter%N_PARALLEL_COMPUTING==(N_PARALLEL_COMPUTING-1))); 
 	then
 		wait
