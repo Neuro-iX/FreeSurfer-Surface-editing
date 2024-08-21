@@ -239,7 +239,7 @@ fi
 
 if [ ! -d "$O" ]
 then
-	echo "Create $O adn subfolders"
+	echo "Create $O and subfolders"
 	mkdir $O;
 	mkdir $O/scripts;
 	mkdir $O/surf;
@@ -1257,6 +1257,12 @@ do
  	cmd "${H[$i]} mri_label2label h0c4v_mpm_vpnl" \
  	"mri_label2label --srcsubject fsaverage --srclabel $SUBJECTS_DIR/fsaverage/label/${H[$i]}.hOc4v.mpm.vpnl.label --trgsubject $SUBJID/$OUTPUT_FOLDER --trglabel ${H0C4V_MPM_VPNL_LABEL[$i]} --hemi ${H[$i]} --regmethod surface"
  	
+ 	if [ -f "$O/label/${H[$i]}.mpm.vpnl.annot" ]
+	then
+	var=$(date +%F_%H-%M-%S)
+	cmd "Change name of $O/label/${H[$i]}.mpm.vpnl.annot to recompute it: ${H[$i]}.mpm.vpnl.annot_$var" \
+	"mv $O/label/${H[$i]}.mpm.vpnl.annot $O/label/${H[$i]}.mpm.vpnl.annot_$var"
+	fi
  	cmd "${H[$i]} mri_label2label ctab" \
  	"mris_label2annot --s $SUBJID/$OUTPUT_FOLDER --ctab $COLORTABLE_VPNL_TXT --hemi ${H[$i]} --a mpm.vpnl --maxstatwinner --noverbose --l ${FG1_MPM_VPNL_LABEL[$i]} --l ${FG2_MPM_VPNL_LABEL[$i]} --l ${FG3_MPM_VPNL_LABEL[$i]} --l ${FG4_MPM_VPNL_LABEL[$i]} --l ${H0C1_MPM_VPNL_LABEL[$i]} --l ${H0C2_MPM_VPNL_LABEL[$i]} --l ${H0C3V_MPM_VPNL_LABEL[$i]} --l ${H0C4V_MPM_VPNL_LABEL[$i]}"
  	
@@ -1290,9 +1296,13 @@ do
  	cmd "${H[$i]} mri_label2label perirhinal_exvivo_thresh" \
  	"mri_label2label --srcsubject fsaverage --srclabel $SUBJECTS_DIR/fsaverage/label/${H[$i]}.perirhinal_exvivo.thresh.label --trgsubject $SUBJID/$OUTPUT_FOLDER --trglabel ${PERIRHINAL_EXVIVO_THRESH_LABEL[$i]} --hemi ${H[$i]} --regmethod surface"
  	
+	cmd "Change name of ${BA_EXVIVO_ANNOT[$i]} if already exists" \
+ 	"if [ -f ${BA_EXVIVO_ANNOT[$i]} ]; then mv ${BA_EXVIVO_ANNOT[$i]} ${BA_EXVIVO_ANNOT[$i]}_old_$(date +%F_%H-%M-%S); fi"
  	cmd "${H[$i]} mri_label2label ctab" \
  	"mris_label2annot --s $SUBJID/$OUTPUT_FOLDER --hemi ${H[$i]} --ctab $COLORTABLE_BA_TXT --l ${BA1_EXVIVO_LABEL[$i]} --l ${BA2_EXVIVO_LABEL[$i]} --l ${BA3A_EXVIVO_LABEL[$i]} --l ${BA3B_EXVIVO_LABEL[$i]} --l ${BA4A_EXVIVO_LABEL[$i]} --l ${BA4P_EXVIVO_LABEL[$i]} --l ${BA6_EXVIVO_LABEL[$i]} --l ${BA44_EXVIVO_LABEL[$i]} --l ${BA45_EXVIVO_LABEL[$i]} --l ${V1_EXVIVO_LABEL[$i]} --l ${V2_EXVIVO_LABEL[$i]} --l ${MT_EXVIVO_LABEL[$i]} --l ${PERIRHINAL_EXVIVO_LABEL[$i]} --l ${ENTORHINAL_EXVIVO_LABEL[$i]} --a BA_exvivo --maxstatwinner --noverbose"
  	
+ 	cmd "Change name of ${BA_EXVIVO_THRESH_ANNOT[$i]} if already exists" \
+ 	"if [ -f ${BA_EXVIVO_THRESH_ANNOT[$i]} ]; then mv ${BA_EXVIVO_THRESH_ANNOT[$i]} ${BA_EXVIVO_THRESH_ANNOT[$i]}_old_$(date +%F_%H-%M-%S); fi"
  	cmd "${H[$i]} mri_label2label ctab thresh" \
  	"mris_label2annot --s $SUBJID/$OUTPUT_FOLDER --hemi ${H[$i]} --ctab $COLORTABLE_BA_TXT --l ${BA1_EXVIVO_THRESH_LABEL[$i]} --l ${BA2_EXVIVO_THRESH_LABEL[$i]} --l ${BA3A_EXVIVO_THRESH_LABEL[$i]} --l ${BA3B_EXVIVO_THRESH_LABEL[$i]} --l ${BA4A_EXVIVO_THRESH_LABEL[$i]} --l ${BA4P_EXVIVO_THRESH_LABEL[$i]} --l ${BA6_EXVIVO_THRESH_LABEL[$i]} --l ${BA44_EXVIVO_THRESH_LABEL[$i]} --l ${BA45_EXVIVO_THRESH_LABEL[$i]} --l ${V1_EXVIVO_THRESH_LABEL[$i]} --l ${V2_EXVIVO_THRESH_LABEL[$i]} --l ${MT_EXVIVO_THRESH_LABEL[$i]} --l ${PERIRHINAL_EXVIVO_THRESH_LABEL[$i]} --l ${ENTORHINAL_EXVIVO_THRESH_LABEL[$i]} --a BA_exvivo.thresh --maxstatwinner --noverbose"
 
@@ -1333,8 +1343,11 @@ do
  	cmd "ASeg Stats" \
  	"mri_segstats --seed 1234 --seg $ASEG --sum $ASEG_STATS --pv $NORM --empty --brainmask $BRAIN_FINALSURFS --brain-vol-from-seg --excludeid 0 --excl-ctxgmwm --supratent --subcortgray --in $NORM --in-intensity-name norm --in-intensity-units MR --etiv --euler --ctab $ASEG_STATS_LUT --subject $SUBJID/$OUTPUT_FOLDER --no-global-stats"
  	
+ 	if [ ! -d "$SUBJECTS_DIR/fsaverage" ]
+	then
  	cmd "Create Symlink of $FSAVERAGE folder in SUBJECTS_DIR" \
  	"ln -s $FSAVERAGE $SUBJECTS_DIR"
+	fi
  	
  	cmd "${H[$i]} BA_exvivo Labels" \
  	"mri_label2label --srcsubject fsaverage --srclabel $SUBJECTS_DIR/fsaverage/label/${H[$i]}.BA1_exvivo.label --trgsubject $SUBJID/$OUTPUT_FOLDER --trglabel ${BA1_EXVIVO_LABEL[$i]} --hemi ${H[$i]} --regmethod surface"
@@ -1382,6 +1395,12 @@ do
  	cmd "${H[$i]} mri_label2label h0c4v_mpm_vpnl" \
  	"mri_label2label --srcsubject fsaverage --srclabel $SUBJECTS_DIR/fsaverage/label/${H[$i]}.hOc4v.mpm.vpnl.label --trgsubject $SUBJID/$OUTPUT_FOLDER --trglabel ${H0C4V_MPM_VPNL_LABEL[$i]} --hemi ${H[$i]} --regmethod surface"
  	
+ 	if [ -f "$O/label/${H[$i]}.mpm.vpnl.annot" ]
+	then
+	var=$(date +%F_%H-%M-%S)
+	cmd "Change name of $O/label/${H[$i]}.mpm.vpnl.annot to recompute it: ${H[$i]}.mpm.vpnl.annot_$var" \
+	"mv $O/label/${H[$i]}.mpm.vpnl.annot $O/label/${H[$i]}.mpm.vpnl.annot_$var"
+	fi
  	cmd "${H[$i]} mri_label2label ctab" \
  	"mris_label2annot --s $SUBJID/$OUTPUT_FOLDER --ctab $COLORTABLE_VPNL_TXT --hemi ${H[$i]} --a mpm.vpnl --maxstatwinner --noverbose --l ${FG1_MPM_VPNL_LABEL[$i]} --l ${FG2_MPM_VPNL_LABEL[$i]} --l ${FG3_MPM_VPNL_LABEL[$i]} --l ${FG4_MPM_VPNL_LABEL[$i]} --l ${H0C1_MPM_VPNL_LABEL[$i]} --l ${H0C2_MPM_VPNL_LABEL[$i]} --l ${H0C3V_MPM_VPNL_LABEL[$i]} --l ${H0C4V_MPM_VPNL_LABEL[$i]}"
  	
@@ -1445,7 +1464,8 @@ do
 	then
 		continue;
 	else
-	echo "counter=${counter}" #Put your command lines below
+	echo "..."
+	#echo "counter=${counter}" #Put your command lines below
 	#sleep 5
 	fi
 done
