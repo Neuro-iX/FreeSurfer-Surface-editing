@@ -788,10 +788,11 @@ cmd "Add SUBJID to SUBJECTS_DIR" \
 #-xopts-overwrite is used when expert file already used before
 cmd "Apply recon-all -autorecon 1 and 2 on $IMAGE_PADDED" \
 "recon-all -autorecon1 -autorecon2 -s ${SUBJID}_freesurfer -i $IMAGE_PADDED -hires -parallel -openmp 4 -expert expert_file.txt -xopts-overwrite" 
-fi
+
 
 cmd "Change back SUBJECTS_DIR/SUBJID to SUBJECTS_DIR" \
 "export SUBJECTS_DIR=$(dirname $SUBJECTS_DIR)"
+fi
 
 #################
 ## Convert ribbon and subcortical
