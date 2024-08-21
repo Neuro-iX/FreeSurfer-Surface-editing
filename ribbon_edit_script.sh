@@ -8,7 +8,7 @@ Help ()
 builtin echo "
 AUTHOR: Benoît Verreman
 
-LAST UPDATE: 2024-08-13
+LAST UPDATE: 2024-08-20
 
 DESCRIPTION: 
 Use ribbon and subcortical NIFTI files to recompute pial surface,
@@ -229,26 +229,24 @@ Echo ()
 #################
 ## Function to reset report.sh, $OUTPUT_FOLDER and mri_convert_correction_by_translation.py
 #################
-CreateScripts()
-{
-if [ ! -f "$O/report.sh" ]
-then
-Echo "#!/bin/bash"
-fi
-}
-
 CreateFolders()
 {
+if [ ! -d "$SUBJECTS_DIR/$SUBJID" ]
+then
+	echo "Create $SUBJECTS_DIR/$SUBJID"
+	mkdir $SUBJECTS_DIR/$SUBJID;
+fi
+
 if [ ! -d "$O" ]
 then
-	cmd "Create $O" \
-	"mkdir $O;
+	echo "Create $O adn subfolders"
+	mkdir $O;
 	mkdir $O/scripts;
 	mkdir $O/surf;
 	mkdir $O/mri;
 	mkdir $O/mri/transforms;
 	mkdir $O/label;
-	mkdir $O/stats;"
+	mkdir $O/stats;
 	
 	script_nifti_padding
 	script_brain-finalsurfs-edit
@@ -257,12 +255,19 @@ then
 fi
 }
 
+CreateScripts()
+{
+if [ ! -f "$O/report.sh" ]
+then
+touch $O/report.sh
+Echo "#!/bin/bash"
+fi
+}
+
 Delete()
 {
 cmd "Reset $O" \
 "rm -r $O;"
-
-rm $O/report.sh
 }
 
 #################
@@ -748,6 +753,7 @@ BA_EXVIVO_THRESH_CTAB="$O/label/BA_exvivo.thresh.ctab"
 ## New invocation in report.sh and create
 #################
 #Test if $OUTPUT_FOLDER folder already exist, and if it does not, create one
+CreateFolders
 CreateScripts
 
 Echo "
@@ -767,9 +773,9 @@ then
 : ${IMAGE:?Missing argument -i}
 Echo "# Given image: $IMAGE"
 
-if [ -d "$SUBJECTS_DIR/$SUBJID" ]
+if [ -d "$SUBJECTS_DIR/$SUBJID/mri" ]
 then
-	Echo "Do not re-run FreeSurfer on same SUBJID: $SUBJECTS_DIR/$SUBJID"
+	Echo "Do not re-run FreeSurfer on same SUBJID: $SUBJECTS_DIR/$SUBJID/mri"
 	exit 1
 fi
 
@@ -790,8 +796,6 @@ then
 : ${RIBBON:?Missing argument -b} ${SUBCORTICAL:?Missing argument -c}
 Echo "# Given ribbon: $RIBBON"
 Echo "# Given subcortical: $SUBCORTICAL"
-
-CreateFolders
 
 cmd "Use script $O/nifti_padding.py on $RIBBON" \
 "python $O/nifti_padding.py $RIBBON $RIBBON_PADDED padding"
@@ -870,15 +874,15 @@ cmd "Mask BFS" \
 #OR
 #cmd "Copy" \
 #"cp $BRAIN $BRAIN_FINALSURFS"
-
-# Extract white matter from ribbon-edit to create wm-bmask.mgz
-cmd "Extract WM from $RIBBON_EDIT" \
-"mri_extract_label $RIBBON_EDIT ${LABEL_RIBBON_WM[0]} ${LABEL_RIBBON_WM[1]} $WM_BMASK" #0/128 binary mask
 fi
 
 # Compute WM_EDIT based on BRAIN_FINALSURFS masked by WM_BMASK
 if ((TAG<=5))
 then
+# Extract white matter from ribbon-edit to create wm-bmask.mgz
+cmd "Extract WM from $RIBBON_EDIT" \
+"mri_extract_label $RIBBON_EDIT ${LABEL_RIBBON_WM[0]} ${LABEL_RIBBON_WM[1]} $WM_BMASK" #0/128 binary mask
+
 cmd "Concatenate $WM_BMASK with $WM into $WM_CONCAT" \
 "mri_concat --i $WM_BMASK --i $WM --o $WM_CONCAT --sum" #ROI at 378 (128+250)
 
@@ -999,9 +1003,7 @@ do
 	cmd "${H[$i]} Replace 128 by 80 into ${BRAIN_FINALSURFS_NO_CEREB_UNIFORM_80[$i]}" \
 	"mri_binarize --i ${BRAIN_FINALSURFS_NO_CEREB_UNIFORM_GM_80[$i]} --o ${BRAIN_FINALSURFS_NO_CEREB_UNIFORM_GM_80[$i]} --replace 128 80"
 
-	# Use script brain-finalsurfs-edit.py to edit brain.finalsurfs.mgz
-	cmd "${H[$i]} Use script $O/brain-finalsurfs-edit.py on ${BRAIN_FINALSURFS_NO_CEREB[$i]} with ${GM_BMASK[$i]}" \
-	"python $O/brain-finalsurfs-edit.py ${BRAIN_FINALSURFS_NO_CEREB[$i]} ${GM_BMASK[$i]} ${BRAIN_FINALSURFS_NO_CEREB_EDITED[$i]}"
+
 	fi
 done
 fi
@@ -1016,7 +1018,12 @@ do
 	if ((HEMI>=0 && HEMI!=i)); #Cases when the current hemi ($i) is not to be processed
 	then
 		continue;
-	else
+	else	
+	
+	# Use script brain-finalsurfs-edit.py to edit brain.finalsurfs.mgz
+	cmd "${H[$i]} Use script $O/brain-finalsurfs-edit.py on ${BRAIN_FINALSURFS_NO_CEREB[$i]} with ${GM_BMASK[$i]}" \
+	"python $O/brain-finalsurfs-edit.py ${BRAIN_FINALSURFS_NO_CEREB[$i]} ${GM_BMASK[$i]} ${BRAIN_FINALSURFS_NO_CEREB_EDITED[$i]}"
+	
 	# Compute stats
 	cmd "${H[$i]} Computes stats for pial surface" \
 	"mris_autodet_gwstats --o ${AUTODET_NEW_GW_STATS[$i]} --i ${BRAIN_FINALSURFS_NO_CEREB_EDITED[$i]} --wm $WM_EDITED --surf ${ORIG[$i]}"
