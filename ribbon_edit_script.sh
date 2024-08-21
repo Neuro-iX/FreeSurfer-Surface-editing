@@ -549,16 +549,16 @@ fi
 #################
 ## Input files
 #################
-T1="$SUBJECTS_DIR/$SUBJID/mri/T1.mgz"
+T1="$SUBJECTS_DIR/${SUBJID}_freesurfer/mri/T1.mgz"
 
 RB_ALL_WITHSKULL="$FREESURFER_HOME/average/RB_all_withskull_2016-05-10.vc700.gca"
-TALAIRACH_WITH_SKULL="$SUBJECTS_DIR/$SUBJID/mri/transforms/talairach_with_skull.lta"
-NU="$SUBJECTS_DIR/$SUBJID/mri/nu.mgz"
+TALAIRACH_WITH_SKULL="$SUBJECTS_DIR/${SUBJID}_freesurfer/mri/transforms/talairach_with_skull.lta"
+NU="$SUBJECTS_DIR/${SUBJID}_freesurfer/mri/nu.mgz"
 RB_ALL="$FREESURFER_HOME/average/RB_all_2020-01-02.gca"
-CTRL_PTS="$SUBJECTS_DIR/$SUBJID/mri/ctrl_pts.mgz"
-CC_UP="$SUBJECTS_DIR/$SUBJID/mri/transforms/cc_up.lta"
+CTRL_PTS="$SUBJECTS_DIR/${SUBJID}_freesurfer/mri/ctrl_pts.mgz"
+CC_UP="$SUBJECTS_DIR/${SUBJID}_freesurfer/mri/transforms/cc_up.lta"
 
-WM="$SUBJECTS_DIR/$SUBJID/mri/wm.mgz"
+WM="$SUBJECTS_DIR/${SUBJID}_freesurfer/mri/wm.mgz"
 
 SUBCORTICALMASSLUT="$FREESURFER_HOME/SubCorticalMassLUT.txt"
 
@@ -574,18 +574,18 @@ COLORTABLE_BA_TXT="$FREESURFER_HOME/average/colortable_BA.txt"
 declare -a FOLDING_ATLAS_ACFB40=("$FREESURFER_HOME/average/lh.folding.atlas.acfb40.noaparc.i12.2016-08-02.tif" "$FREESURFER_HOME/average/rh.folding.atlas.acfb40.noaparc.i12.2016-08-02.tif")
 declare -a DKAPARC_ATLAS_ACFB40=("$FREESURFER_HOME/average/lh.DKaparc.atlas.acfb40.noaparc.i12.2016-08-02.gcs" "$FREESURFER_HOME/average/rh.DKaparc.atlas.acfb40.noaparc.i12.2016-08-02.gcs")
 
-RAWAVG="$SUBJECTS_DIR/$SUBJID/mri/rawavg.mgz"
-ORIG_VOLUME="$SUBJECTS_DIR/$SUBJID/mri/orig.mgz"
+RAWAVG="$SUBJECTS_DIR/${SUBJID}_freesurfer/mri/rawavg.mgz"
+ORIG_VOLUME="$SUBJECTS_DIR/${SUBJID}_freesurfer/mri/orig.mgz"
 
 
 #ADDED for mri_segstats
-TALAIRACH_XFM="$SUBJECTS_DIR/$SUBJID/mri/transforms/talairach.xfm"
+TALAIRACH_XFM="$SUBJECTS_DIR/${SUBJID}_freesurfer/mri/transforms/talairach.xfm"
 TALAIRACH_XFM_COPY="$O/mri/transforms/talairach.xfm"
 
 #################
 ## Output files
 #################
-IMAGE_PADDED="$SUBJECTS_DIR/image-padded.mgz"
+IMAGE_PADDED="$SUBJECTS_DIR/$SUBJID/image-padded.mgz"
 
 RIBBON_PADDED="$O/mri/ribbon-precorrection.mgz"
 SUBCORTICAL_PADDED="$O/mri/subcortical-precorrection.mgz"
@@ -782,10 +782,16 @@ fi
 cmd "Compensate for future translation in FreeSurfer" \
 "python $O/nifti_padding.py $IMAGE $IMAGE_PADDED padding"
 
+cmd "Add SUBJID to SUBJECTS_DIR" \
+"export SUBJECTS_DIR=$SUBJECTS_DIR/$SUBJID"
+
 #-xopts-overwrite is used when expert file already used before
 cmd "Apply recon-all -autorecon 1 and 2 on $IMAGE_PADDED" \
-"recon-all -autorecon1 -autorecon2 -s $SUBJID -i $IMAGE_PADDED -hires -parallel -openmp 4 -expert expert_file.txt -xopts-overwrite" 
+"recon-all -autorecon1 -autorecon2 -s ${SUBJID}_freesurfer -i $IMAGE_PADDED -hires -parallel -openmp 4 -expert expert_file.txt -xopts-overwrite" 
 fi
+
+cmd "Change back SUBJECTS_DIR/SUBJID to SUBJECTS_DIR" \
+"export SUBJECTS_DIR=$(dirname $SUBJECTS_DIR)"
 
 #################
 ## Convert ribbon and subcortical
