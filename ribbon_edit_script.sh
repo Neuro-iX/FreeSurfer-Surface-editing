@@ -8,7 +8,7 @@ Help ()
 builtin echo "
 AUTHOR: Benoît Verreman
 
-LAST UPDATE: 2024-08-20
+LAST UPDATE: 2024-08-26
 
 DESCRIPTION: 
 Use ribbon and subcortical NIFTI files to recompute pial surface,
@@ -119,6 +119,8 @@ PIAL_BORDER_LOW=5
 #################
 ## Manage flags
 #################
+string_arguments=""
+
 unset -v IMAGE
 unset -v SUBJID
 unset -v RIBBON
@@ -132,25 +134,32 @@ while getopts ${VALID_ARGS} opt; do
     i)
         IMAGE=${OPTARG}
         FS=1
+        string_arguments+="-i ${OPTARG} "
         ;;
     s)
         SUBJID=${OPTARG}
+        string_arguments+="-s ${OPTARG} "
         ;;
     b)
         RIBBON=${OPTARG}
+        string_arguments+="-b ${OPTARG} "
         ;;
     c)
         SUBCORTICAL=${OPTARG}
+        string_arguments+="-c ${OPTARG} "
         ;;     
     t)
 	TAG=${OPTARG}
+	string_arguments+="-t ${OPTARG} "
 	;;
     p)
 	PIAL_BORDER_LOW=${OPTARG}
+	string_arguments+="-p ${OPTARG} "
 	;;
     f)
 	SUBJECTS_DIR=${OPTARG}
 	MULTICASE=1
+	string_arguments+="-f ${OPTARG} "
 	;;
     h)
 	Help
@@ -158,12 +167,15 @@ while getopts ${VALID_ARGS} opt; do
 	;;
     l)
 	HEMI=0 #left hemisphere only
+	string_arguments+="-l "
 	;;
     r)
 	HEMI=1 #right hemisphere only
+	string_arguments+="-r "
 	;;
     d)
 	Delete #Delete report.sh and $OUTPUT_FOLDER
+	string_arguments+="-d "
 	;;
     :)
       	echo "Option -${OPTARG} requires an argument."
@@ -247,12 +259,13 @@ then
 	mkdir $O/mri/transforms;
 	mkdir $O/label;
 	mkdir $O/stats;
-	
-	script_nifti_padding
-	script_brain-finalsurfs-edit
-	script_edit_aseg_presurf_based_on_ribbon
-	script_expert_file
 fi
+
+script_nifti_padding
+script_brain-finalsurfs-edit
+script_edit_aseg_presurf_based_on_ribbon
+script_expert_file
+
 }
 
 CreateScripts()
@@ -441,6 +454,9 @@ class L:
     l_v = 28 # lh ventralDC
     r_v = 60 # rh ventralDC
     
+    l_lv = 4 # lh lateral ventricle
+    r_lv = 43 # rh lateral ventricle
+    
     l_h = 17 # lh hippocampus
     r_h = 53 # rh hippocampus
     
@@ -449,16 +465,21 @@ class L:
     
     l_cc = 8 # lh cerebellum cortex
     r_cc = 47 # rh cerebellum cortex
+    
+    l_aa = 26 # lh Accumbens area
+    r_aa = 58 # rh Accumbens area
+    
+    cc_ant = 255 # CC_Anterior
 
 ### Get neighbours matrix
 motion = numpy.transpose(numpy.indices((3,3,3)) - 1).reshape(-1, 3)
 motion = numpy.delete(motion,int(len(motion)/2),axis=0) #remove [0 0 0]
 
 ### Instantiate lists
-list_P_V=[] #Will contain couple (label,[x,y,z]) for putamen and ventralDC erosion (neighbouring GM)
+list_P_V=[] #Will contain couple (label,[x,y,z]) for putamen, ventralDC, lateral ventricle, and CC_Anterior erosion (neighbouring GM)
 list_H_A=[] #Will contain couple (label,[x,y,z]) for hippocampus and amygdala dilation in GM
 
-### Modify BG, WM, GM and subcortical structures based on ribbon
+### Modify BG, WM, GM, CC_anterior and subcortical structures based on ribbon
 for x in range(a):
     for y in range(b):
         for z in range(c):
@@ -466,11 +487,11 @@ for x in range(a):
             aseg_voxel = int(data_aseg[x,y,z])
             
             if aseg_voxel in [L.l_h,L.r_h,L.l_a,L.r_a]: 
-            	list_H_A.append((aseg_voxel,[x,y,z])) #Used for hippocampus and amygdala dilation in GM
+                list_H_A.append((aseg_voxel,[x,y,z])) #Used for hippocampus and amygdala dilation in GM
 
-            elif aseg_voxel in [L.l_p,L.r_p,L.l_v,L.r_v]: 
-            	list_P_V.append((aseg_voxel,[x,y,z])) #Used for putamen and ventralDC erosion (neighbouring GM)
-            	
+            elif aseg_voxel in [L.l_p,L.r_p,L.l_v,L.r_v,L.cc_ant,L.l_lv,L.r_lv,L.l_aa,L.r_aa]: 
+                list_P_V.append((aseg_voxel,[x,y,z])) #Used for putamen... erosion (neighbouring GM)
+
             if aseg_voxel != ribbon_voxel: #Voxel for which label may have to be changed
                 match aseg_voxel:
                     case 0 | L.l_wm | L.r_wm | L.l_gm | L.r_gm: #Aseg voxel in BG, WM or GM
@@ -478,10 +499,9 @@ for x in range(a):
                             data_new_aseg[x,y,z] = ribbon_voxel
                     case L.l_cc | L.r_cc if ribbon_voxel in [L.l_wm,L.r_wm,L.l_gm,L.r_gm]: # Correcting cerebellum cortex respective to wm and gm in ribbon
                         data_new_aseg[x,y,z] = ribbon_voxel
-                    case L.l_p | L.r_p | L.l_v | L.r_v if ribbon_voxel in [0,L.l_gm,L.r_gm]: #putamen and ventralDC should not be in GM or BG of ribbon
+                    case L.l_p | L.r_p | L.l_v | L.r_v | L.cc_ant | L.l_lv | L.r_lv | L.l_aa | L.r_aa if ribbon_voxel in [0,L.l_gm,L.r_gm]: #putamen, ventralDC, lateral ventricle, and CC_Anterior should not be in GM or BG of ribbon
                         data_new_aseg[x,y,z] = ribbon_voxel
                         list_P_V.pop()
-                        
                     case L.l_h | L.r_h | L.l_a | L.r_a if ribbon_voxel in [0,L.l_wm,L.r_wm]: #hippocampus and amygdala should not be in WM or BG of ribbon
                         data_new_aseg[x,y,z] = ribbon_voxel
                         list_H_A.pop()
@@ -493,14 +513,14 @@ for (label,[x,y,z]) in list_H_A:
         if int(data_new_aseg[k,n,m]) in [L.l_gm,L.r_gm]: #Neighbour in GM should be changed to label (of hippocampus or amygdala)
             data_new_aseg[k,n,m] = label
         
-### Erode Putamen and VentralDC bordering GM
+### Erode Putamen, VentralDC, CC_Anterior ... bordering GM
 for (label,[x,y,z]) in list_P_V:
     n_coordinates = motion + [[x, y, z]]
     for (k,n,m) in n_coordinates:
         ribbon_voxel = int(data_ribbon[k,n,m])
         if ribbon_voxel in [L.l_gm,L.r_gm]: 
             data_new_aseg[x,y,z] = ribbon_voxel - 1 #neigbour is GM, so change voxel to WM
-
+            
 ### Save new aseg
 img_new_aseg = nib.Nifti1Image(data_new_aseg, img_aseg.affine.copy())
 nib.save(img_new_aseg, path_out)
@@ -761,7 +781,9 @@ Echo "
 #*******************
 #*******************
 #*******************
-# New invocation of ribbon_edit_script.sh: $current_date_time
+# New invocation: $current_date_time
+
+bash $(basename "$0") $string_arguments
 
 # Given subjid: $SUBJID"
 
@@ -857,6 +879,9 @@ cmd "Subcortical Segment: mri_ca_label" \
 cmd "CC Segment: mri_cc" \
 "mri_cc -aseg aseg.auto_noCCseg.mgz -o aseg.auto.mgz -lta $CC_UP $SUBJID/$OUTPUT_FOLDER" # Function "mri_cc" add "mri/" to $ASEG_AUTO_NOCCSEG and $ASEG_AUTO
 
+cmd "Merge ASeg" \
+"cp $ASEG_AUTO $ASEG_PRESURF_NOFIX"
+
 
 fi
 
@@ -865,12 +890,11 @@ fi
 #################
 if ((TAG<=4))
 then
-cmd "Merge ASeg" \
-"cp $ASEG_AUTO $ASEG_PRESURF_NOFIX"
 
 ## ADDED aseg.presurf.mgz correction based on ribbon-edit.mgz
 cmd "Use script $O/edit_aseg_presurf_based_on_ribbon.py on $ASEG_PRESURF_NOFIX" \
 "python $O/edit_aseg_presurf_based_on_ribbon.py $ASEG_PRESURF_NOFIX $RIBBON_EDIT $ASEG_PRESURF"
+
 
 #BRAIN_FINALSURFS
 cmd "Intensity Normalize" \
@@ -1078,8 +1102,8 @@ do
 	"mris_place_surface --i ${ORIG[$i]} --o ${RIBBON_EDIT_PIAL[$i]} --nsmooth 0 --adgws-in ${AUTODET_NEW_GW_STATS[$i]} --pial --${H[$i]} --repulse-surf ${ORIG[$i]} --invol ${BRAIN_FINALSURFS_NO_CEREB_EDITED[$i]} --threads 6 --white-surf ${ORIG[$i]} --pin-medial-wall ${CORTEX_LABEL[$i]} --seg $ASEG_PRESURF --no-rip" #--rip-label $LH_CORTEX_HIPAMYG_LABEL" --aparc ${APARC_ANNOT[$i]} #--rip-bg isn't recognised
 	
 	### BONUS: aparc option
-	cmd "${H[$i]} Computes pial surface" \
-	"mris_place_surface --i ${ORIG[$i]} --o ${RIBBON_EDIT_PIAL[$i]}_with_aparc --nsmooth 0 --adgws-in ${AUTODET_NEW_GW_STATS[$i]} --pial --${H[$i]} --repulse-surf ${ORIG[$i]} --invol ${BRAIN_FINALSURFS_NO_CEREB_EDITED[$i]} --threads 6 --white-surf ${ORIG[$i]} --pin-medial-wall ${CORTEX_LABEL[$i]} --seg $ASEG_PRESURF --no-rip --aparc ${APARC_ANNOT[$i]}" #--rip-label $LH_CORTEX_HIPAMYG_LABEL" --aparc ${APARC_ANNOT[$i]} #--rip-bg isn't recognised
+	#cmd "${H[$i]} Computes pial surface, BONUS aparc" \
+	#"mris_place_surface --i ${ORIG[$i]} --o ${RIBBON_EDIT_PIAL[$i]}_with_aparc --nsmooth 0 --adgws-in ${AUTODET_NEW_GW_STATS[$i]} --pial --${H[$i]} --repulse-surf ${ORIG[$i]} --invol ${BRAIN_FINALSURFS_NO_CEREB_EDITED[$i]} --threads 6 --white-surf ${ORIG[$i]} --pin-medial-wall ${CORTEX_LABEL[$i]} --seg $ASEG_PRESURF --no-rip --aparc ${APARC_ANNOT[$i]}" #--rip-label $LH_CORTEX_HIPAMYG_LABEL" --aparc ${APARC_ANNOT[$i]} #--rip-bg isn't recognised
 	
 	#Second pass BEST RESULT (i_w)
 	cmd "${H[$i]} Computes pial surface - second pass" \
