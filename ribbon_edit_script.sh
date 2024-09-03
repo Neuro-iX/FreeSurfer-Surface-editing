@@ -73,6 +73,7 @@ TAG
 -t 9: (pial) Start from computing pial surface
 -t 10: (smooth) Start from smoothing pial surface
 -t 11: (aseg+aparc) Compute stats and other files
+-t 12: BONUS: test some command lines
 
 VALUES
 -p: Give value of PIAL_BORDER_LOW
@@ -119,7 +120,7 @@ PIAL_BORDER_LOW=5
 #################
 ## Manage flags
 #################
-string_arguments=""
+string_arguments="" #String of the different arguments in the command line
 
 unset -v IMAGE
 unset -v SUBJID
@@ -412,6 +413,8 @@ import sys #To add arguments
 import copy
 import numpy
 
+from itertools import product  #for motion2
+
 #Outside parameters
 path_aseg = sys.argv[1] #Path to aseg.presurf.old.mgz
 path_ribbon = sys.argv[2] #Path to ribbon-edit.mgz
@@ -474,6 +477,7 @@ class L:
 ### Get neighbours matrix
 motion = numpy.transpose(numpy.indices((3,3,3)) - 1).reshape(-1, 3)
 motion = numpy.delete(motion,int(len(motion)/2),axis=0) #remove [0 0 0]
+motion2 = numpy.array(list(product([-2, -1, 0, 1, 2], repeat=3)))
 
 ### Instantiate lists
 list_P_V=[] #Will contain couple (label,[x,y,z]) for putamen, ventralDC, lateral ventricle, and CC_Anterior erosion (neighbouring GM)
@@ -515,11 +519,19 @@ for (label,[x,y,z]) in list_H_A:
         
 ### Erode Putamen, VentralDC, CC_Anterior ... bordering GM
 for (label,[x,y,z]) in list_P_V:
-    n_coordinates = motion + [[x, y, z]]
-    for (k,n,m) in n_coordinates:
-        ribbon_voxel = int(data_ribbon[k,n,m])
-        if ribbon_voxel in [L.l_gm,L.r_gm]: 
-            data_new_aseg[x,y,z] = ribbon_voxel - 1 #neigbour is GM, so change voxel to WM
+    if (label == L.l_p) or (label == L.r_p): #if Putamen, use motion2 instead of motion
+        n_coordinates = motion2 + [[x, y, z]]
+        for (k,n,m) in n_coordinates:
+            ribbon_voxel = int(data_ribbon[k,n,m])
+            if ribbon_voxel in [L.l_gm,L.r_gm]: 
+                data_new_aseg[x,y,z] = ribbon_voxel - 1 #neigbour is GM, so change voxel to WM
+    else:
+        n_coordinates = motion + [[x, y, z]]
+        for (k,n,m) in n_coordinates:
+            ribbon_voxel = int(data_ribbon[k,n,m])
+            if ribbon_voxel in [L.l_gm,L.r_gm]: 
+                data_new_aseg[x,y,z] = ribbon_voxel - 1 #neigbour is GM, so change voxel to WM
+    
             
 ### Save new aseg
 img_new_aseg = nib.Nifti1Image(data_new_aseg, img_aseg.affine.copy())
