@@ -8,7 +8,7 @@ Help ()
 builtin echo "
 AUTHOR: Benoît Verreman
 
-LAST UPDATE: 2024-08-26
+LAST UPDATE: 2024-09-18
 
 DESCRIPTION: 
 Use ribbon and subcortical NIFTI files to recompute pial surface,
@@ -418,7 +418,8 @@ from itertools import product  #for motion2
 #Outside parameters
 path_aseg = sys.argv[1] #Path to aseg.presurf.old.mgz
 path_ribbon = sys.argv[2] #Path to ribbon-edit.mgz
-path_out = sys.argv[3] #Path to output aseg.presurf.mgz
+path_ribbon2 = sys.argv[3] #Path to ribbon-edit2.mgz
+path_out = sys.argv[4] #Path to output aseg.presurf.mgz
 
 ### Get images
 if not os.path.isfile(path_aseg):
@@ -430,10 +431,17 @@ if not os.path.isfile(path_ribbon):
     raise FileNotFoundError("Make sure the following path is correct: " + path_ribbon)
 else:
     img_ribbon = nib.load(path_ribbon)
+
+if not os.path.isfile(path_ribbon2):
+    raise FileNotFoundError("Make sure the following path is correct: " + path_ribbon2)
+else:
+    img_ribbon2 = nib.load(path_ribbon2)
+    
     
 ### Get data
 data_aseg = img_aseg.get_fdata() #Not to be edited
 data_ribbon = img_ribbon.get_fdata() #Not to be edited
+data_ribbon2 = img_ribbon2.get_fdata() #Not to be edited again
 
 ### Copy aseg
 data_new_aseg = copy.deepcopy(data_aseg) #Copy to be edited
@@ -473,6 +481,8 @@ class L:
     r_aa = 58 # rh Accumbens area
     
     cc_ant = 255 # CC_Anterior
+    
+    edit = 1 #manuel edit in ribbon2
 
 ### Get neighbours matrix
 motion = numpy.transpose(numpy.indices((3,3,3)) - 1).reshape(-1, 3)
@@ -481,24 +491,21 @@ motion2 = numpy.array(list(product([-2, -1, 0, 1, 2], repeat=3)))
 
 ### Instantiate lists
 list_P_V=[] #Will contain couple (label,[x,y,z]) for putamen, ventralDC, lateral ventricle, and CC_Anterior erosion (neighbouring GM)
-list_H_A=[] #Will contain couple (label,[x,y,z]) for hippocampus and amygdala dilation in GM
 
 ### Modify BG, WM, GM, CC_anterior and subcortical structures based on ribbon
 for x in range(a):
     for y in range(b):
         for z in range(c):
             ribbon_voxel = int(data_ribbon[x,y,z])
+            ribbon2_voxel = int(data_ribbon2[x,y,z])
             aseg_voxel = int(data_aseg[x,y,z])
             
-            if aseg_voxel in [L.l_h,L.r_h,L.l_a,L.r_a]: 
-                list_H_A.append((aseg_voxel,[x,y,z])) #Used for hippocampus and amygdala dilation in GM
-
-            elif aseg_voxel in [L.l_p,L.r_p,L.l_v,L.r_v,L.cc_ant,L.l_lv,L.r_lv,L.l_aa,L.r_aa]: 
+            if aseg_voxel in [L.l_p,L.r_p,L.l_v,L.r_v,L.cc_ant,L.l_lv,L.r_lv,L.l_aa,L.r_aa]: 
                 list_P_V.append((aseg_voxel,[x,y,z])) #Used for putamen... erosion (neighbouring GM)
-
+            
             if aseg_voxel != ribbon_voxel: #Voxel for which label may have to be changed
                 match aseg_voxel:
-                    case 0 | L.l_wm | L.r_wm | L.l_gm | L.r_gm: #Aseg voxel in BG, WM or GM
+                    case 0 | L.l_wm | L.r_wm | L.l_gm | L.r_gm | L.l_h | L.r_h | L.l_a | L.r_a: #Aseg voxel in BG, WM or GM
                         if ribbon_voxel != L.r_ce: #right-cerebellum-exterior label not in aseg.presurf.nofix
                             data_new_aseg[x,y,z] = ribbon_voxel
                     case L.l_cc | L.r_cc if ribbon_voxel in [L.l_wm,L.r_wm,L.l_gm,L.r_gm]: # Correcting cerebellum cortex respective to wm and gm in ribbon
@@ -506,17 +513,22 @@ for x in range(a):
                     case L.l_p | L.r_p | L.l_v | L.r_v | L.cc_ant | L.l_lv | L.r_lv | L.l_aa | L.r_aa if ribbon_voxel in [0,L.l_gm,L.r_gm]: #putamen, ventralDC, lateral ventricle, and CC_Anterior should not be in GM or BG of ribbon
                         data_new_aseg[x,y,z] = ribbon_voxel
                         list_P_V.pop()
-                    case L.l_h | L.r_h | L.l_a | L.r_a if ribbon_voxel in [0,L.l_wm,L.r_wm]: #hippocampus and amygdala should not be in WM or BG of ribbon
-                        data_new_aseg[x,y,z] = ribbon_voxel
-                        list_H_A.pop()
+            
+            if ribbon2_voxel == L.edit: 
+                if ribbon_voxel == L.l_gm: 
+                    data_new_aseg[x,y,z] = L.l_h
+                elif ribbon_voxel == L.r_gm: 
+                    data_new_aseg[x,y,z] = L.r_h
 
+"""
 ### Dilate hippocampus and amygdala into GM
 for (label,[x,y,z]) in list_H_A:
     n_coordinates = motion + [[x, y, z]]
     for (k,n,m) in n_coordinates:
         if int(data_new_aseg[k,n,m]) in [L.l_gm,L.r_gm]: #Neighbour in GM should be changed to label (of hippocampus or amygdala)
             data_new_aseg[k,n,m] = label
-        
+"""
+
 ### Erode Putamen, VentralDC, CC_Anterior ... bordering GM
 for (label,[x,y,z]) in list_P_V:
     if (label == L.l_p) or (label == L.r_p): #if Putamen, use motion2 instead of motion
@@ -621,6 +633,7 @@ IMAGE_PADDED="$SUBJECTS_DIR/$SUBJID/image-padded.mgz"
 RIBBON_PADDED="$O/mri/ribbon-precorrection.mgz"
 SUBCORTICAL_PADDED="$O/mri/subcortical-precorrection.mgz"
 RIBBON_EDIT="$O/mri/ribbon-edit.mgz"
+RIBBON_EDIT2="$O/mri/ribbon-edit2.mgz"
 SUBCORTICAL_EDIT="$O/mri/subcortical-edit.mgz"
 
 SUBCORTICAL_MASK="$O/mri/subcortical-mask.mgz"
@@ -905,7 +918,7 @@ then
 
 ## ADDED aseg.presurf.mgz correction based on ribbon-edit.mgz
 cmd "Use script $O/edit_aseg_presurf_based_on_ribbon.py on $ASEG_PRESURF_NOFIX" \
-"python $O/edit_aseg_presurf_based_on_ribbon.py $ASEG_PRESURF_NOFIX $RIBBON_EDIT $ASEG_PRESURF"
+"python $O/edit_aseg_presurf_based_on_ribbon.py $ASEG_PRESURF_NOFIX $RIBBON_EDIT $RIBBON_EDIT2 $ASEG_PRESURF"
 
 
 #BRAIN_FINALSURFS
