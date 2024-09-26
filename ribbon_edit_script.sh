@@ -8,7 +8,7 @@ Help ()
 builtin echo "
 AUTHOR: Benoît Verreman
 
-LAST UPDATE: 2024-09-18
+LAST UPDATE: 2024-09-26
 
 DESCRIPTION: 
 Use ribbon and subcortical NIFTI files to recompute pial surface,
@@ -482,7 +482,8 @@ class L:
     
     cc_ant = 255 # CC_Anterior
     
-    edit = 1 #manuel edit in ribbon2
+    l_edit = 21 #lh manuel edit in ribbon2
+    r_edit = 22 #rh manuel edit in ribbon2
 
 ### Get neighbours matrix
 motion = numpy.transpose(numpy.indices((3,3,3)) - 1).reshape(-1, 3)
@@ -514,7 +515,7 @@ for x in range(a):
                         data_new_aseg[x,y,z] = ribbon_voxel
                         list_P_V.pop()
             
-            if ribbon2_voxel == L.edit: 
+            if ribbon2_voxel in [L.l_edit,L.r_edit]: 
                 if ribbon_voxel == L.l_gm: 
                     data_new_aseg[x,y,z] = L.l_h
                 elif ribbon_voxel == L.r_gm: 
