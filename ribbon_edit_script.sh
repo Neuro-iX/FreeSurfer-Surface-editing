@@ -8,7 +8,7 @@ Help ()
 builtin echo "
 AUTHOR: Benoît Verreman
 
-LAST UPDATE: 2024-09-26
+LAST UPDATE: 2024-10-03
 
 DESCRIPTION: 
 Use ribbon and subcortical NIFTI files to recompute pial surface,
@@ -341,6 +341,8 @@ import copy #For deepcopy
 path_bf = sys.argv[1] #Brain.finalsurfs without the cerebellum
 path_gmbm = sys.argv[2] #Gray Matter binary mask at 128 (by default) (based on ribbon-edit.mgz)
 path_out = sys.argv[3] #Absolute path of the output brain.finalsurfs
+path_out2 = sys.argv[4] #Absolute path of the output brain.finalsurfs
+path_ribbon2 = sys.argv[5] #Put added labels in ribbon2 as background in brain.finalsurfs
 
 #Load brain.finalsurfs without the cerebellum
 if not os.path.isfile(path_bf):
@@ -362,11 +364,19 @@ data_gmbm = img_gmbm.get_fdata()
 if (a!=e or b!=f or c!=g):
     sys.exit(0)
 
+#Load ribbon2
+if not os.path.isfile(path_ribbon2):
+    raise FileNotFoundError("Make sure the following path is correct: " + path_ribbon2)
+else:
+    img_ribbon2 = nib.load(path_ribbon2)
+data_ribbon2 = img_ribbon2.get_fdata()
+
 #List of coordinates of the 26-nearest-neighbors around (0,0,0) plus itself
 motion = np.transpose(np.indices((3,3,3)) - 1).reshape(-1, 3)
 
 #Deepcopy of data_bf
 data_bf_new = copy.deepcopy(data_bf)
+data_bf_new2 = copy.deepcopy(data_bf)
 
 #Change Gray Matter in data_bf_new to: 80.0/mean_neigbours*val
 for x in range(a):
@@ -382,12 +392,16 @@ for x in range(a):
                         mean+=data_bf[k,n,m]
                         nn+=1
                 data_bf_new[x,y,z]=80.0/(mean/nn)*val
+                data_bf_new2[x,y,z]=80.0/(mean/nn)*val
+            if (int(data_ribbon2[x,y,z]) == 21) or (int(data_ribbon2[x,y,z]) == 22):
+                data_bf_new2[x,y,z]=0
 
 #Create and save new image
 img_bf_new = nib.Nifti1Image(data_bf_new, img_bf.affine.copy())
 nib.save(img_bf_new, path_out)
 
-
+img_bf_new2 = nib.Nifti1Image(data_bf_new2, img_bf.affine.copy())
+nib.save(img_bf_new2, path_out2)
 EOF
 fi
 }
@@ -492,6 +506,7 @@ motion2 = numpy.array(list(product([-2, -1, 0, 1, 2], repeat=3)))
 
 ### Instantiate lists
 list_P_V=[] #Will contain couple (label,[x,y,z]) for putamen, ventralDC, lateral ventricle, and CC_Anterior erosion (neighbouring GM)
+list_H_A=[] #Hippocampus and amygdala from ribbon2
 
 ### Modify BG, WM, GM, CC_anterior and subcortical structures based on ribbon
 for x in range(a):
@@ -500,6 +515,9 @@ for x in range(a):
             ribbon_voxel = int(data_ribbon[x,y,z])
             ribbon2_voxel = int(data_ribbon2[x,y,z])
             aseg_voxel = int(data_aseg[x,y,z])
+            
+            if ribbon2_voxel in [L.l_edit,L.r_edit]: 
+                list_H_A.append((ribbon2_voxel,[x,y,z])) #Used for b.f. and aseg
             
             if aseg_voxel in [L.l_p,L.r_p,L.l_v,L.r_v,L.cc_ant,L.l_lv,L.r_lv,L.l_aa,L.r_aa]: 
                 list_P_V.append((aseg_voxel,[x,y,z])) #Used for putamen... erosion (neighbouring GM)
@@ -514,21 +532,21 @@ for x in range(a):
                     case L.l_p | L.r_p | L.l_v | L.r_v | L.cc_ant | L.l_lv | L.r_lv | L.l_aa | L.r_aa if ribbon_voxel in [0,L.l_gm,L.r_gm]: #putamen, ventralDC, lateral ventricle, and CC_Anterior should not be in GM or BG of ribbon
                         data_new_aseg[x,y,z] = ribbon_voxel
                         list_P_V.pop()
-            
-            if ribbon2_voxel in [L.l_edit,L.r_edit]: 
-                if ribbon_voxel == L.l_gm: 
-                    data_new_aseg[x,y,z] = L.l_h
-                elif ribbon_voxel == L.r_gm: 
-                    data_new_aseg[x,y,z] = L.r_h
 
-"""
-### Dilate hippocampus and amygdala into GM
+
+### Border from ribbon2 with WM (in ribbon) changed as amygdala in aseg.presurf
 for (label,[x,y,z]) in list_H_A:
     n_coordinates = motion + [[x, y, z]]
+    no_wm_neighbour = True
     for (k,n,m) in n_coordinates:
-        if int(data_new_aseg[k,n,m]) in [L.l_gm,L.r_gm]: #Neighbour in GM should be changed to label (of hippocampus or amygdala)
-            data_new_aseg[k,n,m] = label
-"""
+        if int(data_ribbon[k,n,m]) == L.l_wm: #Neighbour in GM should be changed to label (of hippocampus or amygdala)
+            no_wm_neighbour = False
+            data_new_aseg[x,y,z] = L.l_a
+        elif int(data_ribbon[k,n,m]) == L.r_wm:
+            no_wm_neighbour = False
+            data_new_aseg[x,y,z] = L.r_a
+    if no_wm_neighbour:
+        data_new_aseg[x,y,z] = 0
 
 ### Erode Putamen, VentralDC, CC_Anterior ... bordering GM
 for (label,[x,y,z]) in list_P_V:
@@ -634,7 +652,7 @@ IMAGE_PADDED="$SUBJECTS_DIR/$SUBJID/image-padded.mgz"
 RIBBON_PADDED="$O/mri/ribbon-precorrection.mgz"
 SUBCORTICAL_PADDED="$O/mri/subcortical-precorrection.mgz"
 RIBBON_EDIT="$O/mri/ribbon-edit.mgz"
-RIBBON_EDIT2="$O/mri/ribbon-edit2.mgz"
+RIBBON_EDIT2="$O/mri/188347_ribbon_mod_edit.mgz"
 SUBCORTICAL_EDIT="$O/mri/subcortical-edit.mgz"
 
 SUBCORTICAL_MASK="$O/mri/subcortical-mask.mgz"
@@ -689,6 +707,7 @@ declare -a BMASK=("$O/mri/bmask_lh.mgz" "$O/mri/bmask_rh.mgz")
 declare -a BRAIN_FINALSURFS_NO_CEREB=("$O/mri/brain.finalsurfs_no_cereb_lh.mgz" "$O/mri/brain.finalsurfs_no_cereb_rh.mgz")
 declare -a BRAIN_FINALSURFS_NO_CEREB_UNIFORM_GM_80=("$O/mri/brain.finalsurfs_no_cereb_uniform_gm_80_lh.mgz" "$O/mri/brain.finalsurfs_no_cereb_uniform_gm_80_rh.mgz")
 declare -a BRAIN_FINALSURFS_NO_CEREB_EDITED=("$O/mri/brain.finalsurfs_no_cereb_edited_lh.mgz" "$O/mri/brain.finalsurfs_no_cereb_edited_rh.mgz")
+declare -a BRAIN_FINALSURFS_NO_CEREB_EDITED2=("$O/mri/brain.finalsurfs_no_cereb_edited2_lh.mgz" "$O/mri/brain.finalsurfs_no_cereb_edited2_rh.mgz")
 
 declare -a AUTODET_NEW_GW_STATS=("$O/surf/autodet-new.gw.stats.lh.dat" "$O/surf/autodet-new.gw.stats.rh.dat")
 
@@ -1079,7 +1098,7 @@ do
 	
 	# Use script brain-finalsurfs-edit.py to edit brain.finalsurfs.mgz
 	cmd "${H[$i]} Use script $O/brain-finalsurfs-edit.py on ${BRAIN_FINALSURFS_NO_CEREB[$i]} with ${GM_BMASK[$i]}" \
-	"python $O/brain-finalsurfs-edit.py ${BRAIN_FINALSURFS_NO_CEREB[$i]} ${GM_BMASK[$i]} ${BRAIN_FINALSURFS_NO_CEREB_EDITED[$i]}"
+	"python $O/brain-finalsurfs-edit.py ${BRAIN_FINALSURFS_NO_CEREB[$i]} ${GM_BMASK[$i]} ${BRAIN_FINALSURFS_NO_CEREB_EDITED[$i]} ${BRAIN_FINALSURFS_NO_CEREB_EDITED2[$i]} $RIBBON_EDIT2"
 	
 	# Compute stats
 	cmd "${H[$i]} Computes stats for pial surface" \
@@ -1125,7 +1144,7 @@ do
 		continue;
 	else	
 	cmd "${H[$i]} Computes pial surface" \
-	"mris_place_surface --i ${ORIG[$i]} --o ${RIBBON_EDIT_PIAL[$i]} --nsmooth 0 --adgws-in ${AUTODET_NEW_GW_STATS[$i]} --pial --${H[$i]} --repulse-surf ${ORIG[$i]} --invol ${BRAIN_FINALSURFS_NO_CEREB_EDITED[$i]} --threads 6 --white-surf ${ORIG[$i]} --pin-medial-wall ${CORTEX_LABEL[$i]} --seg $ASEG_PRESURF --no-rip" #--rip-label $LH_CORTEX_HIPAMYG_LABEL" --aparc ${APARC_ANNOT[$i]} #--rip-bg isn't recognised
+	"mris_place_surface --i ${ORIG[$i]} --o ${RIBBON_EDIT_PIAL[$i]} --nsmooth 0 --adgws-in ${AUTODET_NEW_GW_STATS[$i]} --pial --${H[$i]} --repulse-surf ${ORIG[$i]} --invol ${BRAIN_FINALSURFS_NO_CEREB_EDITED2[$i]} --threads 6 --white-surf ${ORIG[$i]} --pin-medial-wall ${CORTEX_LABEL[$i]} --seg $ASEG_PRESURF --no-rip" #--rip-label $LH_CORTEX_HIPAMYG_LABEL" --aparc ${APARC_ANNOT[$i]} #--rip-bg isn't recognised
 	
 	### BONUS: aparc option
 	#cmd "${H[$i]} Computes pial surface, BONUS aparc" \
