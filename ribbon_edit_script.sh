@@ -8,7 +8,7 @@ Help ()
 builtin echo "
 AUTHOR: Benoît Verreman
 
-LAST UPDATE: 2024-10-10
+LAST UPDATE: 2024-11-06
 
 DESCRIPTION: 
 Use ribbon and subcortical NIFTI files to recompute pial surface,
@@ -393,10 +393,10 @@ for x in range(a):
                         nn+=1
                 data_bf_new[x,y,z]=80.0/(mean/nn)*val
                 data_bf_new2[x,y,z]=80.0/(mean/nn)*val
-            if int(data_ribbon2[x,y,z]) in [20,21,22,23]:
+            if int(data_ribbon2[x,y,z]) in [21,22]: #l_edit and r_edit
                 data_bf_new2[x,y,z]=0
 
-#Create and save new image
+#Create and save new images
 img_bf_new = nib.Nifti1Image(data_bf_new, img_bf.affine.copy())
 nib.save(img_bf_new, path_out)
 
@@ -432,8 +432,9 @@ from itertools import product  #for motion2
 #Outside parameters
 path_aseg = sys.argv[1] #Path to aseg.presurf.old.mgz
 path_ribbon = sys.argv[2] #Path to ribbon-edit.mgz
-path_subc = sys.argv[3] #Path to ribbon-edit2.mgz
+path_subc = sys.argv[3] #Path to subcortical-edit.mgz
 path_out = sys.argv[4] #Path to output aseg.presurf.mgz
+path_out2 = sys.argv[5] #Path to output ribbon-edit2.mgz
 
 ### Get images
 if not os.path.isfile(path_aseg):
@@ -450,8 +451,7 @@ if not os.path.isfile(path_subc):
     raise FileNotFoundError("Make sure the following path is correct: " + path_subc)
 else:
     img_subc = nib.load(path_subc)
-    
-    
+
 ### Get data
 data_aseg = img_aseg.get_fdata() #Not to be edited
 data_ribbon = img_ribbon.get_fdata() #Not to be edited
@@ -459,6 +459,7 @@ data_subc = img_subc.get_fdata() #Not to be edited again
 
 ### Copy aseg
 data_new_aseg = copy.deepcopy(data_aseg) #Copy to be edited
+data_new_mask = copy.deepcopy(data_ribbon) #Copy to be edited
 
 ### Get dimensions
 (a,b,c)=img_aseg.header.get_data_shape()
@@ -494,6 +495,12 @@ class L:
     l_aa = 26 # lh Accumbens area
     r_aa = 58 # rh Accumbens area
     
+    l_cp = 31 # lh choroid plexus
+    r_cp = 63 # rh choroid plexus
+    
+    l_ilv = 5 # rh Inf lat vent
+    r_ilv = 44 # rh Inf lat vent
+    
     cc_ant = 255 # CC_Anterior
     
     l_edit = 21 #lh manuel edit in ribbon2
@@ -507,11 +514,16 @@ class L:
     
     l_sc_h = 20 #lh subc (subcortical-edit.mgz) hippocampus
     r_sc_h = 21 #rh subc (subcortical-edit.mgz) hippocampus
-
+    
+    l_sc_vidc = 25 #lh subc (subcortical-edit.mgz) hippocampus
+    r_sc_vidc = 26 #rh subc (subcortical-edit.mgz) hippocampus
+    
 ### Get neighbours matrix
 motion = numpy.transpose(numpy.indices((3,3,3)) - 1).reshape(-1, 3)
 motion = numpy.delete(motion,int(len(motion)/2),axis=0) #remove [0 0 0]
 motion2 = numpy.array(list(product([-2, -1, 0, 1, 2], repeat=3)))
+d = numpy.eye(3, dtype=int).reshape(-1, 3)
+motion1 = numpy.concatenate((d, -d), axis=0)
 
 ### Instantiate lists
 list_P_V=[] #Will contain couple (label,[x,y,z]) for putamen, ventralDC, lateral ventricle, and CC_Anterior erosion (neighbouring GM)
@@ -525,16 +537,17 @@ for x in range(a):
             subc_voxel = int(data_subc[x,y,z]) #subcortical-edit.mgz 
             aseg_voxel = int(data_aseg[x,y,z])
             
-            if subc_voxel in [L.l_sc_a,L.l_sc_h,L.l_sc_lv,L.r_sc_a,L.r_sc_h,L.r_sc_lv]: 
+            if subc_voxel in [L.l_sc_a,L.l_sc_h,L.l_sc_lv,L.r_sc_a,L.r_sc_h,L.r_sc_lv,L.l_sc_vidc,L.r_sc_vidc]: 
                 if ribbon_voxel in [L.l_gm,L.r_gm]:
-                    list_H_A.append((subc_voxel,[x,y,z])) #Used for hippocampus and amygdala in brainfinalsurfs and aseg
+                    list_H_A.append((ribbon_voxel,[x,y,z])) #Used for hippocampus and amygdala in brainfinalsurfs and aseg
+                    data_new_mask[x,y,z] = L.l_edit if (ribbon_voxel == L.l_gm) else L.r_edit
             
             if aseg_voxel in [L.l_p,L.r_p,L.l_v,L.r_v,L.cc_ant,L.l_lv,L.r_lv,L.l_aa,L.r_aa]: 
                 list_P_V.append((aseg_voxel,[x,y,z])) #Used for putamen... erosion (neighbouring GM)
             
             if aseg_voxel != ribbon_voxel: #Voxel for which label may have to be changed
                 match aseg_voxel:
-                    case 0 | L.l_wm | L.r_wm | L.l_gm | L.r_gm | L.l_h | L.r_h | L.l_a | L.r_a: #Aseg voxel in BG, WM or GM
+                    case 0 | L.l_wm | L.r_wm | L.l_gm | L.r_gm | L.l_h | L.r_h | L.l_a | L.r_a | L.l_cp | L.r_cp | L.l_ilv | L.r_ilv: #Aseg voxel in BG, WM, GM, HA, CP or ILV
                         if ribbon_voxel != L.r_ce: #right-cerebellum-exterior label not in aseg.presurf.nofix
                             data_new_aseg[x,y,z] = ribbon_voxel
                     case L.l_cc | L.r_cc if ribbon_voxel in [L.l_wm,L.r_wm,L.l_gm,L.r_gm]: # Correcting cerebellum cortex respective to wm and gm in ribbon
@@ -543,25 +556,63 @@ for x in range(a):
                         data_new_aseg[x,y,z] = ribbon_voxel
                         list_P_V.pop()
 
-### Border from subc with WM (in ribbon) changed as amygdala in aseg.presurf
+### Dilation amygdala in aseg.presurf
+data_new_mask2 = copy.deepcopy(data_new_mask)
+list_HA_d1 = list_H_A[:] #make a copy with [:]
 for (label,[x,y,z]) in list_H_A:
-    n_coordinates = motion + [[x, y, z]]
-    no_wm_neighbour = True
-    """
+    n_coordinates = motion1 + [[x, y, z]]
     for (k,n,m) in n_coordinates:
-        if int(data_ribbon[k,n,m]) == L.l_wm: #Neighbour in GM should be changed to label (of hippocampus or amygdala)
-            no_wm_neighbour = False
-            data_new_aseg[x,y,z] = L.l_a
-        elif int(data_ribbon[k,n,m]) == L.r_wm:
-            no_wm_neighbour = False
-            data_new_aseg[x,y,z] = L.r_a
-    """
-    if no_wm_neighbour:
-        data_new_aseg[x,y,z] = 0
+        mask_voxel = int(data_new_mask2[k,n,m])
+        if mask_voxel in [L.l_gm,L.r_gm]: #Neighbour in GM
+            data_new_mask2[k,n,m] = L.l_edit if (mask_voxel == L.l_gm) else L.r_edit
+            list_HA_d1.append((mask_voxel,[k,n,m]))
+
+data_new_mask3 = copy.deepcopy(data_new_mask2)
+list_HA_d2 = list_HA_d1[:] #make a copy with [:]
+for (label,[x,y,z]) in list_HA_d1:
+    n_coordinates = motion1 + [[x, y, z]]
+    for (k,n,m) in n_coordinates:
+        mask_voxel = int(data_new_mask3[k,n,m])
+        if mask_voxel in [L.l_gm,L.r_gm]: #Neighbour in GM
+            data_new_mask3[k,n,m] = L.l_edit if (mask_voxel == L.l_gm) else L.r_edit
+            list_HA_d2.append((mask_voxel,[k,n,m]))
+
+### Erosion amygdala in aseg.presurf
+data_new_mask4 = copy.deepcopy(data_new_mask3)
+list_HA_e1 = []
+for (label,[x,y,z]) in list_HA_d2:
+    n_coordinates = motion1 + [[x, y, z]]
+    has_grey_neighbour = False
+    for (k,n,m) in n_coordinates:
+        mask_voxel = int(data_new_mask4[k,n,m])
+        if mask_voxel in [L.l_gm,L.r_gm]: #Neighbour in GM
+            has_grey_neighbour = True
+            data_new_mask4[x,y,z] = mask_voxel
+            break
+    if not(has_grey_neighbour):
+        list_HA_e1.append((data_new_mask4[x,y,z],[x,y,z]))
+
+data_new_mask5 = copy.deepcopy(data_new_mask4)
+list_HA_e2 = []
+for (label,[x,y,z]) in list_HA_e1:
+    n_coordinates = motion1 + [[x, y, z]]
+    has_grey_neighbour = False
+    for (k,n,m) in n_coordinates:
+        mask_voxel = int(data_new_mask5[k,n,m])
+        if mask_voxel in [L.l_gm,L.r_gm]: #Neighbour in GM
+            has_grey_neighbour = True
+            data_new_mask5[x,y,z] = mask_voxel
+            break
+    if not(has_grey_neighbour):
+        list_HA_e2.append((data_new_mask5[x,y,z],[x,y,z]))
+
+### Delete voxels in list from aseg
+for (label,[x,y,z]) in list_HA_e2:
+    data_new_aseg[x,y,z] = L.l_a if (label == L.l_gm) else L.r_a
 
 ### Erode Putamen, VentralDC, CC_Anterior ... bordering GM
 for (label,[x,y,z]) in list_P_V:
-    if (label == L.l_p) or (label == L.r_p): #if Putamen, use motion2 instead of motion
+    if label in [L.l_p, L.r_p]: #if Putamen, use motion2 instead of motion
         n_coordinates = motion2 + [[x, y, z]]
         for (k,n,m) in n_coordinates:
             ribbon_voxel = int(data_ribbon[k,n,m])
@@ -578,6 +629,18 @@ for (label,[x,y,z]) in list_P_V:
 ### Save new aseg
 img_new_aseg = nib.Nifti1Image(data_new_aseg, img_aseg.affine.copy())
 nib.save(img_new_aseg, path_out)
+
+### Save new mask
+img_new_mask = nib.Nifti1Image(data_new_mask, img_ribbon.affine.copy())
+nib.save(img_new_mask, path_out2)
+img_new_mask2 = nib.Nifti1Image(data_new_mask2, img_ribbon.affine.copy())
+nib.save(img_new_mask2, path_out2[:len(path_out2)-4]+'_2.mgz')
+img_new_mask3 = nib.Nifti1Image(data_new_mask3, img_ribbon.affine.copy())
+nib.save(img_new_mask3, path_out2[:len(path_out2)-4]+'_3.mgz')
+img_new_mask4 = nib.Nifti1Image(data_new_mask4, img_ribbon.affine.copy())
+nib.save(img_new_mask4, path_out2[:len(path_out2)-4]+'_4.mgz')
+img_new_mask5 = nib.Nifti1Image(data_new_mask5, img_ribbon.affine.copy())
+nib.save(img_new_mask5, path_out2[:len(path_out2)-4]+'_5.mgz')
 EOF
 fi
 }
@@ -625,12 +688,18 @@ fi
 #################
 T1="$SUBJECTS_DIR/$SUBJID/${SUBJID}_freesurfer/mri/T1.mgz"
 
-RB_ALL_WITHSKULL="$FREESURFER_HOME/average/RB_all_withskull_2016-05-10.vc700.gca"
-TALAIRACH_WITH_SKULL="$SUBJECTS_DIR/$SUBJID/${SUBJID}_freesurfer/mri/transforms/talairach_with_skull.lta"
-NU="$SUBJECTS_DIR/$SUBJID/${SUBJID}_freesurfer/mri/nu.mgz"
-RB_ALL="$FREESURFER_HOME/average/RB_all_2020-01-02.gca"
-CTRL_PTS="$SUBJECTS_DIR/$SUBJID/${SUBJID}_freesurfer/mri/ctrl_pts.mgz"
-CC_UP="$SUBJECTS_DIR/$SUBJID/${SUBJID}_freesurfer/mri/transforms/cc_up.lta"
+NORM="$SUBJECTS_DIR/$SUBJID/${SUBJID}_freesurfer/mri/norm.mgz"
+ASEG_PRESURF_NOFIX="$SUBJECTS_DIR/$SUBJID/${SUBJID}_freesurfer/mri/aseg.presurf.mgz"
+
+BRAIN="$SUBJECTS_DIR/$SUBJID/${SUBJID}_freesurfer/mri/brain.mgz"
+BRAIN_FINALSURFS="$SUBJECTS_DIR/$SUBJID/${SUBJID}_freesurfer/mri/brain.finalsurfs.mgz"
+
+#RB_ALL_WITHSKULL="$FREESURFER_HOME/average/RB_all_withskull_2016-05-10.vc700.gca"
+#TALAIRACH_WITH_SKULL="$SUBJECTS_DIR/$SUBJID/${SUBJID}_freesurfer/mri/transforms/talairach_with_skull.lta"
+
+#RB_ALL="$FREESURFER_HOME/average/RB_all_2020-01-02.gca"
+#CTRL_PTS="$SUBJECTS_DIR/$SUBJID/${SUBJID}_freesurfer/mri/ctrl_pts.mgz"
+#CC_UP="$SUBJECTS_DIR/$SUBJID/${SUBJID}_freesurfer/mri/transforms/cc_up.lta"
 
 WM="$SUBJECTS_DIR/$SUBJID/${SUBJID}_freesurfer/mri/wm.mgz"
 
@@ -665,23 +734,14 @@ SUBCORTICAL_PADDED="$O/mri/subcortical-precorrection.mgz"
 RIBBON_EDIT="$O/mri/ribbon-edit.mgz"
 SUBCORTICAL_EDIT="$O/mri/subcortical-edit.mgz"
 
-RIBBON_EDIT2="$SUBCORTICAL_EDIT"
+RIBBON_EDIT2="$O/mri/ribbon-edit2.mgz"
 
 SUBCORTICAL_MASK="$O/mri/subcortical-mask.mgz"
 BRAIN_MASK="$O/mri/brain-mask.mgz"
 
 T1_MASKED="$O/mri/T1-masked.mgz"
 
-TALAIRACH="$O/mri/transforms/talairach.lta"
-NORM="$O/mri/norm.mgz"
-TALAIRACH_M3Z="$O/mri/transforms/talairach.m3z"
-ASEG_AUTO_NOCCSEG="$O/mri/aseg.auto_noCCseg.mgz"
-ASEG_AUTO="$O/mri/aseg.auto.mgz"
-ASEG_PRESURF_NOFIX="$O/mri/aseg.presurf.nofix.mgz"
 ASEG_PRESURF="$O/mri/aseg.presurf.mgz"
-
-BRAIN="$O/mri/brain.mgz"
-BRAIN_FINALSURFS="$O/mri/brain.finalsurfs.mgz"
 
 WM_BMASK_LH="$O/mri/wm-bmask-lh.mgz"
 WM_BMASK_RH="$O/mri/wm-bmask-rh.mgz"
@@ -695,6 +755,8 @@ WM_BMASK_250="$O/mri/wm-bmask-250.mgz"
 WM_ASEGEDIT="$O/mri/wm-asegedit.mgz"
 WM_EDITED="$O/mri/wm.mgz" # Use this name for mri_fix_topology
 
+BRAIN_COPY="$O/mri/brain.mgz" # for mris_fix_topology
+
 declare -a FILLED_PRETRESS=("$O/mri/filled_pretress_lh.mgz" "$O/mri/filled_pretress_rh.mgz")
 declare -a ORIG_NOFIX_PREDEC=("$O/surf/lh.orig.nofix.predec" "$O/surf/rh.orig.nofix.predec")
 declare -a ORIG_NOFIX=("$O/surf/lh.orig.nofix" "$O/surf/rh.orig.nofix")
@@ -705,7 +767,6 @@ declare -a QSPHERE_NOFIX=("$O/surf/lh.qsphere.nofix" "$O/surf/rh.qsphere.nofix")
 declare -a ORIG_PREMESH=("$O/surf/lh.orig.premesh" "$O/surf/rh.orig.premesh")
 declare -a ORIG=("$O/surf/lh.orig" "$O/surf/rh.orig")
 
-#RJR ADDED
 declare -a INFLATED=("$O/surf/lh.inflated" "$O/surf/rh.inflated")
 declare -a SMOOTHW=("$O/surf/lh.smoothwm" "$O/surf/rh.smoothwm")
 declare -a CURV=("$O/surf/lh.curv" "$O/surf/rh.curv")
@@ -918,50 +979,21 @@ cmd "Mask $T1 with $BRAIN_MASK into $T1_MASKED" \
 "mri_mask $T1 $BRAIN_MASK $T1_MASKED"
 fi
 
-# Recompute recon-all steps starting at EM Register up to brain.finalsurfs.mgz
-if ((TAG<=3))
-then
-cmd "EM Register: mri_em_register" \
-"mri_em_register -uns 3 -mask $T1_MASKED $NU $RB_ALL $TALAIRACH"
-
-cmd "CA Normalize: mri_ca_normalize" \
-"mri_ca_normalize -c $CTRL_PTS -mask $T1_MASKED $NU $RB_ALL $TALAIRACH $NORM"
-
-cmd "CA Register: mri_ca_register" \
-"mri_ca_register -nobigventricles -T $TALAIRACH -align-after -mask $T1_MASKED $NORM $RB_ALL $TALAIRACH_M3Z"
-
-cmd "Subcortical Segment: mri_ca_label" \
-"mri_ca_label -relabel_unlikely 9 .3 -prior 0.5 -align $NORM $TALAIRACH_M3Z $RB_ALL $ASEG_AUTO_NOCCSEG"
-
-cmd "CC Segment: mri_cc" \
-"mri_cc -aseg aseg.auto_noCCseg.mgz -o aseg.auto.mgz -lta $CC_UP $SUBJID/$OUTPUT_FOLDER" # Function "mri_cc" add "mri/" to $ASEG_AUTO_NOCCSEG and $ASEG_AUTO
-
-cmd "Merge ASeg" \
-"cp $ASEG_AUTO $ASEG_PRESURF_NOFIX"
-
-## ADDED aseg.presurf.mgz correction based on ribbon-edit.mgz
-cmd "Use script $O/edit_aseg_presurf_based_on_ribbon.py on $ASEG_PRESURF_NOFIX" \
-"python $O/edit_aseg_presurf_based_on_ribbon.py $ASEG_PRESURF_NOFIX $RIBBON_EDIT $RIBBON_EDIT2 $ASEG_PRESURF"
-fi
-
 #################
-## Compute wm.mgz : wm-bmask AND if(wm == 250 & wm-bmask), then wm-mask = 250
+## Edit original aseg.presurf based on ribbon-edit
 #################
 if ((TAG<=4))
 then
 
-#BRAIN_FINALSURFS
-cmd "Intensity Normalize" \
-"mri_normalize -seed 1234 -mprage -noconform -aseg $ASEG_PRESURF -mask $T1_MASKED $NORM $BRAIN"
+## ADDED aseg.presurf.mgz correction based on ribbon-edit.mgz
+cmd "Use script $O/edit_aseg_presurf_based_on_ribbon.py on $ASEG_PRESURF_NOFIX" \
+"python $O/edit_aseg_presurf_based_on_ribbon.py $ASEG_PRESURF_NOFIX $RIBBON_EDIT $SUBCORTICAL_EDIT $ASEG_PRESURF $RIBBON_EDIT2"
 
-cmd "Mask BFS" \
-"mri_mask -T 5 $BRAIN $T1_MASKED $BRAIN_FINALSURFS"
-#OR
-#cmd "Copy" \
-#"cp $BRAIN $BRAIN_FINALSURFS"
 fi
 
-# Compute WM_EDIT based on BRAIN_FINALSURFS masked by WM_BMASK
+#################
+## Compute WM_EDIT based on BRAIN_FINALSURFS masked by WM_BMASK
+#################
 if ((TAG<=5))
 then
 # Extract white matter from ribbon-edit to create wm-bmask.mgz
@@ -1023,7 +1055,11 @@ do
 	# Sphere 1
 	cmd "${H[$i]} Make spherical WM surf" \
 	"mris_sphere -q -p 6 -a 128 -seed 1234 ${INFLATED_NOFIX[$i]} ${QSPHERE_NOFIX[$i]}"
-
+        
+        # Copy BRAIN for mris_fix_topology
+	cmd "${H[$i]} Copy $BRAIN for mris_fix_topology" \
+	"if [ ! -f $BRAIN_COPY ]; then cp $BRAIN $BRAIN_COPY; fi" 
+	
 	# Fix topology
 	cmd "${H[$i]} Fix tolpology WM surf" \
 	"mris_fix_topology -mgz -sphere qsphere.nofix -inflated inflated.nofix -orig orig.nofix -out orig.premesh -ga -seed 1234 $SUBJID/$OUTPUT_FOLDER ${H[$i]}"
