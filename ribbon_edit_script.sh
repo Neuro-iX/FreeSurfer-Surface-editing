@@ -8,7 +8,7 @@ Help ()
 builtin echo "
 AUTHOR: Benoît Verreman
 
-LAST UPDATE: 2024-11-06
+LAST UPDATE: 2025-01-13
 
 DESCRIPTION: 
 Use ribbon and subcortical NIFTI files to recompute pial surface,
@@ -302,18 +302,33 @@ import sys #To add arguments
 # SUBJID directory
 img_in = sys.argv[1]
 img_out = sys.argv[2]
+is_ribbon = sys.argv[3]
 
 #Load image to be treated
 if not os.path.isfile(img_in):
     raise FileNotFoundError("The following path doesn't exist: " + img_in)
 else:
     img = nib.load(img_in)
+    
+    
+data_in = img.get_fdata()
+(a,b,c)=img.header.get_data_shape()
+
+if is_ribbon == '1': #change label edit ribbon
+    for x in range(a):
+        for y in range(b):
+            for z in range(c):
+                if data_in[x,y,z] == 14176:
+                    data_in[x,y,z]=21
+                elif data_in[x,y,z] == 14177:
+                    data_in[x,y,z]=22
+    img = nib.Nifti1Image(data_in, img.affine.copy())
         
 #Padding function: reshape the image to (max_dim, max_dim, max_dim) with same resolution and an orientation of 'LAS'
 def padding(img, new_name):
     d = max(img.header.get_data_shape())
-    new_img = nib.processing.conform(img, out_shape=(d, d, d), \
-    voxel_size = img.header.get_zooms(), order=0, cval=0, orientation='LAS', out_class=None)
+    new_img = nib.processing.conform(img, out_shape=(311, 311, 311), \
+    voxel_size = img.header.get_zooms(), order=0, cval=0, orientation='LAS', out_class=None) #d
     nib.save(new_img, new_name)
 
 padding(img, img_out)
@@ -342,7 +357,7 @@ path_bf = sys.argv[1] #Brain.finalsurfs without the cerebellum
 path_gmbm = sys.argv[2] #Gray Matter binary mask at 128 (by default) (based on ribbon-edit.mgz)
 path_out = sys.argv[3] #Absolute path of the output brain.finalsurfs
 path_out2 = sys.argv[4] #Absolute path of the output brain.finalsurfs
-path_ribbon2 = sys.argv[5] #Put added labels in ribbon2 as background in brain.finalsurfs
+path_ribbon = sys.argv[5] #Put added labels in ribbon as background in brain.finalsurfs
 
 #Load brain.finalsurfs without the cerebellum
 if not os.path.isfile(path_bf):
@@ -364,12 +379,12 @@ data_gmbm = img_gmbm.get_fdata()
 if (a!=e or b!=f or c!=g):
     sys.exit(0)
 
-#Load ribbon2
-if not os.path.isfile(path_ribbon2):
-    raise FileNotFoundError("Make sure the following path is correct: " + path_ribbon2)
+#Load ribbon
+if not os.path.isfile(path_ribbon):
+    raise FileNotFoundError("Make sure the following path is correct: " + path_ribbon)
 else:
-    img_ribbon2 = nib.load(path_ribbon2)
-data_ribbon2 = img_ribbon2.get_fdata()
+    img_ribbon = nib.load(path_ribbon)
+data_ribbon = img_ribbon.get_fdata()
 
 #List of coordinates of the 26-nearest-neighbors around (0,0,0) plus itself
 motion = np.transpose(np.indices((3,3,3)) - 1).reshape(-1, 3)
@@ -393,7 +408,7 @@ for x in range(a):
                         nn+=1
                 data_bf_new[x,y,z]=80.0/(mean/nn)*val
                 data_bf_new2[x,y,z]=80.0/(mean/nn)*val
-            if int(data_ribbon2[x,y,z]) in [21,22]: #l_edit and r_edit
+            if int(data_ribbon[x,y,z]) in [21,22]: #l_edit and r_edit
                 data_bf_new2[x,y,z]=0
 
 #Create and save new images
@@ -416,7 +431,7 @@ then
 
 cat > $O/edit_aseg_presurf_based_on_ribbon.py <<EOF
 ####
-#Correcting aseg.presurf based on ribbon-edit
+#Create aseg.presurf.mgz and aseg.presurf_wo_subc.mgz based on ribbon-edit.mgz
 ####
 
 import os
@@ -432,9 +447,8 @@ from itertools import product  #for motion2
 #Outside parameters
 path_aseg = sys.argv[1] #Path to aseg.presurf.old.mgz
 path_ribbon = sys.argv[2] #Path to ribbon-edit.mgz
-path_subc = sys.argv[3] #Path to subcortical-edit.mgz
-path_out = sys.argv[4] #Path to output aseg.presurf.mgz
-path_out2 = sys.argv[5] #Path to output ribbon-edit2.mgz
+path_out = sys.argv[3] #Path to output aseg.presurf.mgz
+path_out2 = sys.argv[4] #Path to output aseg.presurf_wo_subc.mgz
 
 ### Get images
 if not os.path.isfile(path_aseg):
@@ -447,15 +461,9 @@ if not os.path.isfile(path_ribbon):
 else:
     img_ribbon = nib.load(path_ribbon)
 
-if not os.path.isfile(path_subc):
-    raise FileNotFoundError("Make sure the following path is correct: " + path_subc)
-else:
-    img_subc = nib.load(path_subc)
-
 ### Get data
 data_aseg = img_aseg.get_fdata() #Not to be edited
 data_ribbon = img_ribbon.get_fdata() #Not to be edited
-data_subc = img_subc.get_fdata() #Not to be edited again
 
 ### Copy aseg
 data_new_aseg = copy.deepcopy(data_aseg) #Copy to be edited
@@ -476,6 +484,15 @@ class L:
     
     l_p = 12 # lh putamen
     r_p = 51 # rh putamen
+    
+    l_pd = 13 # lh pallidum
+    r_pd = 52 # rh pallidum
+
+    l_t = 10 # lh thalamus
+    r_t = 49 # rh thalamus
+
+    l_c = 11 # lh caudate
+    r_c = 50 # rh caudate
     
     l_v = 28 # lh ventralDC
     r_v = 60 # rh ventralDC
@@ -503,144 +520,54 @@ class L:
     
     cc_ant = 255 # CC_Anterior
     
-    l_edit = 21 #lh manuel edit in ribbon2
-    r_edit = 22 #rh manuel edit in ribbon2
-    
-    l_sc_lv = 18 #lh subcortical-edit.mgz lateral ventricle
-    r_sc_lv = 19 #rh subcortical-edit.mgz lateral ventricle
-    
-    l_sc_a = 22 #lh subcortical-edit.mgz amygdala
-    r_sc_a = 23 #rh subcortical-edit.mgz amygdala
-    
-    l_sc_h = 20 #lh subc (subcortical-edit.mgz) hippocampus
-    r_sc_h = 21 #rh subc (subcortical-edit.mgz) hippocampus
-    
-    l_sc_vidc = 25 #lh subc (subcortical-edit.mgz) hippocampus
-    r_sc_vidc = 26 #rh subc (subcortical-edit.mgz) hippocampus
-    
-### Get neighbours matrix
-motion = numpy.transpose(numpy.indices((3,3,3)) - 1).reshape(-1, 3)
-motion = numpy.delete(motion,int(len(motion)/2),axis=0) #remove [0 0 0]
-motion2 = numpy.array(list(product([-2, -1, 0, 1, 2], repeat=3)))
-d = numpy.eye(3, dtype=int).reshape(-1, 3)
-motion1 = numpy.concatenate((d, -d), axis=0)
+    l_edit = 21 #lh manuel edit in ribbon
+    r_edit = 22 #rh manuel edit in ribbon
 
 ### Instantiate lists
 list_P_V=[] #Will contain couple (label,[x,y,z]) for putamen, ventralDC, lateral ventricle, and CC_Anterior erosion (neighbouring GM)
-list_H_A=[] #Hippocampus and amygdala from subc
+list_HA=[] #Voxels of Hippocampus/amygdala in ribbon
 
 ### Modify BG, WM, GM, CC_anterior and subcortical structures based on ribbon
 for x in range(a):
     for y in range(b):
         for z in range(c):
-            ribbon_voxel = int(data_ribbon[x,y,z]) #ribbon-edit.mgz 
-            subc_voxel = int(data_subc[x,y,z]) #subcortical-edit.mgz 
+            ribbon_voxel = int(data_ribbon[x,y,z]) #ribbon-edit.mgz
             aseg_voxel = int(data_aseg[x,y,z])
             
-            if subc_voxel in [L.l_sc_a,L.l_sc_h,L.l_sc_lv,L.r_sc_a,L.r_sc_h,L.r_sc_lv,L.l_sc_vidc,L.r_sc_vidc]: 
-                if ribbon_voxel in [L.l_gm,L.r_gm]:
-                    list_H_A.append((ribbon_voxel,[x,y,z])) #Used for hippocampus and amygdala in brainfinalsurfs and aseg
-                    data_new_mask[x,y,z] = L.l_edit if (ribbon_voxel == L.l_gm) else L.r_edit
-            
-            if aseg_voxel in [L.l_p,L.r_p,L.l_v,L.r_v,L.cc_ant,L.l_lv,L.r_lv,L.l_aa,L.r_aa]: 
-                list_P_V.append((aseg_voxel,[x,y,z])) #Used for putamen... erosion (neighbouring GM)
+            if aseg_voxel in [L.l_p,L.r_p,L.l_pd,L.r_pd,L.l_v,L.r_v,L.cc_ant,L.l_lv,L.r_lv,L.l_aa,L.r_aa,L.l_t,L.r_t,L.l_c,L.r_c]: 
+                list_P_V.append((aseg_voxel,[x,y,z])) #Used for putamen (...) suppresion
             
             if aseg_voxel != ribbon_voxel: #Voxel for which label may have to be changed
                 match aseg_voxel:
-                    case 0 | L.l_wm | L.r_wm | L.l_gm | L.r_gm | L.l_h | L.r_h | L.l_a | L.r_a | L.l_cp | L.r_cp | L.l_ilv | L.r_ilv: #Aseg voxel in BG, WM, GM, HA, CP or ILV
+                    case 0 | L.l_wm | L.r_wm | L.l_gm | L.r_gm | L.l_h | L.r_h | L.l_a | L.r_a | L.l_cp | L.r_cp | L.l_ilv | L.r_ilv | L.l_t | L.r_t : #Aseg voxel in BG, WM, GM, HA, CP or ILV
                         if ribbon_voxel != L.r_ce: #right-cerebellum-exterior label not in aseg.presurf.nofix
                             data_new_aseg[x,y,z] = ribbon_voxel
+                            if ribbon_voxel == L.l_edit:
+                                data_new_aseg[x,y,z] = L.l_a
+                            elif ribbon_voxel == L.r_edit:
+                                data_new_aseg[x,y,z] = L.r_a
                     case L.l_cc | L.r_cc if ribbon_voxel in [L.l_wm,L.r_wm,L.l_gm,L.r_gm]: # Correcting cerebellum cortex respective to wm and gm in ribbon
                         data_new_aseg[x,y,z] = ribbon_voxel
                     case L.l_p | L.r_p | L.l_v | L.r_v | L.cc_ant | L.l_lv | L.r_lv | L.l_aa | L.r_aa if ribbon_voxel in [0,L.l_gm,L.r_gm]: #putamen, ventralDC, lateral ventricle, and CC_Anterior should not be in GM or BG of ribbon
                         data_new_aseg[x,y,z] = ribbon_voxel
                         list_P_V.pop()
 
-### Dilation amygdala in aseg.presurf
-data_new_mask2 = copy.deepcopy(data_new_mask)
-list_HA_d1 = list_H_A[:] #make a copy with [:]
-for (label,[x,y,z]) in list_H_A:
-    n_coordinates = motion1 + [[x, y, z]]
-    for (k,n,m) in n_coordinates:
-        mask_voxel = int(data_new_mask2[k,n,m])
-        if mask_voxel in [L.l_gm,L.r_gm]: #Neighbour in GM
-            data_new_mask2[k,n,m] = L.l_edit if (mask_voxel == L.l_gm) else L.r_edit
-            list_HA_d1.append((mask_voxel,[k,n,m]))
+### Copy data_new_aseg
+data_new_aseg_wo_subc = copy.deepcopy(data_new_aseg) #Copy to be edited
 
-data_new_mask3 = copy.deepcopy(data_new_mask2)
-list_HA_d2 = list_HA_d1[:] #make a copy with [:]
-for (label,[x,y,z]) in list_HA_d1:
-    n_coordinates = motion1 + [[x, y, z]]
-    for (k,n,m) in n_coordinates:
-        mask_voxel = int(data_new_mask3[k,n,m])
-        if mask_voxel in [L.l_gm,L.r_gm]: #Neighbour in GM
-            data_new_mask3[k,n,m] = L.l_edit if (mask_voxel == L.l_gm) else L.r_edit
-            list_HA_d2.append((mask_voxel,[k,n,m]))
-
-### Erosion amygdala in aseg.presurf
-data_new_mask4 = copy.deepcopy(data_new_mask3)
-list_HA_e1 = []
-for (label,[x,y,z]) in list_HA_d2:
-    n_coordinates = motion1 + [[x, y, z]]
-    has_grey_neighbour = False
-    for (k,n,m) in n_coordinates:
-        mask_voxel = int(data_new_mask4[k,n,m])
-        if mask_voxel in [L.l_gm,L.r_gm]: #Neighbour in GM
-            has_grey_neighbour = True
-            data_new_mask4[x,y,z] = mask_voxel
-            break
-    if not(has_grey_neighbour):
-        list_HA_e1.append((data_new_mask4[x,y,z],[x,y,z]))
-
-data_new_mask5 = copy.deepcopy(data_new_mask4)
-list_HA_e2 = []
-for (label,[x,y,z]) in list_HA_e1:
-    n_coordinates = motion1 + [[x, y, z]]
-    has_grey_neighbour = False
-    for (k,n,m) in n_coordinates:
-        mask_voxel = int(data_new_mask5[k,n,m])
-        if mask_voxel in [L.l_gm,L.r_gm]: #Neighbour in GM
-            has_grey_neighbour = True
-            data_new_mask5[x,y,z] = mask_voxel
-            break
-    if not(has_grey_neighbour):
-        list_HA_e2.append((data_new_mask5[x,y,z],[x,y,z]))
-
-### Delete voxels in list from aseg
-for (label,[x,y,z]) in list_HA_e2:
-    data_new_aseg[x,y,z] = L.l_a if (label == L.l_gm) else L.r_a
-
-### Erode Putamen, VentralDC, CC_Anterior ... bordering GM
+### Replace different subcortical structures by WM (Putamen, VentralDC, CC_Anterior)
 for (label,[x,y,z]) in list_P_V:
-    if label in [L.l_p, L.r_p]: #if Putamen, use motion2 instead of motion
-        n_coordinates = motion2 + [[x, y, z]]
-        for (k,n,m) in n_coordinates:
-            ribbon_voxel = int(data_ribbon[k,n,m])
-            if ribbon_voxel in [L.l_gm,L.r_gm]: 
-                data_new_aseg[x,y,z] = ribbon_voxel - 1 #neigbour is GM, so change voxel to WM
-    else:
-        n_coordinates = motion + [[x, y, z]]
-        for (k,n,m) in n_coordinates:
-            ribbon_voxel = int(data_ribbon[k,n,m])
-            if ribbon_voxel in [L.l_gm,L.r_gm]: 
-                data_new_aseg[x,y,z] = ribbon_voxel - 1 #neigbour is GM, so change voxel to WM
+    if label in [L.l_p,L.l_pd,L.l_v,L.l_lv,L.l_aa,L.l_t,L.l_c]: #left subcortical structures
+        data_new_aseg_wo_subc[x,y,z] = L.l_wm
+    elif label in [L.r_p,L.r_pd,L.r_v,L.r_lv,L.r_aa,L.r_t,L.r_c]: #right subcortical structures
+        data_new_aseg_wo_subc[x,y,z] = L.r_wm
     
-            
-### Save new aseg
+### Save both new aseg
 img_new_aseg = nib.Nifti1Image(data_new_aseg, img_aseg.affine.copy())
 nib.save(img_new_aseg, path_out)
 
-### Save new mask
-img_new_mask = nib.Nifti1Image(data_new_mask, img_ribbon.affine.copy())
-nib.save(img_new_mask, path_out2)
-img_new_mask2 = nib.Nifti1Image(data_new_mask2, img_ribbon.affine.copy())
-nib.save(img_new_mask2, path_out2[:len(path_out2)-4]+'_2.mgz')
-img_new_mask3 = nib.Nifti1Image(data_new_mask3, img_ribbon.affine.copy())
-nib.save(img_new_mask3, path_out2[:len(path_out2)-4]+'_3.mgz')
-img_new_mask4 = nib.Nifti1Image(data_new_mask4, img_ribbon.affine.copy())
-nib.save(img_new_mask4, path_out2[:len(path_out2)-4]+'_4.mgz')
-img_new_mask5 = nib.Nifti1Image(data_new_mask5, img_ribbon.affine.copy())
-nib.save(img_new_mask5, path_out2[:len(path_out2)-4]+'_5.mgz')
+img_new_aseg_wo_subc = nib.Nifti1Image(data_new_aseg_wo_subc, img_aseg.affine.copy())
+nib.save(img_new_aseg_wo_subc, path_out2)
 EOF
 fi
 }
@@ -742,6 +669,7 @@ BRAIN_MASK="$O/mri/brain-mask.mgz"
 T1_MASKED="$O/mri/T1-masked.mgz"
 
 ASEG_PRESURF="$O/mri/aseg.presurf.mgz"
+ASEG_PRESURF_WO_SUBC="$O/mri/aseg.presurf_wo_subc.mgz"
 
 WM_BMASK_LH="$O/mri/wm-bmask-lh.mgz"
 WM_BMASK_RH="$O/mri/wm-bmask-rh.mgz"
@@ -921,7 +849,7 @@ then
 fi
 
 cmd "Compensate for future translation in FreeSurfer" \
-"python $O/nifti_padding.py $IMAGE $IMAGE_PADDED padding"
+"python $O/nifti_padding.py $IMAGE $IMAGE_PADDED 0"
 
 cmd "Add SUBJID to SUBJECTS_DIR" \
 "export SUBJECTS_DIR=$SUBJECTS_DIR/$SUBJID"
@@ -945,10 +873,10 @@ Echo "# Given ribbon: $RIBBON"
 Echo "# Given subcortical: $SUBCORTICAL"
 
 cmd "Use script $O/nifti_padding.py on $RIBBON" \
-"python $O/nifti_padding.py $RIBBON $RIBBON_PADDED padding"
+"python $O/nifti_padding.py $RIBBON $RIBBON_PADDED 1"
 
 cmd "Use script $O/nifti_padding.py on $SUBCORTICAL" \
-"python $O/nifti_padding.py $SUBCORTICAL $SUBCORTICAL_PADDED padding"
+"python $O/nifti_padding.py $SUBCORTICAL $SUBCORTICAL_PADDED 0"
 
 #Necessary for correcting the orientation of the image
 cmd "Convert $RIBBON_PADDED" \
@@ -985,9 +913,9 @@ fi
 if ((TAG<=4))
 then
 
-## ADDED aseg.presurf.mgz correction based on ribbon-edit.mgz
+## Create aseg.presurf.mgz and aseg.presurf_wo_subc.mgz based on ribbon-edit.mgz
 cmd "Use script $O/edit_aseg_presurf_based_on_ribbon.py on $ASEG_PRESURF_NOFIX" \
-"python $O/edit_aseg_presurf_based_on_ribbon.py $ASEG_PRESURF_NOFIX $RIBBON_EDIT $SUBCORTICAL_EDIT $ASEG_PRESURF $RIBBON_EDIT2"
+"python $O/edit_aseg_presurf_based_on_ribbon.py $ASEG_PRESURF_NOFIX $RIBBON_EDIT $ASEG_PRESURF $ASEG_PRESURF_WO_SUBC"
 
 fi
 
@@ -1143,7 +1071,7 @@ do
 	
 	# Use script brain-finalsurfs-edit.py to edit brain.finalsurfs.mgz
 	cmd "${H[$i]} Use script $O/brain-finalsurfs-edit.py on ${BRAIN_FINALSURFS_NO_CEREB[$i]} with ${GM_BMASK[$i]}" \
-	"python $O/brain-finalsurfs-edit.py ${BRAIN_FINALSURFS_NO_CEREB[$i]} ${GM_BMASK[$i]} ${BRAIN_FINALSURFS_NO_CEREB_EDITED[$i]} ${BRAIN_FINALSURFS_NO_CEREB_EDITED2[$i]} $RIBBON_EDIT2"
+	"python $O/brain-finalsurfs-edit.py ${BRAIN_FINALSURFS_NO_CEREB[$i]} ${GM_BMASK[$i]} ${BRAIN_FINALSURFS_NO_CEREB_EDITED[$i]} ${BRAIN_FINALSURFS_NO_CEREB_EDITED2[$i]} $RIBBON_EDIT"
 	
 	# Compute stats
 	cmd "${H[$i]} Computes stats for pial surface" \
@@ -1189,7 +1117,7 @@ do
 		continue;
 	else	
 	cmd "${H[$i]} Computes pial surface" \
-	"mris_place_surface --i ${ORIG[$i]} --o ${RIBBON_EDIT_PIAL[$i]} --nsmooth 0 --adgws-in ${AUTODET_NEW_GW_STATS[$i]} --pial --${H[$i]} --repulse-surf ${ORIG[$i]} --invol ${BRAIN_FINALSURFS_NO_CEREB_EDITED2[$i]} --threads 6 --white-surf ${ORIG[$i]} --pin-medial-wall ${CORTEX_LABEL[$i]} --seg $ASEG_PRESURF --no-rip" #--rip-label $LH_CORTEX_HIPAMYG_LABEL" --aparc ${APARC_ANNOT[$i]} #--rip-bg isn't recognised
+	"mris_place_surface --i ${ORIG[$i]} --o ${RIBBON_EDIT_PIAL[$i]} --nsmooth 0 --adgws-in ${AUTODET_NEW_GW_STATS[$i]} --pial --${H[$i]} --repulse-surf ${ORIG[$i]} --invol ${BRAIN_FINALSURFS_NO_CEREB_EDITED2[$i]} --threads 6 --white-surf ${ORIG[$i]} --pin-medial-wall ${CORTEX_LABEL[$i]} --seg $ASEG_PRESURF_WO_SUBC --no-rip" #--rip-label $LH_CORTEX_HIPAMYG_LABEL" --aparc ${APARC_ANNOT[$i]} #--rip-bg isn't recognised
 	
 	### BONUS: aparc option
 	#cmd "${H[$i]} Computes pial surface, BONUS aparc" \
@@ -1197,7 +1125,7 @@ do
 	
 	#Second pass BEST RESULT (i_w)
 	cmd "${H[$i]} Computes pial surface - second pass" \
-	"mris_place_surface --i ${RIBBON_EDIT_PIAL[$i]} --o ${RIBBON_EDIT_PIAL_SECOND_PASS_i_w[$i]} --nsmooth 0 --adgws-in ${AUTODET_NEW_GW_STATS[$i]} --pial --${H[$i]} --repulse-surf ${ORIG[$i]} --invol ${BRAIN_FINALSURFS_NO_CEREB_UNIFORM_GM_80[$i]} --threads 6 --white-surf ${RIBBON_EDIT_PIAL[$i]} --pin-medial-wall ${CORTEX_LABEL[$i]} --seg $ASEG_PRESURF --no-rip" #--aparc ${APARC_ANNOT[$i]}" #--rip-bg isn't recognised
+	"mris_place_surface --i ${RIBBON_EDIT_PIAL[$i]} --o ${RIBBON_EDIT_PIAL_SECOND_PASS_i_w[$i]} --nsmooth 0 --adgws-in ${AUTODET_NEW_GW_STATS[$i]} --pial --${H[$i]} --repulse-surf ${ORIG[$i]} --invol ${BRAIN_FINALSURFS_NO_CEREB_UNIFORM_GM_80[$i]} --threads 6 --white-surf ${RIBBON_EDIT_PIAL[$i]} --pin-medial-wall ${CORTEX_LABEL[$i]} --seg $ASEG_PRESURF_WO_SUBC --no-rip" #--aparc ${APARC_ANNOT[$i]}" #--rip-bg isn't recognised
 
 	fi
 done
@@ -1218,7 +1146,7 @@ do
 		continue;
 	else		
 	cmd "${H[$i]} Smooths pial surface" \
-	"mris_place_surface --i ${RIBBON_EDIT_PIAL_SECOND_PASS_i_w[$i]} --o ${RIBBON_EDIT_PIAL_THIRD_PASS_SMOOTH[$i]} --nsmooth 1 --adgws-in ${AUTODET_NEW_GW_STATS[$i]} --pial --${H[$i]} --repulse-surf ${RIBBON_EDIT_PIAL_SECOND_PASS_i_w[$i]} --invol ${BRAIN_FINALSURFS_NO_CEREB_EDITED[$i]} --threads 6 --white-surf ${ORIG[$i]} --pin-medial-wall ${CORTEX_LABEL[$i]} --seg $ASEG_PRESURF --no-rip" #--rip-label #--rip-bg isn't recognised
+	"mris_place_surface --i ${RIBBON_EDIT_PIAL_SECOND_PASS_i_w[$i]} --o ${RIBBON_EDIT_PIAL_THIRD_PASS_SMOOTH[$i]} --nsmooth 1 --adgws-in ${AUTODET_NEW_GW_STATS[$i]} --pial --${H[$i]} --repulse-surf ${RIBBON_EDIT_PIAL_SECOND_PASS_i_w[$i]} --invol ${BRAIN_FINALSURFS_NO_CEREB_EDITED[$i]} --threads 6 --white-surf ${ORIG[$i]} --pin-medial-wall ${CORTEX_LABEL[$i]} --seg $ASEG_PRESURF_WO_SUBC --no-rip" #--rip-label #--rip-bg isn't recognised
 	fi
 done
 fi
