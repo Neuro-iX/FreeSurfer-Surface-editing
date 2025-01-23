@@ -8,7 +8,7 @@ Help ()
 builtin echo "
 AUTHOR: Benoît Verreman
 
-LAST UPDATE: 2025-01-13
+LAST UPDATE: 2025-01-20
 
 DESCRIPTION: 
 Use ribbon and subcortical NIFTI files to recompute pial surface,
@@ -475,6 +475,10 @@ data_new_mask = copy.deepcopy(data_ribbon) #Copy to be edited
 ### Create labels class
 class L:
     r_ce = 45 # right cerebellum exterior (in ribbon)
+    cc_ant = 255 # CC_Anterior
+    wmh = 77 # WM Hypointensities
+    oc = 85 # optic chasm
+    csf = 24 # Cerebrospinal fluid
     
     l_wm = 2 # lh white matter
     r_wm = 41 # rh white matter
@@ -497,6 +501,9 @@ class L:
     l_v = 28 # lh ventralDC
     r_v = 60 # rh ventralDC
     
+    l_vs = 30 # lh left vessel
+    r_vs = 62 # rh right vessel
+    
     l_lv = 4 # lh lateral ventricle
     r_lv = 43 # rh lateral ventricle
     
@@ -505,9 +512,6 @@ class L:
     
     l_a = 18 # lh amygdala
     r_a = 54 # rh amygdala
-    
-    l_cc = 8 # lh cerebellum cortex
-    r_cc = 47 # rh cerebellum cortex
     
     l_aa = 26 # lh Accumbens area
     r_aa = 58 # rh Accumbens area
@@ -518,14 +522,26 @@ class L:
     l_ilv = 5 # rh Inf lat vent
     r_ilv = 44 # rh Inf lat vent
     
-    cc_ant = 255 # CC_Anterior
+    #CEREBELUM
+    
+    bs = 16 # brain stem
+    
+    fv = 15 # 4th ventricle
+    
+    l_cw = 7 # lh cerebellum white matter
+    r_cw = 46 # rh cerebellum white matter
+    
+    l_cc = 8 # lh cerebellum cortex
+    r_cc = 47 # rh cerebellum cortex
+    
+    #EDIT RIBBON
     
     l_edit = 21 #lh manuel edit in ribbon
     r_edit = 22 #rh manuel edit in ribbon
 
 ### Instantiate lists
-list_P_V=[] #Will contain couple (label,[x,y,z]) for putamen, ventralDC, lateral ventricle, and CC_Anterior erosion (neighbouring GM)
-list_HA=[] #Voxels of Hippocampus/amygdala in ribbon
+list_LH=[] #Subcortical structures in lh
+list_RH=[] #Subcortical structures in rh
 
 ### Modify BG, WM, GM, CC_anterior and subcortical structures based on ribbon
 for x in range(a):
@@ -534,33 +550,35 @@ for x in range(a):
             ribbon_voxel = int(data_ribbon[x,y,z]) #ribbon-edit.mgz
             aseg_voxel = int(data_aseg[x,y,z])
             
-            if aseg_voxel in [L.l_p,L.r_p,L.l_pd,L.r_pd,L.l_v,L.r_v,L.cc_ant,L.l_lv,L.r_lv,L.l_aa,L.r_aa,L.l_t,L.r_t,L.l_c,L.r_c]: 
-                list_P_V.append((aseg_voxel,[x,y,z])) #Used for putamen (...) suppresion
-            
             if aseg_voxel != ribbon_voxel: #Voxel for which label may have to be changed
-                match aseg_voxel:
-                    case 0 | L.l_wm | L.r_wm | L.l_gm | L.r_gm | L.l_h | L.r_h | L.l_a | L.r_a | L.l_cp | L.r_cp | L.l_ilv | L.r_ilv | L.l_t | L.r_t : #Aseg voxel in BG, WM, GM, HA, CP or ILV
-                        if ribbon_voxel != L.r_ce: #right-cerebellum-exterior label not in aseg.presurf.nofix
-                            data_new_aseg[x,y,z] = ribbon_voxel
-                            if ribbon_voxel == L.l_edit:
-                                data_new_aseg[x,y,z] = L.l_a
-                            elif ribbon_voxel == L.r_edit:
-                                data_new_aseg[x,y,z] = L.r_a
-                    case L.l_cc | L.r_cc if ribbon_voxel in [L.l_wm,L.r_wm,L.l_gm,L.r_gm]: # Correcting cerebellum cortex respective to wm and gm in ribbon
-                        data_new_aseg[x,y,z] = ribbon_voxel
-                    case L.l_p | L.r_p | L.l_v | L.r_v | L.cc_ant | L.l_lv | L.r_lv | L.l_aa | L.r_aa if ribbon_voxel in [0,L.l_gm,L.r_gm]: #putamen, ventralDC, lateral ventricle, and CC_Anterior should not be in GM or BG of ribbon
-                        data_new_aseg[x,y,z] = ribbon_voxel
-                        list_P_V.pop()
+                match ribbon_voxel:
+            	    case 0 if aseg_voxel not in [L.l_cc,L.r_cc,L.l_cw,L.r_cw,L.bs,L.fv]: #correction of CEREBELLUM
+            	        data_new_aseg[x,y,z] = ribbon_voxel
+            	    case L.l_gm | L.r_gm: 
+            	        data_new_aseg[x,y,z] = ribbon_voxel
+            	    case L.l_edit:
+            	        data_new_aseg[x,y,z] = L.l_a
+            	    case L.r_edit:
+            	        data_new_aseg[x,y,z] = L.r_a
+            	    case L.l_wm:
+            	        if aseg_voxel in [0, L.l_gm, L.bs]:
+            	            data_new_aseg[x,y,z] = L.l_wm
+            	        elif aseg_voxel in [L.l_p,L.l_pd,L.l_v,L.l_lv,L.l_aa,L.l_t,L.l_c,L.l_cp,L.l_ilv,L.l_h,L.l_a,L.l_vs,L.wmh,L.oc,L.csf]: #SUBCORTICAL structure lh only
+            	            list_LH.append((aseg_voxel,[x,y,z]))
+            	    case L.r_wm:
+            	        if aseg_voxel in [0, L.r_gm, L.bs]:
+            	            data_new_aseg[x,y,z] = L.r_wm
+            	        elif aseg_voxel in [L.r_p,L.r_pd,L.r_v,L.r_lv,L.r_aa,L.r_t,L.r_c,L.r_cp,L.r_ilv,L.r_h,L.r_a,L.r_vs,L.wmh,L.oc,L.csf]: #SUBCORTICAL structure rh only
+            	            list_RH.append((aseg_voxel,[x,y,z]))
 
 ### Copy data_new_aseg
 data_new_aseg_wo_subc = copy.deepcopy(data_new_aseg) #Copy to be edited
 
 ### Replace different subcortical structures by WM (Putamen, VentralDC, CC_Anterior)
-for (label,[x,y,z]) in list_P_V:
-    if label in [L.l_p,L.l_pd,L.l_v,L.l_lv,L.l_aa,L.l_t,L.l_c]: #left subcortical structures
-        data_new_aseg_wo_subc[x,y,z] = L.l_wm
-    elif label in [L.r_p,L.r_pd,L.r_v,L.r_lv,L.r_aa,L.r_t,L.r_c]: #right subcortical structures
-        data_new_aseg_wo_subc[x,y,z] = L.r_wm
+for (label,[x,y,z]) in list_LH:
+    data_new_aseg_wo_subc[x,y,z] = L.l_wm
+for (label,[x,y,z]) in list_RH:
+    data_new_aseg_wo_subc[x,y,z] = L.r_wm
     
 ### Save both new aseg
 img_new_aseg = nib.Nifti1Image(data_new_aseg, img_aseg.affine.copy())
