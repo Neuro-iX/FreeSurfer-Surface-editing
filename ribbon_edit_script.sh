@@ -8,7 +8,7 @@ Help ()
 builtin echo "
 AUTHOR: Benoît Verreman
 
-LAST UPDATE: 2025-01-20
+LAST UPDATE: 2025-01-24
 
 DESCRIPTION: 
 Use ribbon and subcortical NIFTI files to recompute pial surface,
@@ -540,8 +540,11 @@ class L:
     r_edit = 22 #rh manuel edit in ribbon
 
 ### Instantiate lists
-list_LH=[] #Subcortical structures in lh
-list_RH=[] #Subcortical structures in rh
+list_HA_LH=[] #lh Hippocampus/amygdala (HA) structures
+list_HA_RH=[] #rh Hippocampus/amygdala (HA) structures
+
+list_LH=[] #lh Subcortical structures except HA
+list_RH=[] #rh Subcortical structures except HA
 
 ### Modify BG, WM, GM, CC_anterior and subcortical structures based on ribbon
 for x in range(a):
@@ -552,32 +555,40 @@ for x in range(a):
             
             if aseg_voxel != ribbon_voxel: #Voxel for which label may have to be changed
                 match ribbon_voxel:
-            	    case 0 if aseg_voxel not in [L.l_cc,L.r_cc,L.l_cw,L.r_cw,L.bs,L.fv]: #correction of CEREBELLUM
+            	    case 0 if aseg_voxel not in [L.l_cc,L.r_cc,L.l_cw,L.r_cw,L.bs,L.fv]: #correction of background except cerebellum
             	        data_new_aseg[x,y,z] = ribbon_voxel
-            	    case L.l_gm | L.r_gm: 
+            	    case L.l_gm | L.r_gm: #correction of GM
             	        data_new_aseg[x,y,z] = ribbon_voxel
-            	    case L.l_edit:
-            	        data_new_aseg[x,y,z] = L.l_a
-            	    case L.r_edit:
-            	        data_new_aseg[x,y,z] = L.r_a
-            	    case L.l_wm:
-            	        if aseg_voxel in [0, L.l_gm, L.bs]:
+            	    case L.l_edit: #lh correction of Amygdala/hippocampus complex
+            	        list_HA_LH.append((ribbon_voxel,[x,y,z]))  #lh For second output only: HA into A
+            	        if aseg_voxel not in [L.l_a,L.l_h]: #lh Correction of not HA in edit part of ribbon
             	            data_new_aseg[x,y,z] = L.l_wm
-            	        elif aseg_voxel in [L.l_p,L.l_pd,L.l_v,L.l_lv,L.l_aa,L.l_t,L.l_c,L.l_cp,L.l_ilv,L.l_h,L.l_a,L.l_vs,L.wmh,L.oc,L.csf]: #SUBCORTICAL structure lh only
+            	    case L.r_edit: #rh correction of Amygdala/hippocampus complex
+            	        list_HA_RH.append((ribbon_voxel,[x,y,z]))  #rh For second output only: HA into A
+            	        if aseg_voxel not in [L.r_a,L.r_h]: #rh Correction of not HA in edit part of ribbon
+            	            data_new_aseg[x,y,z] = L.r_wm
+            	    case L.l_wm:
+            	        if aseg_voxel in [0,L.l_gm,L.bs,L.l_h,L.l_a,L.l_cc,L.r_cc]: #lh Correcting brain stem, amygdala and hippocampus in ribbon wm (and cerebellum cortex just in case)
+            	            data_new_aseg[x,y,z] = L.l_wm
+            	        elif aseg_voxel in [L.l_p,L.l_pd,L.l_v,L.l_lv,L.l_aa,L.l_t,L.l_c,L.l_cp,L.l_ilv,L.l_vs,L.wmh,L.oc,L.csf]: #lh For second output only: SUBCORTICAL into WM
             	            list_LH.append((aseg_voxel,[x,y,z]))
             	    case L.r_wm:
-            	        if aseg_voxel in [0, L.r_gm, L.bs]:
+            	        if aseg_voxel in [0,L.r_gm,L.bs,L.r_h,L.r_a,L.l_cc,L.r_cc]: #rh Correcting brain stem, amygdala and hippocampus in ribbon wm (and cerebellum cortex just in case)
             	            data_new_aseg[x,y,z] = L.r_wm
-            	        elif aseg_voxel in [L.r_p,L.r_pd,L.r_v,L.r_lv,L.r_aa,L.r_t,L.r_c,L.r_cp,L.r_ilv,L.r_h,L.r_a,L.r_vs,L.wmh,L.oc,L.csf]: #SUBCORTICAL structure rh only
+            	        elif aseg_voxel in [L.r_p,L.r_pd,L.r_v,L.r_lv,L.r_aa,L.r_t,L.r_c,L.r_cp,L.r_ilv,L.r_vs,L.wmh,L.oc,L.csf]: #rh For second output only: SUBCORTICAL into WM
             	            list_RH.append((aseg_voxel,[x,y,z]))
 
-### Copy data_new_aseg
+### Copy data_new_aseg (for second output)
 data_new_aseg_wo_subc = copy.deepcopy(data_new_aseg) #Copy to be edited
 
-### Replace different subcortical structures by WM (Putamen, VentralDC, CC_Anterior)
-for (label,[x,y,z]) in list_LH:
+### For second output only: Replace HA into A and other subcortical structures into WM
+for (label,[x,y,z]) in list_HA_LH: #lh HA into A
+    data_new_aseg_wo_subc[x,y,z] = L.l_a
+for (label,[x,y,z]) in list_HA_RH: #rh HA into A
+    data_new_aseg_wo_subc[x,y,z] = L.r_a
+for (label,[x,y,z]) in list_LH: # lh Subcortical into WM
     data_new_aseg_wo_subc[x,y,z] = L.l_wm
-for (label,[x,y,z]) in list_RH:
+for (label,[x,y,z]) in list_RH: # rh Subcortical into WM
     data_new_aseg_wo_subc[x,y,z] = L.r_wm
     
 ### Save both new aseg
