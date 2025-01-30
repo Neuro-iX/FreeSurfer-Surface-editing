@@ -8,7 +8,7 @@ Help ()
 builtin echo "
 AUTHOR: Benoît Verreman
 
-LAST UPDATE: 2025-01-24
+LAST UPDATE: 2025-01-30
 
 DESCRIPTION: 
 Use ribbon and subcortical NIFTI files to recompute pial surface,
@@ -102,7 +102,6 @@ TROUBLESHOOTS:
 #################
 ## Default global variables
 #################
-current_date_time=$(date)
 TAG=-1 # Start from beginning (option -t not used)
 HEMI=-1 # Both hemispheres (option -r or -l not used)
 FS=0 # Default: No recon-all (option -i not used)
@@ -625,7 +624,7 @@ $2"
 else
 	Echo "
 #---------------------------------
-#@# $1: $current_date_time
+#@# $1: $(date)f
 
 $2"
 fi
@@ -856,7 +855,7 @@ Echo "
 #*******************
 #*******************
 #*******************
-# New invocation: $current_date_time
+# New invocation: $(date)
 
 bash $(basename "$0") $string_arguments
 
@@ -1117,11 +1116,11 @@ do
 	
 	# Compute labels for pin-medial-wall
 	cmd "${H[$i]} Label2label for cortex" \
-	"mri_label2label --label-cortex ${ORIG[$i]} $ASEG_PRESURF 0 ${CORTEX_LABEL[$i]}"
+	"mri_label2label --label-cortex ${ORIG[$i]} $ASEG_PRESURF_WO_SUBC 0 ${CORTEX_LABEL[$i]}"
 	
 	# Compute labels to remove HIPOCAMPUS AND AMYGDALA from pial surface in mris_place_surface
 	cmd "${H[$i]} Label2label for cortex" \
-	"mri_label2label --label-cortex ${ORIG[$i]} $ASEG_PRESURF 1 ${CORTEX_HIPAMYG_LABEL[$i]}"
+	"mri_label2label --label-cortex ${ORIG[$i]} $ASEG_PRESURF_WO_SUBC 1 ${CORTEX_HIPAMYG_LABEL[$i]}"
 	
 	# Compute APARC cortical parcellation for --aparc option in mris_place_surface
 	cmd "${H[$i]} Sphere" \
