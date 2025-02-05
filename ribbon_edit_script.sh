@@ -8,7 +8,7 @@ Help ()
 builtin echo "
 AUTHOR: Benoît Verreman
 
-LAST UPDATE: 2025-01-30
+LAST UPDATE: 2025-02-05
 
 DESCRIPTION: 
 Use ribbon and subcortical NIFTI files to recompute pial surface,
@@ -102,6 +102,7 @@ TROUBLESHOOTS:
 #################
 ## Default global variables
 #################
+current_date_time=$(date)
 TAG=-1 # Start from beginning (option -t not used)
 HEMI=-1 # Both hemispheres (option -r or -l not used)
 FS=0 # Default: No recon-all (option -i not used)
@@ -318,9 +319,9 @@ if is_ribbon == '1': #change label edit ribbon
         for y in range(b):
             for z in range(c):
                 if data_in[x,y,z] == 14176:
-                    data_in[x,y,z]=21
+                    data_in[x,y,z]=2 #lh wm
                 elif data_in[x,y,z] == 14177:
-                    data_in[x,y,z]=22
+                    data_in[x,y,z]=41 #rh wm
     img = nib.Nifti1Image(data_in, img.affine.copy())
         
 #Padding function: reshape the image to (max_dim, max_dim, max_dim) with same resolution and an orientation of 'LAS'
@@ -405,8 +406,9 @@ for x in range(a):
                     if int(data_gmbm[k,n,m]) == 128:
                         mean+=data_bf[k,n,m]
                         nn+=1
-                data_bf_new[x,y,z]=80.0/(mean/nn)*val
-                data_bf_new2[x,y,z]=80.0/(mean/nn)*val
+                res = 80.0/(mean/nn)*val
+                data_bf_new[x,y,z] = res
+                data_bf_new2[x,y,z]= res
             if int(data_ribbon[x,y,z]) in [21,22]: #l_edit and r_edit
                 data_bf_new2[x,y,z]=0
 
@@ -539,11 +541,8 @@ class L:
     r_edit = 22 #rh manuel edit in ribbon
 
 ### Instantiate lists
-list_HA_LH=[] #lh Hippocampus/amygdala (HA) structures
-list_HA_RH=[] #rh Hippocampus/amygdala (HA) structures
-
-list_LH=[] #lh Subcortical structures except HA
-list_RH=[] #rh Subcortical structures except HA
+list_LH=[] #Subcortical structures in lh
+list_RH=[] #Subcortical structures in rh
 
 ### Modify BG, WM, GM, CC_anterior and subcortical structures based on ribbon
 for x in range(a):
@@ -554,40 +553,32 @@ for x in range(a):
             
             if aseg_voxel != ribbon_voxel: #Voxel for which label may have to be changed
                 match ribbon_voxel:
-            	    case 0 if aseg_voxel not in [L.l_cc,L.r_cc,L.l_cw,L.r_cw,L.bs,L.fv]: #correction of background except cerebellum
+            	    case 0 if aseg_voxel not in [L.l_cc,L.r_cc,L.l_cw,L.r_cw,L.bs,L.fv]: #correction of CEREBELLUM
             	        data_new_aseg[x,y,z] = ribbon_voxel
-            	    case L.l_gm | L.r_gm: #correction of GM
+            	    case L.l_gm | L.r_gm: 
             	        data_new_aseg[x,y,z] = ribbon_voxel
-            	    case L.l_edit: #lh correction of Amygdala/hippocampus complex
-            	        list_HA_LH.append((ribbon_voxel,[x,y,z]))  #lh For second output only: HA into A
-            	        if aseg_voxel not in [L.l_a,L.l_h]: #lh Correction of not HA in edit part of ribbon
-            	            data_new_aseg[x,y,z] = L.l_wm
-            	    case L.r_edit: #rh correction of Amygdala/hippocampus complex
-            	        list_HA_RH.append((ribbon_voxel,[x,y,z]))  #rh For second output only: HA into A
-            	        if aseg_voxel not in [L.r_a,L.r_h]: #rh Correction of not HA in edit part of ribbon
-            	            data_new_aseg[x,y,z] = L.r_wm
+            	    case L.l_edit:
+            	        data_new_aseg[x,y,z] = L.l_a
+            	    case L.r_edit:
+            	        data_new_aseg[x,y,z] = L.r_a
             	    case L.l_wm:
-            	        if aseg_voxel in [0,L.l_gm,L.bs,L.l_h,L.l_a,L.l_cc,L.r_cc]: #lh Correcting brain stem, amygdala and hippocampus in ribbon wm (and cerebellum cortex just in case)
+            	        if aseg_voxel in [0, L.l_gm, L.bs]:
             	            data_new_aseg[x,y,z] = L.l_wm
-            	        elif aseg_voxel in [L.l_p,L.l_pd,L.l_v,L.l_lv,L.l_aa,L.l_t,L.l_c,L.l_cp,L.l_ilv,L.l_vs,L.wmh,L.oc,L.csf]: #lh For second output only: SUBCORTICAL into WM
+            	        elif aseg_voxel in [L.l_p,L.l_pd,L.l_v,L.l_lv,L.l_aa,L.l_t,L.l_c,L.l_cp,L.l_ilv,L.l_h,L.l_a,L.l_vs,L.wmh,L.oc,L.csf]: #SUBCORTICAL structure lh only
             	            list_LH.append((aseg_voxel,[x,y,z]))
             	    case L.r_wm:
-            	        if aseg_voxel in [0,L.r_gm,L.bs,L.r_h,L.r_a,L.l_cc,L.r_cc]: #rh Correcting brain stem, amygdala and hippocampus in ribbon wm (and cerebellum cortex just in case)
+            	        if aseg_voxel in [0, L.r_gm, L.bs]:
             	            data_new_aseg[x,y,z] = L.r_wm
-            	        elif aseg_voxel in [L.r_p,L.r_pd,L.r_v,L.r_lv,L.r_aa,L.r_t,L.r_c,L.r_cp,L.r_ilv,L.r_vs,L.wmh,L.oc,L.csf]: #rh For second output only: SUBCORTICAL into WM
+            	        elif aseg_voxel in [L.r_p,L.r_pd,L.r_v,L.r_lv,L.r_aa,L.r_t,L.r_c,L.r_cp,L.r_ilv,L.r_h,L.r_a,L.r_vs,L.wmh,L.oc,L.csf]: #SUBCORTICAL structure rh only
             	            list_RH.append((aseg_voxel,[x,y,z]))
 
-### Copy data_new_aseg (for second output)
+### Copy data_new_aseg
 data_new_aseg_wo_subc = copy.deepcopy(data_new_aseg) #Copy to be edited
 
-### For second output only: Replace HA into A and other subcortical structures into WM
-for (label,[x,y,z]) in list_HA_LH: #lh HA into A
-    data_new_aseg_wo_subc[x,y,z] = L.l_a
-for (label,[x,y,z]) in list_HA_RH: #rh HA into A
-    data_new_aseg_wo_subc[x,y,z] = L.r_a
-for (label,[x,y,z]) in list_LH: # lh Subcortical into WM
+### Replace different subcortical structures by WM (Putamen, VentralDC, CC_Anterior)
+for (label,[x,y,z]) in list_LH:
     data_new_aseg_wo_subc[x,y,z] = L.l_wm
-for (label,[x,y,z]) in list_RH: # rh Subcortical into WM
+for (label,[x,y,z]) in list_RH:
     data_new_aseg_wo_subc[x,y,z] = L.r_wm
     
 ### Save both new aseg
@@ -624,7 +615,7 @@ $2"
 else
 	Echo "
 #---------------------------------
-#@# $1: $(date)f
+#@# $1: $current_date_time
 
 $2"
 fi
@@ -699,12 +690,7 @@ T1_MASKED="$O/mri/T1-masked.mgz"
 ASEG_PRESURF="$O/mri/aseg.presurf.mgz"
 ASEG_PRESURF_WO_SUBC="$O/mri/aseg.presurf_wo_subc.mgz"
 
-WM_BMASK_LH="$O/mri/wm-bmask-lh.mgz"
-WM_BMASK_RH="$O/mri/wm-bmask-rh.mgz"
-GM_BMASK_LH="$O/mri/gm-bmask-lh.mgz"
-GM_BMASK_RH="$O/mri/gm-bmask-rh.mgz"
-
-WM_BMASK="$O/mri/wm-bmask.mgz"
+WM_BMASK_ALL="$O/mri/wm-bmask.mgz"
 WM_MASK="$O/mri/wm-mask.mgz"
 WM_CONCAT="$O/mri/wm-concat.mgz"
 WM_BMASK_250="$O/mri/wm-bmask-250.mgz"
@@ -734,6 +720,7 @@ declare -a GM_BMASK=("$O/mri/gm-bmask_lh.mgz" "$O/mri/gm-bmask_rh.mgz")
 declare -a WM_BMASK=("$O/mri/wm-bmask_lh.mgz" "$O/mri/wm-bmask_rh.mgz")
 declare -a BMASK=("$O/mri/bmask_lh.mgz" "$O/mri/bmask_rh.mgz")
 declare -a BRAIN_FINALSURFS_NO_CEREB=("$O/mri/brain.finalsurfs_no_cereb_lh.mgz" "$O/mri/brain.finalsurfs_no_cereb_rh.mgz")
+declare -a BRAIN_FINALSURFS_NO_CEREB_UNIFORM_WM_110=("$O/mri/brain.finalsurfs_no_cereb_uniform_wm_110_lh.mgz" "$O/mri/brain.finalsurfs_no_cereb_uniform_wm_110_rh.mgz")
 declare -a BRAIN_FINALSURFS_NO_CEREB_UNIFORM_GM_80=("$O/mri/brain.finalsurfs_no_cereb_uniform_gm_80_lh.mgz" "$O/mri/brain.finalsurfs_no_cereb_uniform_gm_80_rh.mgz")
 declare -a BRAIN_FINALSURFS_NO_CEREB_EDITED=("$O/mri/brain.finalsurfs_no_cereb_edited_lh.mgz" "$O/mri/brain.finalsurfs_no_cereb_edited_rh.mgz")
 declare -a BRAIN_FINALSURFS_NO_CEREB_EDITED2=("$O/mri/brain.finalsurfs_no_cereb_edited2_lh.mgz" "$O/mri/brain.finalsurfs_no_cereb_edited2_rh.mgz")
@@ -855,7 +842,7 @@ Echo "
 #*******************
 #*******************
 #*******************
-# New invocation: $(date)
+# New invocation: $current_date_time
 
 bash $(basename "$0") $string_arguments
 
@@ -948,16 +935,16 @@ cmd "Use script $O/edit_aseg_presurf_based_on_ribbon.py on $ASEG_PRESURF_NOFIX" 
 fi
 
 #################
-## Compute WM_EDIT based on BRAIN_FINALSURFS masked by WM_BMASK
+## Compute WM_EDIT based on BRAIN_FINALSURFS masked by WM_BMASK_ALL
 #################
 if ((TAG<=5))
 then
 # Extract white matter from ribbon-edit to create wm-bmask.mgz
 cmd "Extract WM from $RIBBON_EDIT" \
-"mri_extract_label $RIBBON_EDIT ${LABEL_RIBBON_WM[0]} ${LABEL_RIBBON_WM[1]} $WM_BMASK" #0/128 binary mask
+"mri_extract_label $RIBBON_EDIT ${LABEL_RIBBON_WM[0]} ${LABEL_RIBBON_WM[1]} $WM_BMASK_ALL" #0/128 binary mask
 
-cmd "Concatenate $WM_BMASK with $WM into $WM_CONCAT" \
-"mri_concat --i $WM_BMASK --i $WM --o $WM_CONCAT --sum" #ROI at 378 (128+250)
+cmd "Concatenate $WM_BMASK_ALL with $WM into $WM_CONCAT" \
+"mri_concat --i $WM_BMASK_ALL --i $WM --o $WM_CONCAT --sum" #ROI at 378 (128+250)
 
 cmd "Binarize $WM_CONCAT at 251 into $WM_BMASK_250" \
 "mri_binarize --i $WM_CONCAT --o $WM_BMASK_250 --match 378"
@@ -966,8 +953,8 @@ cmd "Replace 1 by 250 into $WM_BMASK_250" \
 "mri_binarize --i $WM_BMASK_250 --o $WM_BMASK_250 --replace 1 250"
 
 # May also use $BRAIN_FINALSURFS
-cmd "Mask $BRAIN with $WM_BMASK into $WM_MASK" \
-"mri_mask -T 5 $BRAIN $WM_BMASK $WM_MASK"
+cmd "Mask $BRAIN with $WM_BMASK_ALL into $WM_MASK" \
+"mri_mask -T 5 $BRAIN $WM_BMASK_ALL $WM_MASK"
 
 cmd "Concatenate $WM_MASK with $WM_BMASK_250 into $WM_ASEGEDIT" \
 "mri_concat --i $WM_MASK --i $WM_BMASK_250 --o $WM_ASEGEDIT --max"
@@ -1061,7 +1048,7 @@ do
 		continue;
 	else
 	# Extract brain from ribbon-edit to create bmask.mgz (no cerebellum), and use the latter on brain.finalsurfs
-	cmd "${H[$i]} Extract GM from $RIBBON_EDIT" \
+	cmd "${H[$i]} Extract forebrain from $RIBBON_EDIT" \
 	"mri_extract_label $RIBBON_EDIT ${LABEL_RIBBON_GM[$i]} ${LABEL_RIBBON_WM[$i]} ${BMASK[$i]}" #0/128 binary mask
 
 	cmd "${H[$i]} Replace 128 by 1 into ${BMASK[$i]}" \
@@ -1070,17 +1057,25 @@ do
 	cmd "${H[$i]} Mask $BRAIN_FINALSURFS with ${BMASK[$i]} into ${BRAIN_FINALSURFS_NO_CEREB[$i]}" \
 	"mri_mask $BRAIN_FINALSURFS ${BMASK[$i]} ${BRAIN_FINALSURFS_NO_CEREB[$i]}"
 
+	# Extract white matter from ribbon-edit to create wm-bmask.mgz
+	cmd "${H[$i]} Extract GM from $RIBBON_EDIT" \
+	"mri_extract_label $RIBBON_EDIT ${LABEL_RIBBON_WM[$i]} ${WM_BMASK[$i]}" #0/128 binary mask
+
+	cmd "${H[$i]} Concatenate ${WM_BMASK[$i]} with ${BRAIN_FINALSURFS_NO_CEREB[$i]} into ${BRAIN_FINALSURFS_NO_CEREB_UNIFORM_WM_110[$i]}" \
+	"mri_concat --i ${WM_BMASK[$i]} --i ${BRAIN_FINALSURFS_NO_CEREB[$i]} --o ${BRAIN_FINALSURFS_NO_CEREB_UNIFORM_WM_110[$i]} --max"
+
+	cmd "${H[$i]} Replace 128 by 110 in ${BRAIN_FINALSURFS_NO_CEREB_UNIFORM_WM_110[$i]}" \
+	"mri_binarize --i ${BRAIN_FINALSURFS_NO_CEREB_UNIFORM_WM_110[$i]} --o ${BRAIN_FINALSURFS_NO_CEREB_UNIFORM_WM_110[$i]} --replace 128 110"
+	
 	# Extract gray matter from ribbon-edit to create gm-bmask.mgz, and create with it bf_80
 	cmd "${H[$i]} Extract GM from $RIBBON_EDIT" \
 	"mri_extract_label $RIBBON_EDIT ${LABEL_RIBBON_GM[$i]} ${GM_BMASK[$i]}" #0/128 binary mask
 
 	cmd "${H[$i]} Concatenate ${GM_BMASK[$i]} with ${BRAIN_FINALSURFS_NO_CEREB[$i]} into ${BRAIN_FINALSURFS_NO_CEREB_UNIFORM_GM_80[$i]}" \
-	"mri_concat --i ${GM_BMASK[$i]} --i ${BRAIN_FINALSURFS_NO_CEREB[$i]} --o ${BRAIN_FINALSURFS_NO_CEREB_UNIFORM_GM_80[$i]} --max"
+	"mri_concat --i ${GM_BMASK[$i]} --i ${BRAIN_FINALSURFS_NO_CEREB_UNIFORM_WM_110[$i]} --o ${BRAIN_FINALSURFS_NO_CEREB_UNIFORM_GM_80[$i]} --max"
 
-	cmd "${H[$i]} Replace 128 by 80 into ${BRAIN_FINALSURFS_NO_CEREB_UNIFORM_80[$i]}" \
+	cmd "${H[$i]} Replace 128 by 80 in ${BRAIN_FINALSURFS_NO_CEREB_UNIFORM_GM_80[$i]}" \
 	"mri_binarize --i ${BRAIN_FINALSURFS_NO_CEREB_UNIFORM_GM_80[$i]} --o ${BRAIN_FINALSURFS_NO_CEREB_UNIFORM_GM_80[$i]} --replace 128 80"
-
-
 	fi
 done
 fi
@@ -1099,7 +1094,7 @@ do
 	
 	# Use script brain-finalsurfs-edit.py to edit brain.finalsurfs.mgz
 	cmd "${H[$i]} Use script $O/brain-finalsurfs-edit.py on ${BRAIN_FINALSURFS_NO_CEREB[$i]} with ${GM_BMASK[$i]}" \
-	"python $O/brain-finalsurfs-edit.py ${BRAIN_FINALSURFS_NO_CEREB[$i]} ${GM_BMASK[$i]} ${BRAIN_FINALSURFS_NO_CEREB_EDITED[$i]} ${BRAIN_FINALSURFS_NO_CEREB_EDITED2[$i]} $RIBBON_EDIT"
+	"python $O/brain-finalsurfs-edit.py ${BRAIN_FINALSURFS_NO_CEREB_UNIFORM_WM_110[$i]} ${GM_BMASK[$i]} ${BRAIN_FINALSURFS_NO_CEREB_EDITED[$i]} ${BRAIN_FINALSURFS_NO_CEREB_EDITED2[$i]} $RIBBON_EDIT"
 	
 	# Compute stats
 	cmd "${H[$i]} Computes stats for pial surface" \
@@ -1174,7 +1169,7 @@ do
 		continue;
 	else		
 	cmd "${H[$i]} Smooths pial surface" \
-	"mris_place_surface --i ${RIBBON_EDIT_PIAL_SECOND_PASS_i_w[$i]} --o ${RIBBON_EDIT_PIAL_THIRD_PASS_SMOOTH[$i]} --nsmooth 1 --adgws-in ${AUTODET_NEW_GW_STATS[$i]} --pial --${H[$i]} --repulse-surf ${RIBBON_EDIT_PIAL_SECOND_PASS_i_w[$i]} --invol ${BRAIN_FINALSURFS_NO_CEREB_EDITED[$i]} --threads 6 --white-surf ${ORIG[$i]} --pin-medial-wall ${CORTEX_LABEL[$i]} --seg $ASEG_PRESURF_WO_SUBC --no-rip" #--rip-label #--rip-bg isn't recognised
+	"mris_place_surface --i ${RIBBON_EDIT_PIAL_SECOND_PASS_i_w[$i]} --o ${RIBBON_EDIT_PIAL_THIRD_PASS_SMOOTH[$i]} --nsmooth 1 --adgws-in ${AUTODET_NEW_GW_STATS[$i]} --pial --${H[$i]} --repulse-surf ${RIBBON_EDIT_PIAL_SECOND_PASS_i_w[$i]} --invol ${BRAIN_FINALSURFS_NO_CEREB_EDITED2[$i]} --threads 6 --white-surf ${ORIG[$i]} --pin-medial-wall ${CORTEX_LABEL[$i]} --seg $ASEG_PRESURF_WO_SUBC --no-rip" #--rip-label #--rip-bg isn't recognised
 	fi
 done
 fi
