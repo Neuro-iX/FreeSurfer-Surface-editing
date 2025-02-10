@@ -326,9 +326,9 @@ if is_ribbon == '1': #change label edit ribbon
         for y in range(b):
             for z in range(c):
                 if data_in[x,y,z] == 14176:
-                    data_in[x,y,z]=2 #lh wm
+                    data_in[x,y,z]=21 #2 #lh wm
                 elif data_in[x,y,z] == 14177:
-                    data_in[x,y,z]=41 #rh wm
+                    data_in[x,y,z]=22 #41 #rh wm
     img = nib.Nifti1Image(data_in, img.affine.copy())
         
 #Padding function: reshape the image to (max_dim, max_dim, max_dim) with same resolution and an orientation of 'LAS'
