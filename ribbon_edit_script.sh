@@ -8,7 +8,7 @@ Help ()
 builtin echo "
 AUTHOR: Benoît Verreman
 
-LAST UPDATE: 2025-02-05
+LAST UPDATE: 2025-02-10
 
 DESCRIPTION: 
 Use ribbon and subcortical NIFTI files to recompute pial surface,
@@ -60,6 +60,9 @@ INPUT FILES
 -b: Relative or absolute path to ribbon file
 -c: Relative or absolute path to subcortical file
 
+OPTION
+-n: Use ribbon-edit (with labels 21 (lh HA) and 22 (rh HA)) instead of aparc+aseg
+
 TAG
 -t 0: (ribbons) Start with resizing RIBBON_EDIT and SUBCORTICAL
 -t 1: (bmask) Start with BRAIN_MASK
@@ -102,13 +105,13 @@ TROUBLESHOOTS:
 #################
 ## Default global variables
 #################
-current_date_time=$(date)
+RIB=0 # Do not use ribbon-edit file (with labels 21 and 22 for HA complex, but use aparc+aseg file for -b option
 TAG=-1 # Start from beginning (option -t not used)
 HEMI=-1 # Both hemispheres (option -r or -l not used)
 FS=0 # Default: No recon-all (option -i not used)
 MULTICASE=0 # Default: Only one case (option -f not used)
 OUTPUT_FOLDER="outputs"
-LABELS_SUBCORTICAL="5 15 29 30 32 31"
+LABELS_SUBCORTICAL="7 8 15 16 46 47" # "5 15 29 30 32 31"
 declare -a H=("lh" "rh") #Left then Right hemispheres
 declare -a LABEL_RIBBON_WM=("2" "41")
 declare -a LABEL_RIBBON_GM=("3" "42")
@@ -128,7 +131,7 @@ unset -v RIBBON
 unset -v SUBCORTICAL
 
 #If a character is followed by :, then it needs an argument just after
-VALID_ARGS="i:s:b:c:t:p:f:hlrd"
+VALID_ARGS="i:s:b:c:t:p:f:hlrdn"
 
 while getopts ${VALID_ARGS} opt; do
   case ${opt} in
@@ -145,10 +148,14 @@ while getopts ${VALID_ARGS} opt; do
         RIBBON=${OPTARG}
         string_arguments+="-b ${OPTARG} "
         ;;
+    n)
+        RIB=1 #-b will be given ribbon-edit instead of aparc+aseg
+        LABELS_SUBCORTICAL="5 15 29 30 32 31"
+        ;;
     c)
         SUBCORTICAL=${OPTARG}
         string_arguments+="-c ${OPTARG} "
-        ;;     
+        ;;
     t)
 	TAG=${OPTARG}
 	string_arguments+="-t ${OPTARG} "
@@ -615,7 +622,7 @@ $2"
 else
 	Echo "
 #---------------------------------
-#@# $1: $current_date_time
+#@# $1: $(date)
 
 $2"
 fi
@@ -842,7 +849,7 @@ Echo "
 #*******************
 #*******************
 #*******************
-# New invocation: $current_date_time
+# New invocation: $(date)
 
 bash $(basename "$0") $string_arguments
 
@@ -1124,6 +1131,7 @@ do
  	"mris_register -curv ${SPHERE[$i]} ${FOLDING_ATLAS_ACFB40[$i]} ${SPHERE_REG[$i]}"
  	cmd "${H[$i]} Cortical Parc" \
  	"mris_ca_label -l ${CORTEX_LABEL[$i]} -aseg $ASEG_PRESURF -seed 1234 $SUBJID/$OUTPUT_FOLDER ${H[$i]} ${SPHERE_REG[$i]} ${DKAPARC_ATLAS_ACFB40[$i]} ${APARC_ANNOT[$i]}"
+ 	
 	fi
 done
 fi
