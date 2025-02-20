@@ -8,7 +8,7 @@ Help ()
 builtin echo "
 AUTHOR: Benoît Verreman
 
-LAST UPDATE: 2025-02-10
+LAST UPDATE: 2025-02-13
 
 DESCRIPTION: 
 Use ribbon and subcortical NIFTI files to recompute pial surface,
@@ -56,12 +56,15 @@ HELP
 
 INPUT FILES
 -i: Relative or absolute path to T1w image file
--s: Relative or absolute path to subjid folder (Necessary)
--b: Relative or absolute path to ribbon file
--c: Relative or absolute path to subcortical file
+-s: Relative or absolute path to subjid folder (NECESSARY)
+-b: Relative or absolute path to ribbon file (ribbon without labels 21 and 22, by default) (if option n: add labels 21 and 22 for HA)
+-c: Relative or absolute path to subcortical file (aparc+aseg.nii.gz, by default) (if option n: use another subcortical files, replace LABELS_SUBCORTICAL accordingly)
 
-OPTION
--n: Use ribbon-edit (with labels 21 (lh HA) and 22 (rh HA)) instead of aparc+aseg
+-n: List of labels (LABELS_SUBCORTICAL) to be used in subcortical file (-c)
+#The default list is meant for aparc+aseg.nii.gz.
+#If -n is used, it also means that HA is specified in the ribbon (-b) (with labels 21 (lh HA) and 22 (rh HA)), and not in aparc+aseg.nii.gz anymore)
+#for aparc+aseg.nii.gz : LABELS_SUBCORTICAL='7 8 15 16 46 47' (default, no need to use -n option)
+#for previous subcortical files : LABELS_SUBCORTICAL='5 15 29 30 32 31'
 
 TAG
 -t 0: (ribbons) Start with resizing RIBBON_EDIT and SUBCORTICAL
@@ -105,13 +108,15 @@ TROUBLESHOOTS:
 #################
 ## Default global variables
 #################
-RIB=0 # Do not use ribbon-edit file (with labels 21 and 22 for HA complex, but use aparc+aseg file for -b option
+RIB=0 # Use aparc+aseg file for HA (and not ribbon-edit file with labels 21 and 22 for HA complex)
 TAG=-1 # Start from beginning (option -t not used)
 HEMI=-1 # Both hemispheres (option -r or -l not used)
 FS=0 # Default: No recon-all (option -i not used)
 MULTICASE=0 # Default: Only one case (option -f not used)
 OUTPUT_FOLDER="outputs"
-LABELS_SUBCORTICAL="7 8 15 16 46 47" # "5 15 29 30 32 31"
+LABELS_SUBCORTICAL="7 8 15 16 46 47" #for previous subcortical files (given to -c) : "5 15 29 30 32 31"
+declare -a LABELS_HA=("5 17 18" "44 53 54") #HA in aparc+aseg
+declare -a LABELS_HA_RIB=("21" "22") #HA in ribbon (-n flag)
 declare -a H=("lh" "rh") #Left then Right hemispheres
 declare -a LABEL_RIBBON_WM=("2" "41")
 declare -a LABEL_RIBBON_GM=("3" "42")
@@ -131,7 +136,7 @@ unset -v RIBBON
 unset -v SUBCORTICAL
 
 #If a character is followed by :, then it needs an argument just after
-VALID_ARGS="i:s:b:c:t:p:f:hlrdn"
+VALID_ARGS="i:s:b:n:c:t:p:f:hlrd"
 
 while getopts ${VALID_ARGS} opt; do
   case ${opt} in
@@ -149,8 +154,11 @@ while getopts ${VALID_ARGS} opt; do
         string_arguments+="-b ${OPTARG} "
         ;;
     n)
-        RIB=1 #-b will be given ribbon-edit instead of aparc+aseg
-        LABELS_SUBCORTICAL="5 15 29 30 32 31"
+        LABELS_SUBCORTICAL=${OPTARG} #for previous subcortical files : "5 15 29 30 32 31"
+        string_arguments+="-n ${OPTARG} "
+        RIB=1
+        LABELS_HA[0]=${LABELS_HA_RIB[0]}
+        LABELS_HA[1]=${LABELS_HA_RIB[1]}
         ;;
     c)
         SUBCORTICAL=${OPTARG}
@@ -269,6 +277,7 @@ then
 	mkdir $O/stats;
 fi
 
+script_ha_ribbon_edit
 script_nifti_padding
 script_brain-finalsurfs-edit
 script_edit_aseg_presurf_based_on_ribbon
@@ -292,6 +301,73 @@ cmd "Reset $O" \
 }
 
 #################
+## Create a python script "ha_ribbon_edit.py"
+#################
+script_ha_ribbon_edit()
+{
+if [ ! -f "$O/ha_ribbon_edit.py" ]
+then
+
+cat > $O/ha_ribbon_edit.py <<EOF
+import os
+import nibabel as nib
+import nibabel.processing #Used in nib.processing.conform
+import scipy.ndimage #Used in nib.processing.conform
+import sys #To add arguments
+import copy #For deepcopy
+
+#Arguments
+path_ribbon = sys.argv[1]
+path_aparc = sys.argv[2]
+path_out = sys.argv[3]
+labels_ha_lh = sys.argv[4]
+labels_ha_rh = sys.argv[5]
+labels_ha_rib_lh = sys.argv[6]
+labels_ha_rib_rh = sys.argv[7]
+
+#Load ribbon
+if not os.path.isfile(path_ribbon):
+    raise FileNotFoundError("The following path doesn't exist: " + path_ribbon)
+else:
+    img_ribbon = nib.load(path_ribbon)
+data_ribbon = img_ribbon.get_fdata()
+(a,b,c)=img_ribbon.header.get_data_shape()
+
+#Load aparc+aseg
+if not os.path.isfile(path_aparc):
+    raise FileNotFoundError("The following path doesn't exist: " + path_aparc)
+else:
+    img_aparc = nib.load(path_aparc)
+data_aparc = img_aparc.get_fdata()
+
+#Deepcopy of data_ribbon
+data_out= copy.deepcopy(data_ribbon)
+
+#labels into list
+labels_ha_lh = list(map(int,labels_ha_lh.split()))
+labels_ha_rh = list(map(int,labels_ha_rh.split()))
+labels_ha_rib_lh = int(labels_ha_rib_lh)
+labels_ha_rib_rh = int(labels_ha_rib_rh)
+
+#Edit ribbon with HA from aparc+aseg
+for x in range(a):
+    for y in range(b):
+        for z in range(c):
+            aparc=data_aparc[x,y,z]
+            if aparc in labels_ha_lh:
+                data_out[x,y,z]=labels_ha_rib_lh #21 #lh HA
+            elif aparc in labels_ha_rh:
+                data_out[x,y,z]=labels_ha_rib_rh #22 #rh HA
+
+#Create and save new images
+img_out = nib.Nifti1Image(data_out, img_ribbon.affine.copy())
+nib.save(img_out, path_out)
+
+EOF
+fi
+}
+
+#################
 ## Create a python script "nifti_padding.py"
 #################
 script_nifti_padding()
@@ -309,28 +385,16 @@ import sys #To add arguments
 # SUBJID directory
 img_in = sys.argv[1]
 img_out = sys.argv[2]
-is_ribbon = sys.argv[3]
 
 #Load image to be treated
 if not os.path.isfile(img_in):
     raise FileNotFoundError("The following path doesn't exist: " + img_in)
 else:
     img = nib.load(img_in)
-    
-    
+
 data_in = img.get_fdata()
 (a,b,c)=img.header.get_data_shape()
 
-if is_ribbon == '1': #change label edit ribbon
-    for x in range(a):
-        for y in range(b):
-            for z in range(c):
-                if data_in[x,y,z] == 14176:
-                    data_in[x,y,z]=21 #2 #lh wm
-                elif data_in[x,y,z] == 14177:
-                    data_in[x,y,z]=22 #41 #rh wm
-    img = nib.Nifti1Image(data_in, img.affine.copy())
-        
 #Padding function: reshape the image to (max_dim, max_dim, max_dim) with same resolution and an orientation of 'LAS'
 def padding(img, new_name):
     d = max(img.header.get_data_shape())
@@ -364,7 +428,7 @@ path_bf = sys.argv[1] #Brain.finalsurfs without the cerebellum
 path_gmbm = sys.argv[2] #Gray Matter binary mask at 128 (by default) (based on ribbon-edit.mgz)
 path_out = sys.argv[3] #Absolute path of the output brain.finalsurfs
 path_out2 = sys.argv[4] #Absolute path of the output brain.finalsurfs
-path_ribbon = sys.argv[5] #Put added labels in ribbon as background in brain.finalsurfs
+path_ha = sys.argv[5] #Put HA as background in brain.finalsurfs (in ribbon-edit)
 
 #Load brain.finalsurfs without the cerebellum
 if not os.path.isfile(path_bf):
@@ -387,11 +451,11 @@ if (a!=e or b!=f or c!=g):
     sys.exit(0)
 
 #Load ribbon
-if not os.path.isfile(path_ribbon):
-    raise FileNotFoundError("Make sure the following path is correct: " + path_ribbon)
+if not os.path.isfile(path_ha):
+    raise FileNotFoundError("Make sure the following path is correct: " + path_ha)
 else:
-    img_ribbon = nib.load(path_ribbon)
-data_ribbon = img_ribbon.get_fdata()
+    img_ha = nib.load(path_ha)
+data_ha = img_ha.get_fdata()
 
 #List of coordinates of the 26-nearest-neighbors around (0,0,0) plus itself
 motion = np.transpose(np.indices((3,3,3)) - 1).reshape(-1, 3)
@@ -416,7 +480,7 @@ for x in range(a):
                 res = 80.0/(mean/nn)*val
                 data_bf_new[x,y,z] = res
                 data_bf_new2[x,y,z]= res
-            if int(data_ribbon[x,y,z]) in [21,22]: #l_edit and r_edit
+            if int(data_ha[x,y,z]) in [21,22]: #l_edit and r_edit
                 data_bf_new2[x,y,z]=0
 
 #Create and save new images
@@ -684,10 +748,9 @@ IMAGE_PADDED="$SUBJECTS_DIR/$SUBJID/image-padded.mgz"
 
 RIBBON_PADDED="$O/mri/ribbon-precorrection.mgz"
 SUBCORTICAL_PADDED="$O/mri/subcortical-precorrection.mgz"
+RIBBON_CONVERT="$O/mri/ribbon-convert.mgz"
 RIBBON_EDIT="$O/mri/ribbon-edit.mgz"
 SUBCORTICAL_EDIT="$O/mri/subcortical-edit.mgz"
-
-RIBBON_EDIT2="$O/mri/ribbon-edit2.mgz"
 
 SUBCORTICAL_MASK="$O/mri/subcortical-mask.mgz"
 BRAIN_MASK="$O/mri/brain-mask.mgz"
@@ -871,7 +934,7 @@ then
 fi
 
 cmd "Compensate for future translation in FreeSurfer" \
-"python $O/nifti_padding.py $IMAGE $IMAGE_PADDED 0"
+"python $O/nifti_padding.py $IMAGE $IMAGE_PADDED"
 
 cmd "Add SUBJID to SUBJECTS_DIR" \
 "export SUBJECTS_DIR=$SUBJECTS_DIR/$SUBJID"
@@ -895,14 +958,14 @@ Echo "# Given ribbon: $RIBBON"
 Echo "# Given subcortical: $SUBCORTICAL"
 
 cmd "Use script $O/nifti_padding.py on $RIBBON" \
-"python $O/nifti_padding.py $RIBBON $RIBBON_PADDED 1"
+"python $O/nifti_padding.py $RIBBON $RIBBON_PADDED"
 
 cmd "Use script $O/nifti_padding.py on $SUBCORTICAL" \
-"python $O/nifti_padding.py $SUBCORTICAL $SUBCORTICAL_PADDED 0"
+"python $O/nifti_padding.py $SUBCORTICAL $SUBCORTICAL_PADDED"
 
 #Necessary for correcting the orientation of the image
 cmd "Convert $RIBBON_PADDED" \
-"mri_convert $RIBBON_PADDED $RIBBON_EDIT -rt nearest -ns 1 --conform_min"
+"mri_convert $RIBBON_PADDED $RIBBON_CONVERT -rt nearest -ns 1 --conform_min"
 
 cmd "Convert $SUBCORTICAL_PADDED" \
 "mri_convert $SUBCORTICAL_PADDED $SUBCORTICAL_EDIT -rt nearest -ns 1 --conform_min"
@@ -913,6 +976,16 @@ fi
 #################
 if ((TAG<=1))
 then
+
+if ((RIB==0))
+then
+cmd "Use script $O/ha_ribbon_edit.py on $RIBBON_CONVERT to add HA from $SUBCORTICAL_EDIT" \
+"python $O/ha_ribbon_edit.py $RIBBON_CONVERT $SUBCORTICAL_EDIT $RIBBON_EDIT '${LABELS_HA[0]}' '${LABELS_HA[1]}' ${LABELS_HA_RIB[0]} ${LABELS_HA_RIB[1]}"
+else
+cmd "Copy $RIBBON_CONVERT in $RIBBON_EDIT" \
+"cp $RIBBON_CONVERT $RIBBON_EDIT" 
+fi
+
 cmd "Extract labels from $SUBCORTICAL_EDIT (Cerebellum, Medulla oblongata, Pons and Midbrain) into $SUBCORTICAL_MASK" \
 "mri_extract_label $SUBCORTICAL_EDIT $LABELS_SUBCORTICAL $SUBCORTICAL_MASK"
 
