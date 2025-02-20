@@ -8,7 +8,7 @@ Help ()
 builtin echo "
 AUTHOR: Benoît Verreman
 
-LAST UPDATE: 2025-02-13
+LAST UPDATE: 2025-02-20
 
 DESCRIPTION: 
 Use ribbon and subcortical NIFTI files to recompute pial surface,
@@ -324,6 +324,7 @@ labels_ha_lh = sys.argv[4]
 labels_ha_rh = sys.argv[5]
 labels_ha_rib_lh = sys.argv[6]
 labels_ha_rib_rh = sys.argv[7]
+rib = sys.argv[8]
 
 #Load ribbon
 if not os.path.isfile(path_ribbon):
@@ -350,19 +351,31 @@ labels_ha_rib_lh = int(labels_ha_rib_lh)
 labels_ha_rib_rh = int(labels_ha_rib_rh)
 
 #Edit ribbon with HA from aparc+aseg
-for x in range(a):
-    for y in range(b):
-        for z in range(c):
-            aparc=data_aparc[x,y,z]
-            if aparc in labels_ha_lh:
-                data_out[x,y,z]=labels_ha_rib_lh #21 #lh HA
-            elif aparc in labels_ha_rh:
-                data_out[x,y,z]=labels_ha_rib_rh #22 #rh HA
+if rib:
+    for x in range(a):
+        for y in range(b):
+            for z in range(c):
+                aparc=data_aparc[x,y,z]
+                if aparc in labels_ha_lh:
+                    data_out[x,y,z]=labels_ha_rib_lh #21 #lh HA
+                elif aparc in labels_ha_rh:
+                    data_out[x,y,z]=labels_ha_rib_rh #22 #rh HA
+
+#Correct affine matrix after freeview+nibabel+mri_convert
+b = img_ribbon.affine.copy()
+a = img_aparc.affine.copy()
+
+if b[3,2]>127.5:
+    b[3,2]=127.5
+if a[3,2]>127.5:
+    a[3,2]=127.5
 
 #Create and save new images
-img_out = nib.Nifti1Image(data_out, img_ribbon.affine.copy())
-nib.save(img_out, path_out)
+img_out_rib = nib.Nifti1Image(data_out, b)
+nib.save(img_out_rib, path_out)
 
+img_out_aparc = nib.Nifti1Image(data_aparc, a)
+nib.save(img_out_aparc, path_aparc)
 EOF
 fi
 }
@@ -977,14 +990,15 @@ fi
 if ((TAG<=1))
 then
 
-if ((RIB==0))
-then
 cmd "Use script $O/ha_ribbon_edit.py on $RIBBON_CONVERT to add HA from $SUBCORTICAL_EDIT" \
-"python $O/ha_ribbon_edit.py $RIBBON_CONVERT $SUBCORTICAL_EDIT $RIBBON_EDIT '${LABELS_HA[0]}' '${LABELS_HA[1]}' ${LABELS_HA_RIB[0]} ${LABELS_HA_RIB[1]}"
-else
-cmd "Copy $RIBBON_CONVERT in $RIBBON_EDIT" \
-"cp $RIBBON_CONVERT $RIBBON_EDIT" 
-fi
+"python $O/ha_ribbon_edit.py $RIBBON_CONVERT $SUBCORTICAL_EDIT $RIBBON_EDIT '${LABELS_HA[0]}' '${LABELS_HA[1]}' ${LABELS_HA_RIB[0]} ${LABELS_HA_RIB[1]} $RIB"
+
+#if ((RIB==0))
+#then
+#else
+#cmd "Copy $RIBBON_CONVERT in $RIBBON_EDIT" \
+#"cp $RIBBON_CONVERT $RIBBON_EDIT" 
+#fi
 
 cmd "Extract labels from $SUBCORTICAL_EDIT (Cerebellum, Medulla oblongata, Pons and Midbrain) into $SUBCORTICAL_MASK" \
 "mri_extract_label $SUBCORTICAL_EDIT $LABELS_SUBCORTICAL $SUBCORTICAL_MASK"
