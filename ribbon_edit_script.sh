@@ -8,7 +8,7 @@ Help ()
 builtin echo "
 AUTHOR: Benoît Verreman
 
-LAST UPDATE: 2025-02-20
+LAST UPDATE: 2025-03-14
 
 DESCRIPTION: 
 Use ribbon and subcortical NIFTI files to recompute pial surface,
@@ -108,7 +108,7 @@ TROUBLESHOOTS:
 #################
 ## Default global variables
 #################
-RIB=0 # Use aparc+aseg file for HA (and not ribbon-edit file with labels 21 and 22 for HA complex)
+HA_IN_SUBC=1 # Use aparc+aseg file for HA (and not ribbon-edit file with labels 21 and 22 for HA complex)
 TAG=-1 # Start from beginning (option -t not used)
 HEMI=-1 # Both hemispheres (option -r or -l not used)
 FS=0 # Default: No recon-all (option -i not used)
@@ -156,7 +156,7 @@ while getopts ${VALID_ARGS} opt; do
     n)
         LABELS_SUBCORTICAL=${OPTARG} #for previous subcortical files : "5 15 29 30 32 31"
         string_arguments+="-n ${OPTARG} "
-        RIB=1
+        HA_IN_SUBC=0
         LABELS_HA[0]=${LABELS_HA_RIB[0]}
         LABELS_HA[1]=${LABELS_HA_RIB[1]}
         ;;
@@ -324,7 +324,7 @@ labels_ha_lh = sys.argv[4]
 labels_ha_rh = sys.argv[5]
 labels_ha_rib_lh = sys.argv[6]
 labels_ha_rib_rh = sys.argv[7]
-rib = sys.argv[8]
+ha_in_subc = int(sys.argv[8])
 
 #Load ribbon
 if not os.path.isfile(path_ribbon):
@@ -351,7 +351,7 @@ labels_ha_rib_lh = int(labels_ha_rib_lh)
 labels_ha_rib_rh = int(labels_ha_rib_rh)
 
 #Edit ribbon with HA from aparc+aseg
-if rib:
+if ha_in_subc:
     for x in range(a):
         for y in range(b):
             for z in range(c):
@@ -361,20 +361,11 @@ if rib:
                 elif aparc in labels_ha_rh:
                     data_out[x,y,z]=labels_ha_rib_rh #22 #rh HA
 
-#Correct affine matrix after freeview+nibabel+mri_convert
-b = img_ribbon.affine.copy()
-a = img_aparc.affine.copy()
-
-if b[3,2]>127.5:
-    b[3,2]=127.5
-if a[3,2]>127.5:
-    a[3,2]=127.5
-
 #Create and save new images
-img_out_rib = nib.Nifti1Image(data_out, b)
+img_out_rib = nib.Nifti1Image(data_out, img_ribbon.affine.copy())
 nib.save(img_out_rib, path_out)
 
-img_out_aparc = nib.Nifti1Image(data_aparc, a)
+img_out_aparc = nib.Nifti1Image(data_aparc, img_aparc.affine.copy())
 nib.save(img_out_aparc, path_aparc)
 EOF
 fi
@@ -394,10 +385,12 @@ import nibabel as nib
 import nibabel.processing #Used in nib.processing.conform
 import scipy.ndimage #Used in nib.processing.conform
 import sys #To add arguments
+import subprocess
 
 # SUBJID directory
 img_in = sys.argv[1]
-img_out = sys.argv[2]
+img_padded = sys.argv[2]
+is_t1 = int(sys.argv[3])
 
 #Load image to be treated
 if not os.path.isfile(img_in):
@@ -405,17 +398,22 @@ if not os.path.isfile(img_in):
 else:
     img = nib.load(img_in)
 
-data_in = img.get_fdata()
-(a,b,c)=img.header.get_data_shape()
-
 #Padding function: reshape the image to (max_dim, max_dim, max_dim) with same resolution and an orientation of 'LAS'
 def padding(img, new_name):
     d = max(img.header.get_data_shape())
-    new_img = nib.processing.conform(img, out_shape=(311, 311, 311), \
-    voxel_size = img.header.get_zooms(), order=0, cval=0, orientation='LAS', out_class=None) #d
+    new_img = nib.processing.conform(img, out_shape=(311, 311, 311),     voxel_size = img.header.get_zooms(), order=0, cval=0, orientation='LAS', out_class=None) #d
     nib.save(new_img, new_name)
 
-padding(img, img_out)
+if is_t1:
+    padding(img, img_padded)
+    print('apply_recon_all')
+else:
+    a = img.affine.copy()
+    if int(a[0,3]) == 90:
+        padding(img, img_padded)
+        print('convert')
+    else:
+        print('no_convert')
 
 EOF
 fi
@@ -946,8 +944,8 @@ then
 	exit 1
 fi
 
-cmd "Compensate for future translation in FreeSurfer" \
-"python $O/nifti_padding.py $IMAGE $IMAGE_PADDED"
+cmd "Compensate for future translation in recon-all" \
+"result=`python $O/nifti_padding.py $IMAGE $IMAGE_PADDED 1`"
 
 cmd "Add SUBJID to SUBJECTS_DIR" \
 "export SUBJECTS_DIR=$SUBJECTS_DIR/$SUBJID"
@@ -970,18 +968,29 @@ then
 Echo "# Given ribbon: $RIBBON"
 Echo "# Given subcortical: $SUBCORTICAL"
 
+#If needed, correcting the dimensions of the image with padding
 cmd "Use script $O/nifti_padding.py on $RIBBON" \
-"python $O/nifti_padding.py $RIBBON $RIBBON_PADDED"
+"result=`python $O/nifti_padding.py $RIBBON $RIBBON_PADDED 0`"
+
+	if [[ "$result" == "convert" ]]; then
+	cmd "Convert $RIBBON_PADDED" \
+	"mri_convert $RIBBON_PADDED $RIBBON_CONVERT -rt nearest -ns 1 --conform_min"
+	else
+	cmd "Copy $RIBBON in $RIBBON_CONVERT" \
+	"cp $RIBBON $RIBBON_CONVERT" 
+	fi
 
 cmd "Use script $O/nifti_padding.py on $SUBCORTICAL" \
-"python $O/nifti_padding.py $SUBCORTICAL $SUBCORTICAL_PADDED"
+"result=`python $O/nifti_padding.py $SUBCORTICAL $SUBCORTICAL_PADDED 0`"
 
-#Necessary for correcting the orientation of the image
-cmd "Convert $RIBBON_PADDED" \
-"mri_convert $RIBBON_PADDED $RIBBON_CONVERT -rt nearest -ns 1 --conform_min"
+	if [[ "$result" == "convert" ]]; then
+	cmd "Convert $SUBCORTICAL_PADDED" \
+	"mri_convert $SUBCORTICAL_PADDED $SUBCORTICAL_EDIT -rt nearest -ns 1 --conform_min"
+	else
+	cmd "Copy $SUBCORTICAL in $SUBCORTICAL_EDIT" \
+	"cp $SUBCORTICAL $SUBCORTICAL_EDIT" 
+	fi
 
-cmd "Convert $SUBCORTICAL_PADDED" \
-"mri_convert $SUBCORTICAL_PADDED $SUBCORTICAL_EDIT -rt nearest -ns 1 --conform_min"
 fi
 
 #################
@@ -991,14 +1000,7 @@ if ((TAG<=1))
 then
 
 cmd "Use script $O/ha_ribbon_edit.py on $RIBBON_CONVERT to add HA from $SUBCORTICAL_EDIT" \
-"python $O/ha_ribbon_edit.py $RIBBON_CONVERT $SUBCORTICAL_EDIT $RIBBON_EDIT '${LABELS_HA[0]}' '${LABELS_HA[1]}' ${LABELS_HA_RIB[0]} ${LABELS_HA_RIB[1]} $RIB"
-
-#if ((RIB==0))
-#then
-#else
-#cmd "Copy $RIBBON_CONVERT in $RIBBON_EDIT" \
-#"cp $RIBBON_CONVERT $RIBBON_EDIT" 
-#fi
+"python $O/ha_ribbon_edit.py $RIBBON_CONVERT $SUBCORTICAL_EDIT $RIBBON_EDIT '${LABELS_HA[0]}' '${LABELS_HA[1]}' ${LABELS_HA_RIB[0]} ${LABELS_HA_RIB[1]} $HA_IN_SUBC"
 
 cmd "Extract labels from $SUBCORTICAL_EDIT (Cerebellum, Medulla oblongata, Pons and Midbrain) into $SUBCORTICAL_MASK" \
 "mri_extract_label $SUBCORTICAL_EDIT $LABELS_SUBCORTICAL $SUBCORTICAL_MASK"
