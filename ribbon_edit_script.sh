@@ -8,7 +8,7 @@ Help ()
 builtin echo "
 AUTHOR: Benoît Verreman
 
-LAST UPDATE: 2025-03-14
+LAST UPDATE: 2025-04-09
 
 DESCRIPTION: 
 Use ribbon and subcortical NIFTI files to recompute pial surface,
@@ -315,6 +315,8 @@ import nibabel.processing #Used in nib.processing.conform
 import scipy.ndimage #Used in nib.processing.conform
 import sys #To add arguments
 import copy #For deepcopy
+import numpy #For motion1 for dilation
+from itertools import product  #for motion2
 
 #Arguments
 path_ribbon = sys.argv[1]
@@ -350,7 +352,22 @@ labels_ha_rh = list(map(int,labels_ha_rh.split()))
 labels_ha_rib_lh = int(labels_ha_rib_lh)
 labels_ha_rib_rh = int(labels_ha_rib_rh)
 
+### Create labels class
+class L:    
+    l_wm = 2 # lh white matter
+    r_wm = 41 # rh white matter
+    
+    l_gm = 3 # lh gray matter
+    r_gm = 42 # rh gray matter
+    
+### Motions
+d = numpy.eye(3, dtype=int).reshape(-1, 3)
+motion1 = numpy.concatenate((d, -d), axis=0)
+motion2 = numpy.array(list(product([-2, -1, 0, 1, 2], repeat=3)))
+
+
 #Edit ribbon with HA from aparc+aseg
+list_HA=[]
 if ha_in_subc:
     for x in range(a):
         for y in range(b):
@@ -358,15 +375,117 @@ if ha_in_subc:
                 aparc=data_aparc[x,y,z]
                 if aparc in labels_ha_lh:
                     data_out[x,y,z]=labels_ha_rib_lh #21 #lh HA
+                    list_HA.append((labels_ha_rib_lh,[x,y,z]))
                 elif aparc in labels_ha_rh:
                     data_out[x,y,z]=labels_ha_rib_rh #22 #rh HA
+                    list_HA.append((labels_ha_rib_rh,[x,y,z]))
+    
+    ### 1st Dilation HA in GM
+    data_out2 = copy.deepcopy(data_out)
+    list_HA2 = list_HA[:]
+    for (label,[x,y,z]) in list_HA:
+        n_coordinates = motion1 + [[x, y, z]]
+        for (k,n,m) in n_coordinates:
+            out_voxel = int(data_out[k,n,m])
+            if out_voxel in [L.l_gm,L.r_gm]:
+                data_out2[k,n,m]=label
+                list_HA2.append((label,[k,n,m]))
+    
+    ### 2nd Dilation HA in BG and GM
+    data_out3 = copy.deepcopy(data_out2)
+    list_HA3 = list_HA2[:]
+    for (label,[x,y,z]) in list_HA2:
+        n_coordinates = motion1 + [[x, y, z]]
+        for (k,n,m) in n_coordinates:
+            out_voxel = int(data_out2[k,n,m])
+            if out_voxel in [L.l_gm,L.r_gm]:
+                data_out3[k,n,m]=label
+                list_HA3.append((label,[k,n,m]))
+                
+    ### 3rd Dilation HA in BG and GM
+    data_out4 = copy.deepcopy(data_out3)
+    list_HA4 = list_HA3[:]
+    for (label,[x,y,z]) in list_HA3:
+        n_coordinates = motion1 + [[x, y, z]]
+        for (k,n,m) in n_coordinates:
+            out_voxel = int(data_out3[k,n,m])
+            if out_voxel in [0,L.l_gm,L.r_gm]:
+                data_out4[k,n,m]=label
+                list_HA4.append((label,[k,n,m]))
+                
+    ### 1st Erosion HA next to GM
+    data_out5 = copy.deepcopy(data_out4)
+    list_HA5 = []
+    for (label,[x,y,z]) in list_HA4:
+        n_coordinates = motion1 + [[x, y, z]]
+        next_to_gm = False
+        for (k,n,m) in n_coordinates:
+            out_voxel = int(data_out4[k,n,m])
+            if out_voxel in [L.l_gm,L.r_gm]:
+                next_to_gm = True
+                data_out5[x,y,z] = out_voxel
+                break
+        if not(next_to_gm):
+            list_HA5.append((label,[x,y,z]))
+   
+   ### 2nd Erosion HA next to GM
+    data_out6 = copy.deepcopy(data_out5)
+    list_HA6 = []
+    for (label,[x,y,z]) in list_HA5:
+        n_coordinates = motion1 + [[x, y, z]]
+        next_to_gm = False
+        for (k,n,m) in n_coordinates:
+            out_voxel = int(data_out5[k,n,m])
+            if out_voxel in [L.l_gm,L.r_gm]:
+                next_to_gm = True
+                data_out6[x,y,z] = out_voxel
+                break
+        if not(next_to_gm):
+            list_HA6.append((label,[x,y,z]))
+    
+    ### 3rd Erosion HA next to GM
+    data_out7 = copy.deepcopy(data_out6)
+    list_HA7 = []
+    for (label,[x,y,z]) in list_HA6:
+        n_coordinates = motion1 + [[x, y, z]]
+        next_to_gm = False
+        for (k,n,m) in n_coordinates:
+            out_voxel = int(data_out6[k,n,m])
+            if out_voxel in [L.l_gm,L.r_gm]:
+                next_to_gm = True
+                data_out7[x,y,z] = out_voxel
+                break
+        if not(next_to_gm):
+            list_HA7.append((label,[x,y,z]))
+            
+    ### 4th Erosion HA next to GM
+    data_out8 = copy.deepcopy(data_out7)
+    list_HA8 = []
+    for (label,[x,y,z]) in list_HA7:
+        n_coordinates = motion1 + [[x, y, z]]
+        next_to_gm = False
+        for (k,n,m) in n_coordinates:
+            out_voxel = int(data_out7[k,n,m])
+            if out_voxel in [L.l_gm,L.r_gm]:
+                next_to_gm = True
+                data_out8[x,y,z] = out_voxel
+                break
+        if not(next_to_gm):
+            list_HA8.append((label,[x,y,z]))
+    
+    ### Enlarge WM under HA
+    data_out9 = copy.deepcopy(data_out8)
+    list_HA9=list_HA8[:]
+    for (label,[x,y,z]) in list_HA8: 
+        under_vox = int(data_out8[x,y+1,z])
+        if under_vox in [L.l_wm,L.r_wm]:
+            data_out9[x,y,z]=under_vox
+            list_HA9.remove((label,[x,y,z]))
+            continue
 
 #Create and save new images
-img_out_rib = nib.Nifti1Image(data_out, img_ribbon.affine.copy())
+img_out_rib = nib.Nifti1Image(data_out9, img_ribbon.affine.copy())
 nib.save(img_out_rib, path_out)
-
-img_out_aparc = nib.Nifti1Image(data_aparc, img_aparc.affine.copy())
-nib.save(img_out_aparc, path_aparc)
 EOF
 fi
 }
