@@ -8,7 +8,7 @@ Help ()
 builtin echo "
 AUTHOR: Benoît Verreman
 
-LAST UPDATE: 2025-04-09
+LAST UPDATE: 2025-04-29
 
 DESCRIPTION: 
 Use ribbon and subcortical NIFTI files to recompute pial surface,
@@ -40,14 +40,16 @@ Prepare ribbon and subcortical NIFTI files (for step 0)
 Put the script inside <subjid> folder
 
 *Specific labels and statical values:
-Modify the value of some constants in the script if needed: LABELS_SUBCORTICAL, LABEL_RIBBON_WM_LH, LABEL_RIBBON_WM_RH, PIAL_BORDER_LOW
+Modify the value of some constants in the script if needed: LABEL_RIBBON_WM, LABEL_RIBBON_GM, PIAL_BORDER_LOW
 
 EXAMPLES:
-$ bash ribbon_edit_script.sh -i 133019_T1w_acpc_dc_restore.nii.gz -s 133019 -b 133019_ribbon.nii.gz -c 133019_subcortical.nii.gz
+$ bash ribbon_edit_script.sh -i 133019_T1w_acpc_dc_restore.nii.gz -s 133019 -b 133019_ribbon.nii.gz -c 133019_subcortical.nii.gz -n '5 15 29 30 32 31' -o 133019_ribbon.nii.gz -x 21 -y 22
 
-$ bash ribbon_edit_script.sh -s <subjid> -t 8 -r ### start from pial computation step (8), right hemisphere only (r)
+$ bash ribbon_edit_script.sh -s <subjid> -t 8 -r 
+#start from pial computation step (8), right hemisphere only (r)
 
-$ bash ribbon_edit_script.sh -f <FOLDER_DATASET> -i * -r ### whole folder (f), apply recon-all (-i *), right hemisphere only (r)
+$ bash ribbon_edit_script.sh -f <FOLDER_DATASET> -i * -r -n '5 15 29 30 32 31' -x 21 -y 22
+#whole folder (f), apply recon-all (-i *), right hemisphere only (r)
 
 PARAMETERS:
 
@@ -57,14 +59,16 @@ HELP
 INPUT FILES
 -i: Relative or absolute path to T1w image file
 -s: Relative or absolute path to subjid folder (NECESSARY)
--b: Relative or absolute path to ribbon file (ribbon without labels 21 and 22, by default) (if option n: add labels 21 and 22 for HA)
--c: Relative or absolute path to subcortical file (aparc+aseg.nii.gz, by default) (if option n: use another subcortical files, replace LABELS_SUBCORTICAL accordingly)
+-b: Relative or absolute path to ribbon file (you may use labels 21 and 22 for HA in ribbon)
 
+-c: Relative or absolute path to subcortical file
 -n: List of labels (LABELS_SUBCORTICAL) to be used in subcortical file (-c)
-#The default list is meant for aparc+aseg.nii.gz.
-#If -n is used, it also means that HA is specified in the ribbon (-b) (with labels 21 (lh HA) and 22 (rh HA)), and not in aparc+aseg.nii.gz anymore)
 #for aparc+aseg.nii.gz : LABELS_SUBCORTICAL='7 8 15 16 46 47' (default, no need to use -n option)
 #for previous subcortical files : LABELS_SUBCORTICAL='5 15 29 30 32 31'
+
+-o: Origin image of HA labels
+-x: List of labels for HA left #'5 17 18' in aparc+aseg / '18 20 22' in HOA_Subcortical_Labels
+-y: List of labels for HA right #'44 53 54' in aparc+aseg / '19 21 23' in HOA_Subcortical_Labels
 
 TAG
 -t 0: (ribbons) Start with resizing RIBBON_EDIT and SUBCORTICAL
@@ -108,14 +112,13 @@ TROUBLESHOOTS:
 #################
 ## Default global variables
 #################
-HA_IN_SUBC=1 # Use aparc+aseg file for HA (and not ribbon-edit file with labels 21 and 22 for HA complex)
 TAG=-1 # Start from beginning (option -t not used)
 HEMI=-1 # Both hemispheres (option -r or -l not used)
 FS=0 # Default: No recon-all (option -i not used)
 MULTICASE=0 # Default: Only one case (option -f not used)
 OUTPUT_FOLDER="outputs"
-LABELS_SUBCORTICAL="7 8 15 16 46 47" #for previous subcortical files (given to -c) : "5 15 29 30 32 31"
-declare -a LABELS_HA=("5 17 18" "44 53 54") #HA in aparc+aseg
+#LABELS_SUBCORTICAL="7 8 15 16 46 47" #for previous subcortical files (given to -c) : "5 15 29 30 32 31"
+#declare -a LABELS_HA=("5 17 18" "44 53 54") #HA in aparc+aseg / ('18 20 22' '19 21 23') in HOA_Subcortical_Labels
 declare -a LABELS_HA_RIB=("21" "22") #HA in ribbon (-n flag)
 declare -a H=("lh" "rh") #Left then Right hemispheres
 declare -a LABEL_RIBBON_WM=("2" "41")
@@ -134,62 +137,75 @@ unset -v IMAGE
 unset -v SUBJID
 unset -v RIBBON
 unset -v SUBCORTICAL
+unset -v LABELS_SUBCORTICAL
+unset -v HA
+unset -v LABELS_HA_LEFT
+unset -v LABELS_HA_RIGHT
 
 #If a character is followed by :, then it needs an argument just after
-VALID_ARGS="i:s:b:n:c:t:p:f:hlrd"
+VALID_ARGS="i:s:b:c:n:o:x:y:t:p:f:hlrd"
 
 while getopts ${VALID_ARGS} opt; do
   case ${opt} in
-    i)
+    i) #T1 image path
         IMAGE=${OPTARG}
         FS=1
         string_arguments+="-i ${OPTARG} "
         ;;
-    s)
+    s) #Output folder name
         SUBJID=${OPTARG}
         string_arguments+="-s ${OPTARG} "
         ;;
-    b)
+    b) #ribbon image path
         RIBBON=${OPTARG}
         string_arguments+="-b ${OPTARG} "
         ;;
-    n)
-        LABELS_SUBCORTICAL=${OPTARG} #for previous subcortical files : "5 15 29 30 32 31"
-        string_arguments+="-n ${OPTARG} "
-        HA_IN_SUBC=0
-        LABELS_HA[0]=${LABELS_HA_RIB[0]}
-        LABELS_HA[1]=${LABELS_HA_RIB[1]}
-        ;;
-    c)
+    c) #subcortical image path
         SUBCORTICAL=${OPTARG}
         string_arguments+="-c ${OPTARG} "
         ;;
-    t)
+    n) #subcortical labels
+        LABELS_SUBCORTICAL=${OPTARG} #for previous subcortical files : "5 15 29 30 32 31"
+        string_arguments+="-n ${OPTARG} "
+        ;;
+    o) #HA image path
+        HA=${OPTARG}
+        string_arguments+="-c ${OPTARG} "
+        ;;
+    x) #HA labels left
+        LABELS_HA_LEFT=${OPTARG}
+        string_arguments+="-c ${OPTARG} "
+        ;;
+    y) #HA labels right
+        LABELS_HA_RIGHT=${OPTARG}
+        string_arguments+="-c ${OPTARG} "
+        ;;
+    t) #Tag to (re)start script from
 	TAG=${OPTARG}
 	string_arguments+="-t ${OPTARG} "
 	;;
-    p)
+    p) #Value to give to stat PIAL_BORDER_LOW
 	PIAL_BORDER_LOW=${OPTARG}
 	string_arguments+="-p ${OPTARG} "
 	;;
-    f)
+    f) #Do script on all folder
 	SUBJECTS_DIR=${OPTARG}
 	MULTICASE=1
 	string_arguments+="-f ${OPTARG} "
 	;;
-    h)
+    h) #Help
 	Help
 	exit 1
 	;;
-    l)
+    l) #Left hemisphere only
 	HEMI=0 #left hemisphere only
 	string_arguments+="-l "
 	;;
-    r)
+    r) #Right hemisphere only
 	HEMI=1 #right hemisphere only
 	string_arguments+="-r "
 	;;
-    d)
+    d) #Delete last OUTPUT_FODLER
 	Delete #Delete report.sh and $OUTPUT_FOLDER
 	string_arguments+="-d "
 	;;
@@ -315,8 +331,6 @@ import nibabel.processing #Used in nib.processing.conform
 import scipy.ndimage #Used in nib.processing.conform
 import sys #To add arguments
 import copy #For deepcopy
-import numpy #For motion1 for dilation
-from itertools import product  #for motion2
 
 #Arguments
 path_ribbon = sys.argv[1]
@@ -326,7 +340,6 @@ labels_ha_lh = sys.argv[4]
 labels_ha_rh = sys.argv[5]
 labels_ha_rib_lh = sys.argv[6]
 labels_ha_rib_rh = sys.argv[7]
-ha_in_subc = int(sys.argv[8])
 
 #Load ribbon
 if not os.path.isfile(path_ribbon):
@@ -352,140 +365,22 @@ labels_ha_rh = list(map(int,labels_ha_rh.split()))
 labels_ha_rib_lh = int(labels_ha_rib_lh)
 labels_ha_rib_rh = int(labels_ha_rib_rh)
 
-### Create labels class
-class L:    
-    l_wm = 2 # lh white matter
-    r_wm = 41 # rh white matter
-    
-    l_gm = 3 # lh gray matter
-    r_gm = 42 # rh gray matter
-    
-### Motions
-d = numpy.eye(3, dtype=int).reshape(-1, 3)
-motion1 = numpy.concatenate((d, -d), axis=0)
-motion2 = numpy.array(list(product([-2, -1, 0, 1, 2], repeat=3)))
-
-
 #Edit ribbon with HA from aparc+aseg
-list_HA=[]
-if ha_in_subc:
-    for x in range(a):
-        for y in range(b):
-            for z in range(c):
-                aparc=data_aparc[x,y,z]
-                if aparc in labels_ha_lh:
-                    data_out[x,y,z]=labels_ha_rib_lh #21 #lh HA
-                    list_HA.append((labels_ha_rib_lh,[x,y,z]))
-                elif aparc in labels_ha_rh:
-                    data_out[x,y,z]=labels_ha_rib_rh #22 #rh HA
-                    list_HA.append((labels_ha_rib_rh,[x,y,z]))
-    
-    ### 1st Dilation HA in GM
-    data_out2 = copy.deepcopy(data_out)
-    list_HA2 = list_HA[:]
-    for (label,[x,y,z]) in list_HA:
-        n_coordinates = motion1 + [[x, y, z]]
-        for (k,n,m) in n_coordinates:
-            out_voxel = int(data_out[k,n,m])
-            if out_voxel in [L.l_gm,L.r_gm]:
-                data_out2[k,n,m]=label
-                list_HA2.append((label,[k,n,m]))
-    
-    ### 2nd Dilation HA in BG and GM
-    data_out3 = copy.deepcopy(data_out2)
-    list_HA3 = list_HA2[:]
-    for (label,[x,y,z]) in list_HA2:
-        n_coordinates = motion1 + [[x, y, z]]
-        for (k,n,m) in n_coordinates:
-            out_voxel = int(data_out2[k,n,m])
-            if out_voxel in [L.l_gm,L.r_gm]:
-                data_out3[k,n,m]=label
-                list_HA3.append((label,[k,n,m]))
-                
-    ### 3rd Dilation HA in BG and GM
-    data_out4 = copy.deepcopy(data_out3)
-    list_HA4 = list_HA3[:]
-    for (label,[x,y,z]) in list_HA3:
-        n_coordinates = motion1 + [[x, y, z]]
-        for (k,n,m) in n_coordinates:
-            out_voxel = int(data_out3[k,n,m])
-            if out_voxel in [0,L.l_gm,L.r_gm]:
-                data_out4[k,n,m]=label
-                list_HA4.append((label,[k,n,m]))
-                
-    ### 1st Erosion HA next to GM
-    data_out5 = copy.deepcopy(data_out4)
-    list_HA5 = []
-    for (label,[x,y,z]) in list_HA4:
-        n_coordinates = motion1 + [[x, y, z]]
-        next_to_gm = False
-        for (k,n,m) in n_coordinates:
-            out_voxel = int(data_out4[k,n,m])
-            if out_voxel in [L.l_gm,L.r_gm]:
-                next_to_gm = True
-                data_out5[x,y,z] = out_voxel
-                break
-        if not(next_to_gm):
-            list_HA5.append((label,[x,y,z]))
-   
-   ### 2nd Erosion HA next to GM
-    data_out6 = copy.deepcopy(data_out5)
-    list_HA6 = []
-    for (label,[x,y,z]) in list_HA5:
-        n_coordinates = motion1 + [[x, y, z]]
-        next_to_gm = False
-        for (k,n,m) in n_coordinates:
-            out_voxel = int(data_out5[k,n,m])
-            if out_voxel in [L.l_gm,L.r_gm]:
-                next_to_gm = True
-                data_out6[x,y,z] = out_voxel
-                break
-        if not(next_to_gm):
-            list_HA6.append((label,[x,y,z]))
-    
-    ### 3rd Erosion HA next to GM
-    data_out7 = copy.deepcopy(data_out6)
-    list_HA7 = []
-    for (label,[x,y,z]) in list_HA6:
-        n_coordinates = motion1 + [[x, y, z]]
-        next_to_gm = False
-        for (k,n,m) in n_coordinates:
-            out_voxel = int(data_out6[k,n,m])
-            if out_voxel in [L.l_gm,L.r_gm]:
-                next_to_gm = True
-                data_out7[x,y,z] = out_voxel
-                break
-        if not(next_to_gm):
-            list_HA7.append((label,[x,y,z]))
-            
-    ### 4th Erosion HA next to GM
-    data_out8 = copy.deepcopy(data_out7)
-    list_HA8 = []
-    for (label,[x,y,z]) in list_HA7:
-        n_coordinates = motion1 + [[x, y, z]]
-        next_to_gm = False
-        for (k,n,m) in n_coordinates:
-            out_voxel = int(data_out7[k,n,m])
-            if out_voxel in [L.l_gm,L.r_gm]:
-                next_to_gm = True
-                data_out8[x,y,z] = out_voxel
-                break
-        if not(next_to_gm):
-            list_HA8.append((label,[x,y,z]))
-    
-    ### Enlarge WM under HA
-    data_out9 = copy.deepcopy(data_out8)
-    list_HA9=list_HA8[:]
-    for (label,[x,y,z]) in list_HA8: 
-        under_vox = int(data_out8[x,y+1,z])
-        if under_vox in [L.l_wm,L.r_wm]:
-            data_out9[x,y,z]=under_vox
-            list_HA9.remove((label,[x,y,z]))
-            continue
+for x in range(a):
+    for y in range(b):
+        for z in range(c):
+            aparc=data_aparc[x,y,z]
+            if aparc in labels_ha_lh:
+                data_out[x,y,z]=labels_ha_rib_lh #21 #lh HA
+            elif aparc in labels_ha_rh:
+                data_out[x,y,z]=labels_ha_rib_rh #22 #rh HA
 
 #Create and save new images
-img_out_rib = nib.Nifti1Image(data_out9, img_ribbon.affine.copy())
+img_out_rib = nib.Nifti1Image(data_out, img_ribbon.affine.copy())
 nib.save(img_out_rib, path_out)
+
+img_out_aparc = nib.Nifti1Image(data_aparc, img_aparc.affine.copy())
+nib.save(img_out_aparc, path_aparc)
 EOF
 fi
 }
@@ -520,7 +415,7 @@ else:
 #Padding function: reshape the image to (max_dim, max_dim, max_dim) with same resolution and an orientation of 'LAS'
 def padding(img, new_name):
     d = max(img.header.get_data_shape())
-    new_img = nib.processing.conform(img, out_shape=(311, 311, 311),     voxel_size = img.header.get_zooms(), order=0, cval=0, orientation='LAS', out_class=None) #d
+    new_img = nib.processing.conform(img, out_shape=(d, d, d),     voxel_size = img.header.get_zooms(), order=0, cval=0, orientation='LAS', out_class=None) #d
     nib.save(new_img, new_name)
 
 if is_t1:
@@ -528,10 +423,11 @@ if is_t1:
     print('apply_recon_all')
 else:
     a = img.affine.copy()
-    if int(a[0,3]) == 90:
+    if int(a[0,3]) == 90 or int(a[0,3]) == 140:
         padding(img, img_padded)
         print('convert')
     else:
+        nib.save(img, img_padded) #Convert at least mgz to nii
         print('no_convert')
 
 EOF
@@ -1069,9 +965,10 @@ cmd "Compensate for future translation in recon-all" \
 cmd "Add SUBJID to SUBJECTS_DIR" \
 "export SUBJECTS_DIR=$SUBJECTS_DIR/$SUBJID"
 
-#-xopts-overwrite is used when expert file already used before
 cmd "Apply recon-all -autorecon 1 and 2 on $IMAGE_PADDED" \
-"recon-all -autorecon1 -autorecon2 -s ${SUBJID}_freesurfer -i $IMAGE_PADDED -hires -parallel -openmp 4 -expert expert_file.txt -xopts-overwrite" 
+"recon-all -autorecon1 -autorecon2 -s ${SUBJID}_freesurfer -i $IMAGE_PADDED -hires -parallel -openmp 4 -expert expert_file.txt -xopts-overwrite -cw256" 
+#-xopts-overwrite is used when expert file already used before
+#2025-04-28: added -cw256 for cropped T1 images 
 
 cmd "Change back SUBJECTS_DIR/SUBJID to SUBJECTS_DIR" \
 "export SUBJECTS_DIR=$(dirname $SUBJECTS_DIR)"
@@ -1083,7 +980,7 @@ fi
 if ((TAG<=0))
 then
 # Test if user provided RIBBON and SUBCORTICAL
-: ${RIBBON:?Missing argument -b} ${SUBCORTICAL:?Missing argument -c}
+: ${RIBBON:?Missing argument -b} ${SUBCORTICAL:?Missing argument -c} ${LABELS_SUBCORTICAL:?Missing argument -n}
 Echo "# Given ribbon: $RIBBON"
 Echo "# Given subcortical: $SUBCORTICAL"
 
@@ -1095,8 +992,8 @@ cmd "Use script $O/nifti_padding.py on $RIBBON" \
 	cmd "Convert $RIBBON_PADDED" \
 	"mri_convert $RIBBON_PADDED $RIBBON_CONVERT -rt nearest -ns 1 --conform_min"
 	else
-	cmd "Copy $RIBBON in $RIBBON_CONVERT" \
-	"cp $RIBBON $RIBBON_CONVERT" 
+	#cmd "Copy $RIBBON in $RIBBON_CONVERT" \
+	#"cp $RIBBON $RIBBON_CONVERT" 
 	fi
 
 cmd "Use script $O/nifti_padding.py on $SUBCORTICAL" \
@@ -1106,8 +1003,8 @@ cmd "Use script $O/nifti_padding.py on $SUBCORTICAL" \
 	cmd "Convert $SUBCORTICAL_PADDED" \
 	"mri_convert $SUBCORTICAL_PADDED $SUBCORTICAL_EDIT -rt nearest -ns 1 --conform_min"
 	else
-	cmd "Copy $SUBCORTICAL in $SUBCORTICAL_EDIT" \
-	"cp $SUBCORTICAL $SUBCORTICAL_EDIT" 
+	#cmd "Copy $SUBCORTICAL in $SUBCORTICAL_EDIT" \
+	#"cp $SUBCORTICAL $SUBCORTICAL_EDIT" 
 	fi
 
 fi
@@ -1118,8 +1015,11 @@ fi
 if ((TAG<=1))
 then
 
+# Test if user provided HA information
+: ${HA:?Missing argument -o} ${LABELS_HA_LEFT:?Missing argument -x} ${LABELS_HA_RIGHT:?Missing argument -y}
+
 cmd "Use script $O/ha_ribbon_edit.py on $RIBBON_CONVERT to add HA from $SUBCORTICAL_EDIT" \
-"python $O/ha_ribbon_edit.py $RIBBON_CONVERT $SUBCORTICAL_EDIT $RIBBON_EDIT '${LABELS_HA[0]}' '${LABELS_HA[1]}' ${LABELS_HA_RIB[0]} ${LABELS_HA_RIB[1]} $HA_IN_SUBC"
+"python $O/ha_ribbon_edit.py $RIBBON_CONVERT $SUBCORTICAL_EDIT $RIBBON_EDIT '${LABELS_HA_LEFT}' '${LABELS_HA_RIGHT}' ${LABELS_HA_RIB[0]} ${LABELS_HA_RIB[1]}"
 
 cmd "Extract labels from $SUBCORTICAL_EDIT (Cerebellum, Medulla oblongata, Pons and Midbrain) into $SUBCORTICAL_MASK" \
 "mri_extract_label $SUBCORTICAL_EDIT $LABELS_SUBCORTICAL $SUBCORTICAL_MASK"
@@ -1634,6 +1534,8 @@ do
 	fi
         RIBBON="$(find $SUB -maxdepth 1 -name "*ribbon*")"
         SUBCORTICAL="$(find $SUB -maxdepth 1 -name "*subcortical*")"
+        
+        HA=$RIBBON #TO BE CHANGED IF NECESSARY
         
         #remove last character if /
 	export var="${SUB: -1}"
