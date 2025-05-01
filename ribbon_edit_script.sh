@@ -992,8 +992,8 @@ cmd "Use script $O/nifti_padding.py on $RIBBON" \
 	cmd "Convert $RIBBON_PADDED" \
 	"mri_convert $RIBBON_PADDED $RIBBON_CONVERT -rt nearest -ns 1 --conform_min"
 	else
-	#cmd "Copy $RIBBON in $RIBBON_CONVERT" \
-	#"cp $RIBBON $RIBBON_CONVERT" 
+	cmd "Copy $RIBBON_PADDED in $RIBBON_CONVERT" \
+	"cp $RIBBON_PADDED $RIBBON_CONVERT" 
 	fi
 
 cmd "Use script $O/nifti_padding.py on $SUBCORTICAL" \
@@ -1003,8 +1003,8 @@ cmd "Use script $O/nifti_padding.py on $SUBCORTICAL" \
 	cmd "Convert $SUBCORTICAL_PADDED" \
 	"mri_convert $SUBCORTICAL_PADDED $SUBCORTICAL_EDIT -rt nearest -ns 1 --conform_min"
 	else
-	#cmd "Copy $SUBCORTICAL in $SUBCORTICAL_EDIT" \
-	#"cp $SUBCORTICAL $SUBCORTICAL_EDIT" 
+	cmd "Copy $SUBCORTICAL_PADDED in $SUBCORTICAL_EDIT" \
+	"cp $SUBCORTICAL_PADDED $SUBCORTICAL_EDIT" 
 	fi
 
 fi
