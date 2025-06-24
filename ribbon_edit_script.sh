@@ -8,7 +8,7 @@ Help ()
 builtin echo "
 AUTHOR: Benoît Verreman
 
-LAST UPDATE: 2025-04-29
+LAST UPDATE: 2025-06-25
 
 DESCRIPTION: 
 Use ribbon and subcortical NIFTI files to recompute pial surface,
@@ -288,17 +288,14 @@ then
 	mkdir $O/scripts;
 	mkdir $O/surf;
 	mkdir $O/mri;
+	mkdir $O/mri/orig;
 	mkdir $O/mri/transforms;
 	mkdir $O/label;
 	mkdir $O/stats;
+	mkdir $O/tmp;
+	mkdir $O/touch;
+	mkdir $O/trash;
 fi
-
-script_ha_ribbon_edit
-script_nifti_padding
-script_brain-finalsurfs-edit
-script_edit_aseg_presurf_based_on_ribbon
-script_expert_file
-
 }
 
 CreateScripts()
@@ -308,6 +305,12 @@ then
 touch $O/report.sh
 Echo "#!/bin/bash"
 fi
+
+script_ha_ribbon_edit
+script_nifti_padding
+script_brain-finalsurfs-edit
+script_edit_aseg_presurf_based_on_ribbon
+script_expert_file
 }
 
 Delete()
@@ -331,6 +334,7 @@ import nibabel.processing #Used in nib.processing.conform
 import scipy.ndimage #Used in nib.processing.conform
 import sys #To add arguments
 import copy #For deepcopy
+import numpy #For motion1
 
 #Arguments
 path_ribbon = sys.argv[1]
@@ -349,7 +353,7 @@ else:
 data_ribbon = img_ribbon.get_fdata()
 (a,b,c)=img_ribbon.header.get_data_shape()
 
-#Load aparc+aseg
+#Load -o file (ie aparc+aseg)
 if not os.path.isfile(path_aparc):
     raise FileNotFoundError("The following path doesn't exist: " + path_aparc)
 else:
@@ -365,22 +369,138 @@ labels_ha_rh = list(map(int,labels_ha_rh.split()))
 labels_ha_rib_lh = int(labels_ha_rib_lh)
 labels_ha_rib_rh = int(labels_ha_rib_rh)
 
-#Edit ribbon with HA from aparc+aseg
+#Edit ribbon with HA from -o file
+list_HA=[]
 for x in range(a):
     for y in range(b):
         for z in range(c):
             aparc=data_aparc[x,y,z]
             if aparc in labels_ha_lh:
+                list_HA.append((labels_ha_rib_lh,[x,y,z]))
                 data_out[x,y,z]=labels_ha_rib_lh #21 #lh HA
             elif aparc in labels_ha_rh:
+                list_HA.append((labels_ha_rib_rh,[x,y,z]))
                 data_out[x,y,z]=labels_ha_rib_rh #22 #rh HA
 
-#Create and save new images
-img_out_rib = nib.Nifti1Image(data_out, img_ribbon.affine.copy())
-nib.save(img_out_rib, path_out)
+###Add three diffusion and three erosion steps of HA in GM of ribbon
+### Create labels class
+class L:    
+    l_wm = 2 # lh white matter
+    r_wm = 41 # rh white matter
+    
+    l_gm = 3 # lh gray matter
+    r_gm = 42 # rh gray matter
+    
+### Motions
+d = numpy.eye(3, dtype=int).reshape(-1, 3)
+motion1 = numpy.concatenate((d, -d), axis=0)
 
-img_out_aparc = nib.Nifti1Image(data_aparc, img_aparc.affine.copy())
-nib.save(img_out_aparc, path_aparc)
+### Dilation1 of HA in GM
+data_out2 = copy.deepcopy(data_out)
+list_HA2 = list_HA[:]
+for (label,[x,y,z]) in list_HA:
+    n_coordinates = motion1 + [[x, y, z]]
+    for (k,n,m) in n_coordinates:
+        out_voxel = int(data_out[k,n,m])
+        if out_voxel in [L.l_gm,L.r_gm]:
+            data_out2[k,n,m]=label
+            list_HA2.append((label,[k,n,m]))
+
+### Dilation2 of HA in GM
+data_out3 = copy.deepcopy(data_out2)
+list_HA3 = list_HA2[:]
+for (label,[x,y,z]) in list_HA2:
+    n_coordinates = motion1 + [[x, y, z]]
+    for (k,n,m) in n_coordinates:
+        out_voxel = int(data_out2[k,n,m])
+        if out_voxel in [L.l_gm,L.r_gm]:
+            data_out3[k,n,m]=label
+            list_HA3.append((label,[k,n,m]))
+			
+### Dilation3 HA in GM and BG (fill out BG neighbouring voxels)
+data_out4 = copy.deepcopy(data_out3)
+list_HA4 = list_HA3[:]
+for (label,[x,y,z]) in list_HA3:
+    n_coordinates = motion1 + [[x, y, z]]
+    for (k,n,m) in n_coordinates:
+        out_voxel = int(data_out3[k,n,m])
+        if out_voxel in [0,L.l_gm,L.r_gm,0]:
+            data_out4[k,n,m]=label
+            list_HA4.append((label,[k,n,m]))
+
+### Enlarge WM under HA to avoid pinched white surface in this region
+data_out5 = copy.deepcopy(data_out4)
+list_HA5=list_HA4[:]
+for (label,[x,y,z]) in list_HA4: 
+    under_vox = int(data_out4[x,y+1,z])
+    if under_vox in [L.l_wm,L.r_wm]:
+        data_out5[x,y,z]=under_vox
+        list_HA5.remove((label,[x,y,z]))
+        continue	
+	
+### Erosion1 of HA to BG next to BG (compensate dilation in BG)
+data_out6 = copy.deepcopy(data_out5)
+list_HA6 = []
+for (label,[x,y,z]) in list_HA8:
+    n_coordinates = motion1 + [[x, y, z]]
+    next_to_gm = False
+    for (k,n,m) in n_coordinates:
+        out_voxel = int(data_out5[k,n,m])
+        if out_voxel == 0:
+            next_to_gm = True
+            data_out6[x,y,z] = out_voxel
+            break
+    if not(next_to_gm):
+        list_HA6.append((label,[x,y,z]))
+
+### Erosion2 of HA next to GM
+data_out7 = copy.deepcopy(data_out6)
+list_HA7 = []
+for (label,[x,y,z]) in list_HA6:
+    n_coordinates = motion1 + [[x, y, z]]
+    next_to_gm = False
+    for (k,n,m) in n_coordinates:
+        out_voxel = int(data_out6[k,n,m])
+        if out_voxel in [L.l_gm,L.r_gm]:
+            next_to_gm = True
+            data_out7[x,y,z] = out_voxel
+            break
+    if not(next_to_gm):
+        list_HA7.append((label,[x,y,z]))
+
+### Erosion3 of HA next to GM 
+data_out8 = copy.deepcopy(data_out7)
+list_HA8 = []
+for (label,[x,y,z]) in list_HA7:
+    n_coordinates = motion1 + [[x, y, z]]
+    next_to_gm = False
+    for (k,n,m) in n_coordinates:
+        out_voxel = int(data_out7[k,n,m])
+        if out_voxel in [L.l_gm,L.r_gm]:
+            next_to_gm = True
+            data_out8[x,y,z] = out_voxel
+            break
+    if not(next_to_gm):
+        list_HA8.append((label,[x,y,z]))
+
+### Erosion4 of HA next to GM
+data_out9 = copy.deepcopy(data_out8)
+list_HA9 = []
+for (label,[x,y,z]) in list_HA8:
+    n_coordinates = motion1 + [[x, y, z]]
+    next_to_gm = False
+    for (k,n,m) in n_coordinates:
+        out_voxel = int(data_out8[k,n,m])
+        if out_voxel in [L.l_gm,L.r_gm]:
+            next_to_gm = True
+            data_out9[x,y,z] = out_voxel
+            break
+    if not(next_to_gm):
+        list_HA9.append((label,[x,y,z]))
+
+###Create and save new image
+img_out_rib = nib.Nifti1Image(data_out9, img_ribbon.affine.copy())
+nib.save(img_out_rib, path_out)
 EOF
 fi
 }
@@ -423,11 +543,10 @@ if is_t1:
     print('apply_recon_all')
 else:
     a = img.affine.copy()
-    if int(a[0,3]) == 90 or int(a[0,3]) == 140:
+    if int(a[0,3]) == 90:
         padding(img, img_padded)
         print('convert')
     else:
-        nib.save(img, img_padded) #Convert at least mgz to nii
         print('no_convert')
 
 EOF
@@ -729,6 +848,9 @@ fi
 #################
 ## Input files
 #################
+IMAGE_ORIG_FS="$SUBJECTS_DIR/$SUBJID/${SUBJID}_freesurfer/mri/orig/001.mgz"
+RAWAVG_FS="$SUBJECTS_DIR/$SUBJID/${SUBJID}_freesurfer/mri/rawavg.mgz"
+
 T1="$SUBJECTS_DIR/$SUBJID/${SUBJID}_freesurfer/mri/T1.mgz"
 
 NORM="$SUBJECTS_DIR/$SUBJID/${SUBJID}_freesurfer/mri/norm.mgz"
@@ -771,6 +893,8 @@ TALAIRACH_XFM="$SUBJECTS_DIR/$SUBJID/${SUBJID}_freesurfer/mri/transforms/talaira
 ## Output files
 #################
 IMAGE_PADDED="$SUBJECTS_DIR/$SUBJID/image-padded.mgz"
+$IMAGE_ORIG="$O/mri/orig/001.mgz"
+$RAWAVG="$O/mri/rawavg.mgz"
 
 RIBBON_PADDED="$O/mri/ribbon-precorrection.mgz"
 SUBCORTICAL_PADDED="$O/mri/subcortical-precorrection.mgz"
@@ -965,13 +1089,21 @@ cmd "Compensate for future translation in recon-all" \
 cmd "Add SUBJID to SUBJECTS_DIR" \
 "export SUBJECTS_DIR=$SUBJECTS_DIR/$SUBJID"
 
+#-xopts-overwrite is used when expert file already used before
 cmd "Apply recon-all -autorecon 1 and 2 on $IMAGE_PADDED" \
 "recon-all -autorecon1 -autorecon2 -s ${SUBJID}_freesurfer -i $IMAGE_PADDED -hires -parallel -openmp 4 -expert expert_file.txt -xopts-overwrite -cw256" 
-#-xopts-overwrite is used when expert file already used before
-#2025-04-28: added -cw256 for cropped T1 images 
 
 cmd "Change back SUBJECTS_DIR/SUBJID to SUBJECTS_DIR" \
 "export SUBJECTS_DIR=$(dirname $SUBJECTS_DIR)"
+
+#Copy image-padded.mgz to orig/001.mgz
+cmd "Copy $IMAGE_ORIG_FS" \
+"if [ ! -f $IMAGE_ORIG ]; then cp $IMAGE_ORIG_FS $IMAGE_ORIG; fi" 
+
+#Copy image-padded.mgz to orig/001.mgz
+cmd "Copy $RAWAVG_FS to get $RAWAVG if not already exists" \
+"if [ ! -f $RAWAVG ]; then cp $RAWAVG_FS $RAWAVG; fi" 
+
 fi
 
 #################
@@ -988,24 +1120,24 @@ Echo "# Given subcortical: $SUBCORTICAL"
 cmd "Use script $O/nifti_padding.py on $RIBBON" \
 "result=`python $O/nifti_padding.py $RIBBON $RIBBON_PADDED 0`"
 
-	if [[ "$result" == "convert" ]]; then
-	cmd "Convert $RIBBON_PADDED" \
-	"mri_convert $RIBBON_PADDED $RIBBON_CONVERT -rt nearest -ns 1 --conform_min"
-	else
-	cmd "Copy $RIBBON_PADDED in $RIBBON_CONVERT" \
-	"cp $RIBBON_PADDED $RIBBON_CONVERT" 
-	fi
+if [[ "$result" == "convert" ]]; then
+cmd "Convert $RIBBON_PADDED" \
+"mri_convert $RIBBON_PADDED $RIBBON_CONVERT -rt nearest -ns 1 --conform_min"
+else
+cmd "Copy $RIBBON in $RIBBON_CONVERT" \
+"cp $RIBBON $RIBBON_CONVERT" 
+fi
 
 cmd "Use script $O/nifti_padding.py on $SUBCORTICAL" \
 "result=`python $O/nifti_padding.py $SUBCORTICAL $SUBCORTICAL_PADDED 0`"
 
-	if [[ "$result" == "convert" ]]; then
-	cmd "Convert $SUBCORTICAL_PADDED" \
-	"mri_convert $SUBCORTICAL_PADDED $SUBCORTICAL_EDIT -rt nearest -ns 1 --conform_min"
-	else
-	cmd "Copy $SUBCORTICAL_PADDED in $SUBCORTICAL_EDIT" \
-	"cp $SUBCORTICAL_PADDED $SUBCORTICAL_EDIT" 
-	fi
+if [[ "$result" == "convert" ]]; then
+cmd "Convert $SUBCORTICAL_PADDED" \
+"mri_convert $SUBCORTICAL_PADDED $SUBCORTICAL_EDIT -rt nearest -ns 1 --conform_min"
+else
+cmd "Copy $SUBCORTICAL in $SUBCORTICAL_EDIT" \
+"cp $SUBCORTICAL $SUBCORTICAL_EDIT" 
+fi
 
 fi
 
@@ -1019,7 +1151,7 @@ then
 : ${HA:?Missing argument -o} ${LABELS_HA_LEFT:?Missing argument -x} ${LABELS_HA_RIGHT:?Missing argument -y}
 
 cmd "Use script $O/ha_ribbon_edit.py on $RIBBON_CONVERT to add HA from $SUBCORTICAL_EDIT" \
-"python $O/ha_ribbon_edit.py $RIBBON_CONVERT $SUBCORTICAL_EDIT $RIBBON_EDIT '${LABELS_HA_LEFT}' '${LABELS_HA_RIGHT}' ${LABELS_HA_RIB[0]} ${LABELS_HA_RIB[1]}"
+"python $O/ha_ribbon_edit.py $RIBBON_CONVERT $HA $RIBBON_EDIT '${LABELS_HA_LEFT}' '${LABELS_HA_RIGHT}' ${LABELS_HA_RIB[0]} ${LABELS_HA_RIB[1]}"
 
 cmd "Extract labels from $SUBCORTICAL_EDIT (Cerebellum, Medulla oblongata, Pons and Midbrain) into $SUBCORTICAL_MASK" \
 "mri_extract_label $SUBCORTICAL_EDIT $LABELS_SUBCORTICAL $SUBCORTICAL_MASK"
