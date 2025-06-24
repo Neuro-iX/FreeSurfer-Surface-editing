@@ -892,6 +892,9 @@ RIBBON_CONVERT="$O/mri/ribbon-convert.mgz"
 RIBBON_EDIT="$O/mri/ribbon-edit.mgz"
 SUBCORTICAL_EDIT="$O/mri/subcortical-edit.mgz"
 
+HA_PADDED="$O/mri/ha-padded.mgz"
+HA_CONVERT="$O/mri/ha-convert.mgz"
+
 SUBCORTICAL_MASK="$O/mri/subcortical-mask.mgz"
 BRAIN_MASK="$O/mri/brain-mask.mgz"
 
@@ -1140,8 +1143,20 @@ then
 # Test if user provided HA information
 : ${HA:?Missing argument -o} ${LABELS_HA_LEFT:?Missing argument -x} ${LABELS_HA_RIGHT:?Missing argument -y}
 
+#If needed, correcting the dimensions of the image with padding
+cmd "Use script $O/nifti_padding.py on $HA" \
+"result=`python $O/nifti_padding.py $HA $HA_PADDED 0`"
+
+if [[ "$result" == "convert" ]]; then
+cmd "Convert $HA" \
+"mri_convert $HA_PADDED $HA_CONVERT -rt nearest -ns 1 --conform_min"
+else
+cmd "Copy $HA in $HA_CONVERT" \
+"cp $HA $HA_CONVERT" 
+fi
+
 cmd "Use script $O/ha_ribbon_edit.py on $RIBBON_CONVERT to add HA from $SUBCORTICAL_EDIT" \
-"python $O/ha_ribbon_edit.py $RIBBON_CONVERT $HA $RIBBON_EDIT '${LABELS_HA_LEFT}' '${LABELS_HA_RIGHT}' ${LABELS_HA_RIB[0]} ${LABELS_HA_RIB[1]}"
+"python $O/ha_ribbon_edit.py $RIBBON_CONVERT $HA_CONVERT $RIBBON_EDIT '${LABELS_HA_LEFT}' '${LABELS_HA_RIGHT}' ${LABELS_HA_RIB[0]} ${LABELS_HA_RIB[1]}"
 
 cmd "Extract labels from $SUBCORTICAL_EDIT (Cerebellum, Medulla oblongata, Pons and Midbrain) into $SUBCORTICAL_MASK" \
 "mri_extract_label $SUBCORTICAL_EDIT $LABELS_SUBCORTICAL $SUBCORTICAL_MASK"
