@@ -1356,7 +1356,7 @@ do
 	
 	# PIAL third pass: nsmooth 1
 	cmd "${H[$i]} Computes pial surface - third pass: smooth" \
-	"mris_place_surface --i ${RIBBON_EDIT_PIAL_SECOND_PASS[$i]} --o ${RIBBON_EDIT_PIAL_THIRD_PASS[$i]} --nsmooth 1 --adgws-in ${AUTODET_NEW_GW_STATS[$i]} --pial --${H[$i]} --repulse-surf ${RIBBON_EDIT_PIAL_SECOND_PASS_i_w[$i]} --invol ${BRAIN_FINALSURFS_NO_CEREB_EDITED2[$i]} --threads 6 --white-surf ${ORIG[$i]} --pin-medial-wall ${CORTEX_LABEL[$i]} --seg $ASEG_PRESURF_WO_SUBC --no-rip"
+	"mris_place_surface --i ${RIBBON_EDIT_PIAL_SECOND_PASS[$i]} --o ${RIBBON_EDIT_PIAL_THIRD_PASS[$i]} --nsmooth 1 --adgws-in ${AUTODET_NEW_GW_STATS[$i]} --pial --${H[$i]} --repulse-surf ${RIBBON_EDIT_PIAL_SECOND_PASS[$i]} --invol ${BRAIN_FINALSURFS_NO_CEREB_EDITED2[$i]} --threads 6 --white-surf ${ORIG[$i]} --pin-medial-wall ${CORTEX_LABEL[$i]} --seg $ASEG_PRESURF_WO_SUBC --no-rip"
 	fi
 done
 fi
@@ -1372,6 +1372,7 @@ do
 	then
 		continue;
 	else
+	
 	# Copies to have the right names for the next functions
 	cmd "${H[$i]} Copy white surface to ${WHITE[$i]}" \
 	"cp ${ORIG[$i]} ${WHITE[$i]}" 
