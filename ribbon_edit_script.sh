@@ -8,7 +8,7 @@ Help ()
 builtin echo "
 AUTHOR: Benoît Verreman
 
-LAST UPDATE: 2025-06-25
+LAST UPDATE: 2025-06-26
 
 DESCRIPTION: 
 Use ribbon and subcortical NIFTI files to recompute pial surface,
@@ -81,9 +81,12 @@ TAG
 -t 7: (brain.finalsurfs-edit) edit brain.finalsurfs with GM from RIBBON_EDIT
 -t 8: (stats) Start from computing stats
 -t 9: (pial) Start from computing pial surface
--t 10: (smooth) Start from smoothing pial surface
--t 11: (aseg+aparc) Compute stats and other files
+-t 10: (aseg+aparc) Compute stats and other files
 -t 12: BONUS: test some command lines
+
+HA IMPROVEMENT
+-d: Number of dilation in ha_ribbon_edit.py
+-e: Number of erosion in ha_ribbon_edit.py
 
 VALUES
 -p: Give value of PIAL_BORDER_LOW
@@ -117,6 +120,8 @@ HEMI=-1 # Both hemispheres (option -r or -l not used)
 FS=0 # Default: No recon-all (option -i not used)
 MULTICASE=0 # Default: Only one case (option -f not used)
 OUTPUT_FOLDER="outputs"
+N_DILATION=3
+N_EROSION=2
 #LABELS_SUBCORTICAL="7 8 15 16 46 47" #for previous subcortical files (given to -c) : "5 15 29 30 32 31"
 #declare -a LABELS_HA=("5 17 18" "44 53 54") #HA in aparc+aseg / ('18 20 22' '19 21 23') in HOA_Subcortical_Labels
 declare -a LABELS_HA_RIB=("21" "22") #HA in ribbon (-n flag)
@@ -143,7 +148,7 @@ unset -v LABELS_HA_LEFT
 unset -v LABELS_HA_RIGHT
 
 #If a character is followed by :, then it needs an argument just after
-VALID_ARGS="i:s:b:c:n:o:x:y:t:p:f:hlrd"
+VALID_ARGS="i:s:b:c:n:o:x:y:t:p:f:d:e:hlrk"
 
 while getopts ${VALID_ARGS} opt; do
   case ${opt} in
@@ -193,6 +198,14 @@ while getopts ${VALID_ARGS} opt; do
 	MULTICASE=1
 	string_arguments+="-f ${OPTARG} "
 	;;
+    d) #Number of dilation in ha_ribbon_edit.py
+	N_DILATION=${OPTARG}
+	string_arguments+="-f ${OPTARG} "
+	;;
+    e) #Number of erosion in ha_ribbon_edit.py
+	N_EROSION=${OPTARG}
+	string_arguments+="-f ${OPTARG} "
+	;;
     h) #Help
 	Help
 	exit 1
@@ -205,8 +218,8 @@ while getopts ${VALID_ARGS} opt; do
 	HEMI=1 #right hemisphere only
 	string_arguments+="-r "
 	;;
-    d) #Delete last OUTPUT_FODLER
-	Delete #Delete report.sh and $OUTPUT_FOLDER
+    k) #Kill last OUTPUT_FODLER
+	Delete #Kill report.sh and $OUTPUT_FOLDER
 	string_arguments+="-d "
 	;;
     :)
@@ -344,6 +357,9 @@ labels_ha_lh = sys.argv[4]
 labels_ha_rh = sys.argv[5]
 labels_ha_rib_lh = sys.argv[6]
 labels_ha_rib_rh = sys.argv[7]
+n_dilation = sys.argv[8]
+n_erosion = sys.argv[9]
+
 
 #Load ribbon
 if not os.path.isfile(path_ribbon):
@@ -395,101 +411,43 @@ class L:
 d = numpy.eye(3, dtype=int).reshape(-1, 3)
 motion1 = numpy.concatenate((d, -d), axis=0)
 
-### Dilation1 of HA in GM
-data_out2 = copy.deepcopy(data_out)
-list_HA2 = list_HA[:]
-for (label,[x,y,z]) in list_HA:
-    n_coordinates = motion1 + [[x, y, z]]
-    for (k,n,m) in n_coordinates:
-        out_voxel = int(data_out[k,n,m])
-        if out_voxel in [L.l_gm,L.r_gm]:
-            data_out2[k,n,m]=label
-            list_HA2.append((label,[k,n,m]))
+def dilation(data, list):
+    data_out = copy.deepcopy(data)
+    list_out = list[:]
+    for (label,[x,y,z]) in list:
+        n_coordinates = motion1 + [[x, y, z]]
+        for (k,n,m) in n_coordinates:
+            out_voxel = int(data[k,n,m])
+            if out_voxel in [L.l_gm,L.r_gm]:
+                data_out[k,n,m]=label
+                list_out.append((label,[k,n,m]))
+    return data_out,list_out
 
-### Dilation2 of HA in GM
-data_out3 = copy.deepcopy(data_out2)
-list_HA3 = list_HA2[:]
-for (label,[x,y,z]) in list_HA2:
-    n_coordinates = motion1 + [[x, y, z]]
-    for (k,n,m) in n_coordinates:
-        out_voxel = int(data_out2[k,n,m])
-        if out_voxel in [L.l_gm,L.r_gm]:
-            data_out3[k,n,m]=label
-            list_HA3.append((label,[k,n,m]))
-			
-### Dilation3 HA in GM and BG (fill out BG neighbouring voxels)
-data_out4 = copy.deepcopy(data_out3)
-list_HA4 = list_HA3[:]
-for (label,[x,y,z]) in list_HA3:
-    n_coordinates = motion1 + [[x, y, z]]
-    for (k,n,m) in n_coordinates:
-        out_voxel = int(data_out3[k,n,m])
-        if out_voxel in [0,L.l_gm,L.r_gm,0]:
-            data_out4[k,n,m]=label
-            list_HA4.append((label,[k,n,m]))	
-	
-### Erosion1 of HA to BG next to BG (compensate dilation in BG)
-data_out5 = copy.deepcopy(data_out4)
-list_HA5 = []
-for (label,[x,y,z]) in list_HA4:
-    n_coordinates = motion1 + [[x, y, z]]
-    next_to_gm = False
-    for (k,n,m) in n_coordinates:
-        out_voxel = int(data_out4[k,n,m])
-        if out_voxel == 0:
-            next_to_gm = True
-            data_out5[x,y,z] = out_voxel
-            break
-    if not(next_to_gm):
-        list_HA5.append((label,[x,y,z]))
+def erosion(data, list):
+    data_out = copy.deepcopy(data)
+    list_out = list[:]
+    for (label,[x,y,z]) in list:
+        n_coordinates = motion1 + [[x, y, z]]
+        next_to_gm = False
+        for (k,n,m) in n_coordinates:
+            out_voxel = int(data[k,n,m])
+            if out_voxel in [L.l_gm,L.r_gm]:
+                next_to_gm = True
+                data_out[x,y,z] = out_voxel
+                break
+        if not(next_to_gm):
+            list_out.append((label,[x,y,z]))
+    return data_out,list_out
 
-### Erosion2 of HA next to GM
-data_out6 = copy.deepcopy(data_out5)
-list_HA6 = []
-for (label,[x,y,z]) in list_HA5:
-    n_coordinates = motion1 + [[x, y, z]]
-    next_to_gm = False
-    for (k,n,m) in n_coordinates:
-        out_voxel = int(data_out6[k,n,m])
-        if out_voxel in [L.l_gm,L.r_gm]:
-            next_to_gm = True
-            data_out6[x,y,z] = out_voxel
-            break
-    if not(next_to_gm):
-        list_HA6.append((label,[x,y,z]))
-
-### Erosion3 of HA next to GM 
-data_out7 = copy.deepcopy(data_out6)
-list_HA7 = []
-for (label,[x,y,z]) in list_HA6:
-    n_coordinates = motion1 + [[x, y, z]]
-    next_to_gm = False
-    for (k,n,m) in n_coordinates:
-        out_voxel = int(data_out7[k,n,m])
-        if out_voxel in [L.l_gm,L.r_gm]:
-            next_to_gm = True
-            data_out7[x,y,z] = out_voxel
-            break
-    if not(next_to_gm):
-        list_HA7.append((label,[x,y,z]))
-
-### Erosion4 of HA next to GM
-data_out8 = copy.deepcopy(data_out7)
-list_HA8 = []
-for (label,[x,y,z]) in list_HA7:
-    n_coordinates = motion1 + [[x, y, z]]
-    next_to_gm = False
-    for (k,n,m) in n_coordinates:
-        out_voxel = int(data_out7[k,n,m])
-        if out_voxel in [L.l_gm,L.r_gm]:
-            next_to_gm = True
-            data_out8[x,y,z] = out_voxel
-            break
-    if not(next_to_gm):
-        list_HA8.append((label,[x,y,z]))
+data = copy.deepcopy(data_out)
+list = list_HA[:]
+for i in range(int(n_dilation)):
+    data, list = dilation(data, list)
+for i in range(int(n_erosion)):
+    data, list = erosion(data, list)
 
 ###Create and save new image
-img_out_rib = nib.Nifti1Image(data_out8, img_ribbon.affine.copy())
+img_out_rib = nib.Nifti1Image(data, img_ribbon.affine.copy())
 nib.save(img_out_rib, path_out)
 EOF
 fi
@@ -941,13 +899,9 @@ declare -a BRAIN_FINALSURFS_NO_CEREB_EDITED2=("$O/mri/brain.finalsurfs_no_cereb_
 declare -a AUTODET_NEW_GW_STATS=("$O/surf/autodet-new.gw.stats.lh.dat" "$O/surf/autodet-new.gw.stats.rh.dat")
 
 declare -a RIBBON_EDIT_PIAL=("$O/surf/lh.ribbon_edit.pial" "$O/surf/rh.ribbon_edit.pial")
-declare -a RIBBON_EDIT_PIAL_SECOND_PASS_i=("$O/surf/lh.ribbon_edit-second-pass_i.pial" "$O/surf/rh.ribbon_edit-second-pass_i.pial")
-declare -a RIBBON_EDIT_PIAL_SECOND_PASS_r=("$O/surf/lh.ribbon_edit-second-pass_r.pial" "$O/surf/rh.ribbon_edit-second-pass_r.pial")
-declare -a RIBBON_EDIT_PIAL_SECOND_PASS_i_r=("$O/surf/lh.ribbon_edit-second-pass_i_r.pial" "$O/surf/rh.ribbon_edit-second-pass_i_r.pial")
-declare -a RIBBON_EDIT_PIAL_SECOND_PASS_i_w=("$O/surf/lh.ribbon_edit-second-pass_i_w.pial" "$O/surf/rh.ribbon_edit-second-pass_i_w.pial")
-declare -a RIBBON_EDIT_PIAL_SECOND_PASS_i_w_r=("$O/surf/lh.ribbon_edit-second-pass_i_w_r.pial" "$O/surf/rh.ribbon_edit-second-pass_i_w_r.pial")
+declare -a RIBBON_EDIT_PIAL_SECOND_PASS=("$O/surf/lh.ribbon_edit-second-pass.pial" "$O/surf/rh.ribbon_edit-second-pass.pial")
 
-declare -a RIBBON_EDIT_PIAL_THIRD_PASS_SMOOTH=("$O/surf/lh.ribbon_edit.smooth-third-pass.pial" "$O/surf/rh.ribbon_edit.smooth-third-pass.pial")
+declare -a RIBBON_EDIT_PIAL_THIRD_PASS=("$O/surf/lh.ribbon_edit.smooth-third-pass.pial" "$O/surf/rh.ribbon_edit.smooth-third-pass.pial")
 
 # Curv + Thickness + Stats + APARC + APEG ...
 declare -a CURV=("$O/surf/lh.curv" "$O/surf/rh.curv")
@@ -1156,7 +1110,7 @@ cmd "Copy $HA in $HA_CONVERT" \
 fi
 
 cmd "Use script $O/ha_ribbon_edit.py on $RIBBON_CONVERT to add HA from $SUBCORTICAL_EDIT" \
-"python $O/ha_ribbon_edit.py $RIBBON_CONVERT $HA_CONVERT $RIBBON_EDIT '${LABELS_HA_LEFT}' '${LABELS_HA_RIGHT}' ${LABELS_HA_RIB[0]} ${LABELS_HA_RIB[1]}"
+"python $O/ha_ribbon_edit.py $RIBBON_CONVERT $HA_CONVERT $RIBBON_EDIT '${LABELS_HA_LEFT}' '${LABELS_HA_RIGHT}' ${LABELS_HA_RIB[0]} ${LABELS_HA_RIB[1]} $N_DILATION $N_EROSION"
 
 cmd "Extract labels from $SUBCORTICAL_EDIT (Cerebellum, Medulla oblongata, Pons and Midbrain) into $SUBCORTICAL_MASK" \
 "mri_extract_label $SUBCORTICAL_EDIT $LABELS_SUBCORTICAL $SUBCORTICAL_MASK"
@@ -1391,38 +1345,18 @@ do
 	if ((HEMI>=0 && HEMI!=i)); #Cases when the current hemi ($i) is not to be processed
 	then
 		continue;
-	else	
-	cmd "${H[$i]} Computes pial surface" \
-	"mris_place_surface --i ${ORIG[$i]} --o ${RIBBON_EDIT_PIAL[$i]} --nsmooth 0 --adgws-in ${AUTODET_NEW_GW_STATS[$i]} --pial --${H[$i]} --repulse-surf ${ORIG[$i]} --invol ${BRAIN_FINALSURFS_NO_CEREB_EDITED2[$i]} --threads 6 --white-surf ${ORIG[$i]} --pin-medial-wall ${CORTEX_LABEL[$i]} --seg $ASEG_PRESURF_WO_SUBC --no-rip" #--rip-label $LH_CORTEX_HIPAMYG_LABEL" --aparc ${APARC_ANNOT[$i]} #--rip-bg isn't recognised
+	else
+	# PIAL first pass: BRAIN_FINALSURFS_NO_CEREB_EDITED2
+	cmd "${H[$i]} Computes pial surface - first pass" \
+	"mris_place_surface --i ${ORIG[$i]} --o ${RIBBON_EDIT_PIAL[$i]} --nsmooth 1 --adgws-in ${AUTODET_NEW_GW_STATS[$i]} --pial --${H[$i]} --repulse-surf ${ORIG[$i]} --invol ${BRAIN_FINALSURFS_NO_CEREB_EDITED2[$i]} --threads 6 --white-surf ${ORIG[$i]} --pin-medial-wall ${CORTEX_LABEL[$i]} --seg $ASEG_PRESURF_WO_SUBC --no-rip"
 	
-	### BONUS: aparc option
-	#cmd "${H[$i]} Computes pial surface, BONUS aparc" \
-	#"mris_place_surface --i ${ORIG[$i]} --o ${RIBBON_EDIT_PIAL[$i]}_with_aparc --nsmooth 0 --adgws-in ${AUTODET_NEW_GW_STATS[$i]} --pial --${H[$i]} --repulse-surf ${ORIG[$i]} --invol ${BRAIN_FINALSURFS_NO_CEREB_EDITED[$i]} --threads 6 --white-surf ${ORIG[$i]} --pin-medial-wall ${CORTEX_LABEL[$i]} --seg $ASEG_PRESURF --no-rip --aparc ${APARC_ANNOT[$i]}" #--rip-label $LH_CORTEX_HIPAMYG_LABEL" --aparc ${APARC_ANNOT[$i]} #--rip-bg isn't recognised
+	# PIAL second pass: BRAIN_FINALSURFS_NO_CEREB_UNIFORM_GM_80
+	cmd "${H[$i]} Computes pial surface - second pass: i+w" \
+	"mris_place_surface --i ${RIBBON_EDIT_PIAL[$i]} --o ${RIBBON_EDIT_PIAL_SECOND_PASS[$i]} --nsmooth 0 --adgws-in ${AUTODET_NEW_GW_STATS[$i]} --pial --${H[$i]} --repulse-surf ${ORIG[$i]} --invol ${BRAIN_FINALSURFS_NO_CEREB_UNIFORM_GM_80[$i]} --threads 6 --white-surf ${RIBBON_EDIT_PIAL[$i]} --pin-medial-wall ${CORTEX_LABEL[$i]} --seg $ASEG_PRESURF_WO_SUBC --no-rip"
 	
-	#Second pass BEST RESULT (i_w)
-	cmd "${H[$i]} Computes pial surface - second pass" \
-	"mris_place_surface --i ${RIBBON_EDIT_PIAL[$i]} --o ${RIBBON_EDIT_PIAL_SECOND_PASS_i_w[$i]} --nsmooth 0 --adgws-in ${AUTODET_NEW_GW_STATS[$i]} --pial --${H[$i]} --repulse-surf ${ORIG[$i]} --invol ${BRAIN_FINALSURFS_NO_CEREB_UNIFORM_GM_80[$i]} --threads 6 --white-surf ${RIBBON_EDIT_PIAL[$i]} --pin-medial-wall ${CORTEX_LABEL[$i]} --seg $ASEG_PRESURF_WO_SUBC --no-rip" #--aparc ${APARC_ANNOT[$i]}" #--rip-bg isn't recognised
-
-	fi
-done
-fi
-
-#################
-## Add smoothing to pial surface (mris_place_surface)
-# #################
-#cat << EOF
-#EOF
-
-if ((TAG<=10))
-then
-for (( i=0; i<2; i++ ));
-do
-	if ((HEMI>=0 && HEMI!=i)); #Cases when the current hemi ($i) is not to be processed
-	then
-		continue;
-	else		
-	cmd "${H[$i]} Smooths pial surface" \
-	"mris_place_surface --i ${RIBBON_EDIT_PIAL_SECOND_PASS_i_w[$i]} --o ${RIBBON_EDIT_PIAL_THIRD_PASS_SMOOTH[$i]} --nsmooth 1 --adgws-in ${AUTODET_NEW_GW_STATS[$i]} --pial --${H[$i]} --repulse-surf ${RIBBON_EDIT_PIAL_SECOND_PASS_i_w[$i]} --invol ${BRAIN_FINALSURFS_NO_CEREB_EDITED2[$i]} --threads 6 --white-surf ${ORIG[$i]} --pin-medial-wall ${CORTEX_LABEL[$i]} --seg $ASEG_PRESURF_WO_SUBC --no-rip" #--rip-label #--rip-bg isn't recognised
+	# PIAL third pass: nsmooth 1
+	cmd "${H[$i]} Computes pial surface - third pass: smooth" \
+	"mris_place_surface --i ${RIBBON_EDIT_PIAL_SECOND_PASS[$i]} --o ${RIBBON_EDIT_PIAL_THIRD_PASS[$i]} --nsmooth 1 --adgws-in ${AUTODET_NEW_GW_STATS[$i]} --pial --${H[$i]} --repulse-surf ${RIBBON_EDIT_PIAL_SECOND_PASS_i_w[$i]} --invol ${BRAIN_FINALSURFS_NO_CEREB_EDITED2[$i]} --threads 6 --white-surf ${ORIG[$i]} --pin-medial-wall ${CORTEX_LABEL[$i]} --seg $ASEG_PRESURF_WO_SUBC --no-rip"
 	fi
 done
 fi
@@ -1430,7 +1364,7 @@ fi
 #################
 ## Add last steps of autorecon3: stats, aseg, labels
 # #################
-if ((TAG<=11))
+if ((TAG<=10))
 then
 for (( i=0; i<2; i++ ));
 do
@@ -1442,7 +1376,7 @@ do
 	cmd "${H[$i]} Copy white surface to ${WHITE[$i]}" \
 	"cp ${ORIG[$i]} ${WHITE[$i]}" 
 	cmd "${H[$i]} Copy pial surface to ${PIAL[$i]}" \
-	"cp ${RIBBON_EDIT_PIAL_THIRD_PASS_SMOOTH[$i]} ${PIAL[$i]}" 
+	"cp ${RIBBON_EDIT_PIAL_THIRD_PASS[$i]} ${PIAL[$i]}" 
 	
 	# Compute the stats
 	cmd "${H[$i]} pial curv" \
