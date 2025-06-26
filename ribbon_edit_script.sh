@@ -1147,7 +1147,7 @@ cmd "Extract WM from $RIBBON_EDIT" \
 "mri_extract_label $RIBBON_EDIT ${LABEL_RIBBON_WM[0]} ${LABEL_RIBBON_WM[1]} $WM_BMASK_ALL" #0/128 binary mask
 
 cmd "Concatenate $WM_BMASK_ALL with $WM _FS into $WM_CONCAT" \
-"mri_concat --i $WM_BMASK_ALL --i $WM _FS --o $WM_CONCAT --sum" #ROI at 378 (128+250)
+"mri_concat --i $WM_BMASK_ALL --i $WM_FS --o $WM_CONCAT --sum" #ROI at 378 (128+250)
 
 cmd "Binarize $WM_CONCAT at 251 into $WM_BMASK_250" \
 "mri_binarize --i $WM_CONCAT --o $WM_BMASK_250 --match 378"
@@ -1377,13 +1377,18 @@ do
 	"cp ${RIBBON_EDIT_PIAL_THIRD_PASS[$i]} ${PIAL[$i]}" 
  	cmd "${H[$i]} Copy $RAWAVG to $RAWAVG_MASKED" \
  	"cp $RAWAVG $RAWAVG_MASKED"
- 	cmd "${H[$i]} Mask $RAWAVG_MASKED with $BRAIN_FS_MASK into $RAWAVG_MASKED" \
-"mri_mask $RAWAVG_MASKED $BRAIN_FS_MASK $RAWAVG_MASKED"
+ 	cmd "${H[$i]} Mask $RAWAVG_MASKED with $BRAIN_MASK into $RAWAVG_MASKED" \
+"mri_mask $RAWAVG_MASKED $BRAIN_MASK $RAWAVG_MASKED"
  	cmd "${H[$i]} Copy $ORIG_FS to $ORIG_MASKED" \
  	"cp $ORIG_FS $ORIG_MASKED"
- 	cmd "${H[$i]} Mask $ORIG_MASKED with $BRAIN_FS_MASK into $ORIG_MASKED" \
-"mri_mask $ORIG_MASKED $BRAIN_FS_MASK $ORIG_MASKED"
-
+ 	cmd "${H[$i]} Mask $ORIG_MASKED with $BRAIN_MASK into $ORIG_MASKED" \
+"mri_mask $ORIG_MASKED $BRAIN_MASK $ORIG_MASKED"
+	
+	# Files creation as recon-all
+ 	cmd "${H[$i]} Mask $ORIG_MASKED with $BRAIN_MASK into $ORIG_MASKED" \
+"mri_mask $ORIG_MASKED $BRAIN_MASK $ORIG_MASKED"
+	
+	
 	# Compute the stats
 	cmd "${H[$i]} pial curv" \
  	"mris_place_surface --curv-map ${PIAL[$i]} 2 10 ${PIAL_CURV[$i]}"
