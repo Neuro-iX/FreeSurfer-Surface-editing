@@ -837,35 +837,35 @@ declare -a DKAPARC_ATLAS_ACFB40=("$FREESURFER_HOME/average/lh.DKaparc.atlas.acfb
 #################
 ## Output files
 #################
-IMAGE_PADDED="$SUBJECTS_DIR/$SUBJID/image-padded.mgz"
+IMAGE_PADDED="$SUBJECTS_DIR/$SUBJID/RS_image-padded.mgz"
 $IMAGE_ORIG="$O/mri/orig/001.mgz"
 $RAWAVG="$O/mri/rawavg.mgz"
 
-RIBBON_PADDED="$O/mri/ribbon-precorrection.mgz"
-SUBCORTICAL_PADDED="$O/mri/subcortical-precorrection.mgz"
-RIBBON_CONVERT="$O/mri/ribbon-convert.mgz"
+RIBBON_PADDED="$O/mri/RS_ribbon-precorrection.mgz"
+SUBCORTICAL_PADDED="$O/mri/RS_subcortical-precorrection.mgz"
+RIBBON_CONVERT="$O/mri/RS_ribbon-convert.mgz"
 RIBBON_EDIT="$O/mri/ribbon-edit.mgz"
-SUBCORTICAL_EDIT="$O/mri/subcortical-edit.mgz"
+SUBCORTICAL_EDIT="$O/mri/RS_subcortical-edit.mgz"
 
-HA_PADDED="$O/mri/ha-padded.mgz"
-HA_CONVERT="$O/mri/ha-convert.mgz"
+HA_PADDED="$O/mri/RS_ha-padded.mgz"
+HA_CONVERT="$O/mri/RS_ha-convert.mgz"
 
-SUBCORTICAL_MASK="$O/mri/subcortical-mask.mgz"
-BRAIN_MASK="$O/mri/brain-mask.mgz"
+SUBCORTICAL_MASK="$O/mri/RS_subcortical-mask.mgz"
+BRAIN_MASK="$O/mri/RS_brain-mask.mgz"
 
-T1_MASKED="$O/mri/T1-masked.mgz"
+T1_MASKED="$O/mri/RS_T1-masked.mgz"
 
 ASEG_PRESURF="$O/mri/aseg.presurf.mgz"
-ASEG_PRESURF_WO_SUBC="$O/mri/aseg.presurf_wo_subc.mgz"
+ASEG_PRESURF_WO_SUBC="$O/mri/RS_aseg.presurf_wo_subc.mgz"
 
-WM_BMASK_ALL="$O/mri/wm-bmask.mgz"
-WM_MASK="$O/mri/wm-mask.mgz"
-WM_CONCAT="$O/mri/wm-concat.mgz"
-WM_BMASK_250="$O/mri/wm-bmask-250.mgz"
-WM_ASEGEDIT="$O/mri/wm-asegedit.mgz"
-WM_EDITED="$O/mri/wm.mgz" # Use this name for mri_fix_topology
+WM_BMASK_ALL="$O/mri/RS_wm-bmask.mgz"
+WM_MASK="$O/mri/RS_wm-mask.mgz"
+WM_CONCAT="$O/mri/RS_wm-concat.mgz"
+WM_BMASK_250="$O/mri/RS_wm-bmask-250.mgz"
+WM_ASEGEDIT="$O/mri/RS_wm-asegedit.mgz"
+WM_EDITED="$O/mri/RS_wm.mgz" # Use this name for mri_fix_topology
 
-BRAIN_COPY="$O/mri/brain.mgz" # for mris_fix_topology
+BRAIN="$O/mri/brain.mgz" # for mris_fix_topology
 
 declare -a FILLED_PRETRESS=("$O/mri/filled_pretress_lh.mgz" "$O/mri/filled_pretress_rh.mgz")
 declare -a ORIG_NOFIX_PREDEC=("$O/surf/lh.orig.nofix.predec" "$O/surf/rh.orig.nofix.predec")
@@ -1112,8 +1112,8 @@ cmd "Use script $O/ha_ribbon_edit.py on $RIBBON_CONVERT to add HA from $SUBCORTI
 cmd "Extract labels from $SUBCORTICAL_EDIT (Cerebellum, Medulla oblongata, Pons and Midbrain) into $SUBCORTICAL_MASK" \
 "mri_extract_label $SUBCORTICAL_EDIT $LABELS_SUBCORTICAL $SUBCORTICAL_MASK"
 
-cmd "Concatenate $RIBBON_EDIT with $SUBCORTICAL_MASK into $BRAIN_FS_MASK" \
-"mri_concat --i $RIBBON_EDIT --i $SUBCORTICAL_MASK --o $BRAIN_FS_MASK --combine"
+cmd "Concatenate $RIBBON_EDIT with $SUBCORTICAL_MASK into $BRAIN_MASK" \
+"mri_concat --i $RIBBON_EDIT --i $SUBCORTICAL_MASK --o $BRAIN_MASK --combine"
 fi
 
 #################
@@ -1121,8 +1121,8 @@ fi
 #################
 if ((TAG<=2))
 then
-cmd "Mask $T1_FS with $BRAIN_FS_MASK into $T1_MASKED" \
-"mri_mask $T1_FS $BRAIN_FS_MASK $T1_MASKED"
+cmd "Mask $T1_FS with $BRAIN_MASK into $T1_MASKED" \
+"mri_mask $T1_FS $BRAIN_MASK $T1_MASKED"
 fi
 
 #################
@@ -1204,7 +1204,7 @@ do
         
         # Copy BRAIN for mris_fix_topology
 	cmd "${H[$i]} Copy $BRAIN_FS for mris_fix_topology" \
-	"if [ ! -f $BRAIN_FS_COPY ]; then cp $BRAIN_FS $BRAIN_FS_COPY; fi" 
+	"if [ ! -f $BRAIN ]; then cp $BRAIN_FS $BRAIN; fi" 
 	
 	# Fix topology
 	cmd "${H[$i]} Fix tolpology WM surf" \
