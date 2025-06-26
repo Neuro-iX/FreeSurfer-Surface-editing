@@ -863,7 +863,7 @@ WM_MASK="$O/mri/RS_wm-mask.mgz"
 WM_CONCAT="$O/mri/RS_wm-concat.mgz"
 WM_BMASK_250="$O/mri/RS_wm-bmask-250.mgz"
 WM_ASEGEDIT="$O/mri/RS_wm-asegedit.mgz"
-WM_EDITED="$O/mri/RS_wm.mgz" # Use this name for mri_fix_topology
+WM_EDITED="$O/mri/wm.mgz" # Use this name for mri_fix_topology
 
 BRAIN="$O/mri/brain.mgz" # for mris_fix_topology
 
@@ -994,6 +994,9 @@ declare -a BA_EXVIVO_THRESH_ANNOT=("$O/label/lh.BA_exvivo.thresh.annot" "$O/labe
 BA_EXVIVO_THRESH_CTAB="$O/label/BA_exvivo.thresh.ctab"
 
 TALAIRACH_XFM="$O/mri/transforms/talairach.xfm"
+
+#Other files to complete collection
+ANTSDN_BRAIN="$O/mri/antsdn.brain.mgz"
 
 #################
 ## New invocation in report.sh and create
@@ -1375,54 +1378,60 @@ do
 	"cp ${ORIG[$i]} ${WHITE[$i]}" 
 	cmd "${H[$i]} Copy pial surface to ${PIAL[$i]}" \
 	"cp ${RIBBON_EDIT_PIAL_THIRD_PASS[$i]} ${PIAL[$i]}" 
- 	cmd "${H[$i]} Copy $RAWAVG to $RAWAVG_MASKED" \
- 	"cp $RAWAVG $RAWAVG_MASKED"
- 	cmd "${H[$i]} Mask $RAWAVG_MASKED with $BRAIN_MASK into $RAWAVG_MASKED" \
+	
+	if [ ! -f "$RAWAVG_MASKED" ]; then 
+	cmd "Copy $RAWAVG to $RAWAVG_MASKED" \
+	"cp $RAWAVG $RAWAVG_MASKED"
+	cmd "Mask $RAWAVG_MASKED with $BRAIN_MASK into $RAWAVG_MASKED" \
 "mri_mask $RAWAVG_MASKED $BRAIN_MASK $RAWAVG_MASKED"
- 	cmd "${H[$i]} Copy $ORIG_FS to $ORIG_MASKED" \
- 	"cp $ORIG_FS $ORIG_MASKED"
- 	cmd "${H[$i]} Mask $ORIG_MASKED with $BRAIN_MASK into $ORIG_MASKED" \
+	fi
+
+	if [ ! -f "$ORIG_MASKED" ]; then
+	cmd "Copy $ORIG_FS to $ORIG_MASKED" \
+	"cp $ORIG_FS $ORIG_MASKED"
+	cmd "Mask $ORIG_MASKED with $BRAIN_MASK into $ORIG_MASKED" \
 "mri_mask $ORIG_MASKED $BRAIN_MASK $ORIG_MASKED"
+	fi
 	
 	# Files creation as recon-all
- 	cmd "${H[$i]} Mask $ORIG_MASKED with $BRAIN_MASK into $ORIG_MASKED" \
-"mri_mask $ORIG_MASKED $BRAIN_MASK $ORIG_MASKED"
+	cmd "AntsDenoise $BRAIN to $ANTSDN_BRAIN" \
+	"AntsDenoiseImageFs -i $BRAIN -o $ANTSDN_BRAIN"
 	
 	
 	# Compute the stats
 	cmd "${H[$i]} pial curv" \
- 	"mris_place_surface --curv-map ${PIAL[$i]} 2 10 ${PIAL_CURV[$i]}"
- 	cmd "${H[$i]} pial area" \
- 	"mris_place_surface --area-map ${PIAL[$i]} ${PIAL_AREA[$i]}"
- 	cmd "${H[$i]} thickness" \
- 	"mris_place_surface --thickness ${ORIG[$i]} ${PIAL[$i]} 20 5 ${THICKNESS[$i]}"
- 	# same command again for "area and vertex vol rh" ??? 	
- 	
- 	cmd "${H[$i]} Curvature Stats" \
- 	"mris_curvature_stats -m --writeCurvatureFiles -G -o ${CURV_STATS[$i]} -F smoothwm $SUBJID/$OUTPUT_FOLDER ${H[$i]} curv sulc"
+	"mris_place_surface --curv-map ${PIAL[$i]} 2 10 ${PIAL_CURV[$i]}"
+	cmd "${H[$i]} pial area" \
+	"mris_place_surface --area-map ${PIAL[$i]} ${PIAL_AREA[$i]}"
+	cmd "${H[$i]} thickness" \
+	"mris_place_surface --thickness ${ORIG[$i]} ${PIAL[$i]} 20 5 ${THICKNESS[$i]}"
+	# same command again for "area and vertex vol rh" ??? 	
+	
+	cmd "${H[$i]} Curvature Stats" \
+	"mris_curvature_stats -m --writeCurvatureFiles -G -o ${CURV_STATS[$i]} -F smoothwm $SUBJID/$OUTPUT_FOLDER ${H[$i]} curv sulc"
 
- 	cmd "${H[$i]} Cortical ribbon mask" \
- 	"mris_volmask --aseg_name aseg.presurf --label_left_white ${LABEL_RIBBON_WM[0]} --label_left_ribbon ${LABEL_RIBBON_GM[0]} --label_right_white ${LABEL_RIBBON_WM[1]} --label_right_ribbon ${LABEL_RIBBON_GM[1]} --save_ribbon --out_root ribbon_script_${H[$i]} --${H[$i]}-only $SUBJID/$OUTPUT_FOLDER" #Searching for surf/rh.white and surf/rh.pial, and --surf_white and --surf_pial don't help, can use arg 
+	cmd "${H[$i]} Cortical ribbon mask" \
+	"mris_volmask --aseg_name aseg.presurf --label_left_white ${LABEL_RIBBON_WM[0]} --label_left_ribbon ${LABEL_RIBBON_GM[0]} --label_right_white ${LABEL_RIBBON_WM[1]} --label_right_ribbon ${LABEL_RIBBON_GM[1]} --save_ribbon --out_root ribbon_script_${H[$i]} --${H[$i]}-only $SUBJID/$OUTPUT_FOLDER" #Searching for surf/rh.white and surf/rh.pial, and --surf_white and --surf_pial don't help, can use arg 
 	#cmd "Copy $RH_SMOOTHW_NOFIX to $RH_SMOOTHW" \
 	#"cp $RH_SMOOTHW_NOFIX $RH_SMOOTHW"
-  	#cmd "Inflation2 rh" \
- 	#"mris_inflate -n 30 $RH_SMOOTHW $RH_INFLATED"
+	#cmd "Inflation2 rh" \
+	#"mris_inflate -n 30 $RH_SMOOTHW $RH_INFLATED"
 
- 	cmd "${H[$i]} Cortical Parc 2" \
- 	"mris_ca_label -l ${CORTEX_LABEL[$i]} -aseg $ASEG_PRESURF -seed 1234 $SUBJID/$OUTPUT_FOLDER ${H[$i]} ${SPHERE_REG[$i]} ${CD_APARC_ATLAS[$i]} ${CD_APARC_ANNOT[$i]}"
+	cmd "${H[$i]} Cortical Parc 2" \
+	"mris_ca_label -l ${CORTEX_LABEL[$i]} -aseg $ASEG_PRESURF -seed 1234 $SUBJID/$OUTPUT_FOLDER ${H[$i]} ${SPHERE_REG[$i]} ${CD_APARC_ATLAS[$i]} ${CD_APARC_ANNOT[$i]}"
 	#Use surf/rh.smoothwm and surf/rh.sphere.reg
- 	cmd "${H[$i]} Cortical Parc 3" \
- 	"mris_ca_label -l ${CORTEX_LABEL[$i]} -aseg $ASEG_PRESURF -seed 1234 $SUBJID/$OUTPUT_FOLDER ${H[$i]} ${SPHERE_REG[$i]} ${DKT_APARC_ATLAS[$i]} ${DKT_APARC_ANNOT[$i]}"
- 	
- 	cmd "${H[$i]} Change SUBJECTS_DIR to SUBJECTS_DIR/SUBJID" \
- 	"export SUBJECTS_DIR=$SUBJECTS_DIR/$SUBJID"
- 	cmd "${H[$i]} WM/GM Contrast" \
- 	"pctsurfcon --s $OUTPUT_FOLDER --${H[$i]}-only"
- 	#Need to change $SUBJECTS_DIR because doesn't accept $SUBJID/$OUTPUT_FOLDER 
- 	#Need $RAWAVG_COPY, $ORIG_COPY and $RH_APARC_ANNOT
- 	#PROBLEM in $RH_APARC_ANNOT: # elements (127231) in rh.aparc.annot does not match # vertices (138041)
- 	cmd "${H[$i]} Change back SUBJECTS_DIR/SUBJID to SUBJECTS_DIR" \
- 	"export SUBJECTS_DIR=$(dirname $SUBJECTS_DIR)"
+	cmd "${H[$i]} Cortical Parc 3" \
+	"mris_ca_label -l ${CORTEX_LABEL[$i]} -aseg $ASEG_PRESURF -seed 1234 $SUBJID/$OUTPUT_FOLDER ${H[$i]} ${SPHERE_REG[$i]} ${DKT_APARC_ATLAS[$i]} ${DKT_APARC_ANNOT[$i]}"
+	
+	cmd "${H[$i]} Change SUBJECTS_DIR to SUBJECTS_DIR/SUBJID" \
+	"export SUBJECTS_DIR=$SUBJECTS_DIR/$SUBJID"
+	cmd "${H[$i]} WM/GM Contrast" \
+	"pctsurfcon --s $OUTPUT_FOLDER --${H[$i]}-only"
+	#Need to change $SUBJECTS_DIR because doesn't accept $SUBJID/$OUTPUT_FOLDER 
+	#Need $RAWAVG_COPY, $ORIG_COPY and $RH_APARC_ANNOT
+	#PROBLEM in $RH_APARC_ANNOT: # elements (127231) in rh.aparc.annot does not match # vertices (138041)
+	cmd "${H[$i]} Change back SUBJECTS_DIR/SUBJID to SUBJECTS_DIR" \
+	"export SUBJECTS_DIR=$(dirname $SUBJECTS_DIR)"
  	
  	cmd "${H[$i]} Relabel Hypointensities" \
  	"mri_relabel_hypointensities -${H[$i]} $ASEG_PRESURF $O/surf $ASEG_PRESURF_HYPOS"
