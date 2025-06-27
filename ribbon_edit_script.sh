@@ -81,7 +81,8 @@ TAG
 -t 7: (brain.finalsurfs-edit) edit brain.finalsurfs with GM from RIBBON_EDIT
 -t 8: (stats) Start from computing stats
 -t 9: (pial) Start from computing pial surface
--t 10: (aseg+aparc) Compute stats and other files
+-t 10: Non hemisphere specific files to create
+-t 11: (aseg+aparc) Compute stats and other files
 -t 12: BONUS: test some command lines
 
 HA IMPROVEMENT
@@ -805,6 +806,8 @@ NORM_FS="$SUBJECTS_DIR/$SUBJID/${SUBJID}_freesurfer/mri/norm.mgz"
 ASEG_PRESURF_NOFIX_FS="$SUBJECTS_DIR/$SUBJID/${SUBJID}_freesurfer/mri/aseg.presurf.mgz"
 
 BRAIN_FS="$SUBJECTS_DIR/$SUBJID/${SUBJID}_freesurfer/mri/brain.mgz"
+BRAIN_FINALSURFS_FS="$SUBJECTS_DIR/$SUBJID/${SUBJID}_freesurfer/mri/brain.finalsurfs.mgz"
+BRAIN_FINALSURFS_MANEDIT_FS="$SUBJECTS_DIR/$SUBJID/${SUBJID}_freesurfer/mri/brain.finalsurfs.manedit.mgz"
 
 WM_FS="$SUBJECTS_DIR/$SUBJID/${SUBJID}_freesurfer/mri/wm.mgz"
 
@@ -838,14 +841,16 @@ declare -a DKAPARC_ATLAS_ACFB40=("$FREESURFER_HOME/average/lh.DKaparc.atlas.acfb
 ## Output files
 #################
 IMAGE_PADDED="$SUBJECTS_DIR/$SUBJID/RS_image-padded.mgz"
-$IMAGE_ORIG="$O/mri/orig/001.mgz"
-$RAWAVG="$O/mri/rawavg.mgz"
+IMAGE_ORIG="$O/mri/orig/001.mgz"
 
 RIBBON_PADDED="$O/mri/RS_ribbon-precorrection.mgz"
 SUBCORTICAL_PADDED="$O/mri/RS_subcortical-precorrection.mgz"
 RIBBON_CONVERT="$O/mri/RS_ribbon-convert.mgz"
 RIBBON_EDIT="$O/mri/ribbon-edit.mgz"
 SUBCORTICAL_EDIT="$O/mri/RS_subcortical-edit.mgz"
+
+BRAIN_FINALSURFS="$O/mri/brain.finalsurfs.mgz"
+BRAIN_FINALSURFS_MANEDIT="$O/mri/brain.finalsurfs.manedit.mgz"
 
 HA_PADDED="$O/mri/RS_ha-padded.mgz"
 HA_CONVERT="$O/mri/RS_ha-convert.mgz"
@@ -863,11 +868,11 @@ WM_MASK="$O/mri/RS_wm-mask.mgz"
 WM_CONCAT="$O/mri/RS_wm-concat.mgz"
 WM_BMASK_250="$O/mri/RS_wm-bmask-250.mgz"
 WM_ASEGEDIT="$O/mri/RS_wm-asegedit.mgz"
-WM_EDITED="$O/mri/wm.mgz" # Use this name for mri_fix_topology
+WM="$O/mri/wm.mgz" # Use this name for mri_fix_topology
 
 BRAIN="$O/mri/brain.mgz" # for mris_fix_topology
 
-declare -a FILLED_PRETRESS=("$O/mri/filled_pretress_lh.mgz" "$O/mri/filled_pretress_rh.mgz")
+declare -a FILLED_PRETRESS=("$O/mri/RS_filled_pretress_lh.mgz" "$O/mri/RS_filled_pretress_rh.mgz")
 declare -a ORIG_NOFIX_PREDEC=("$O/surf/lh.orig.nofix.predec" "$O/surf/rh.orig.nofix.predec")
 declare -a ORIG_NOFIX=("$O/surf/lh.orig.nofix" "$O/surf/rh.orig.nofix")
 
@@ -884,21 +889,21 @@ declare -a CURV=("$O/surf/lh.curv" "$O/surf/rh.curv")
 declare -a CORTEX_LABEL=("$O/label/lh.cortex.label" "$O/label/rh.cortex.label")
 declare -a CORTEX_HIPAMYG_LABEL=("$O/label/lh.cortex+hipamyg.label" "$O/label/rh.cortex+hipamyg.label")
 
-declare -a GM_BMASK=("$O/mri/gm-bmask_lh.mgz" "$O/mri/gm-bmask_rh.mgz")
-declare -a WM_BMASK=("$O/mri/wm-bmask_lh.mgz" "$O/mri/wm-bmask_rh.mgz")
-declare -a BMASK=("$O/mri/bmask_lh.mgz" "$O/mri/bmask_rh.mgz")
-declare -a BRAIN_FINALSURFS_NO_CEREB=("$O/mri/brain.finalsurfs_no_cereb_lh.mgz" "$O/mri/brain.finalsurfs_no_cereb_rh.mgz")
-declare -a BRAIN_FINALSURFS_NO_CEREB_UNIFORM_WM_110=("$O/mri/brain.finalsurfs_no_cereb_uniform_wm_110_lh.mgz" "$O/mri/brain.finalsurfs_no_cereb_uniform_wm_110_rh.mgz")
-declare -a BRAIN_FINALSURFS_NO_CEREB_UNIFORM_GM_80=("$O/mri/brain.finalsurfs_no_cereb_uniform_gm_80_lh.mgz" "$O/mri/brain.finalsurfs_no_cereb_uniform_gm_80_rh.mgz")
-declare -a BRAIN_FINALSURFS_NO_CEREB_EDITED=("$O/mri/brain.finalsurfs_no_cereb_edited_lh.mgz" "$O/mri/brain.finalsurfs_no_cereb_edited_rh.mgz")
-declare -a BRAIN_FINALSURFS_NO_CEREB_EDITED2=("$O/mri/brain.finalsurfs_no_cereb_edited2_lh.mgz" "$O/mri/brain.finalsurfs_no_cereb_edited2_rh.mgz")
+declare -a GM_BMASK=("$O/mri/RS_gm-bmask_lh.mgz" "$O/mri/RS_gm-bmask_rh.mgz")
+declare -a WM_BMASK=("$O/mri/RS_wm-bmask_lh.mgz" "$O/mri/RS_wm-bmask_rh.mgz")
+declare -a BMASK=("$O/mri/RS_bmask_lh.mgz" "$O/mri/RS_bmask_rh.mgz")
+declare -a BRAIN_FINALSURFS_NO_CEREB=("$O/mri/RS_brain.finalsurfs_no_cereb_lh.mgz" "$O/mri/RS_brain.finalsurfs_no_cereb_rh.mgz")
+declare -a BRAIN_FINALSURFS_NO_CEREB_UNIFORM_WM_110=("$O/mri/RS_brain.finalsurfs_no_cereb_uniform_wm_110_lh.mgz" "$O/mri/RS_brain.finalsurfs_no_cereb_uniform_wm_110_rh.mgz")
+declare -a BRAIN_FINALSURFS_NO_CEREB_UNIFORM_GM_80=("$O/mri/RS_brain.finalsurfs_no_cereb_uniform_gm_80_lh.mgz" "$O/mri/RS_brain.finalsurfs_no_cereb_uniform_gm_80_rh.mgz")
+declare -a BRAIN_FINALSURFS_NO_CEREB_EDITED=("$O/mri/RS_brain.finalsurfs_no_cereb_edited_lh.mgz" "$O/mri/RS_brain.finalsurfs_no_cereb_edited_rh.mgz")
+declare -a BRAIN_FINALSURFS_NO_CEREB_EDITED2=("$O/mri/RS_brain.finalsurfs_no_cereb_edited2_lh.mgz" "$O/mri/RS_brain.finalsurfs_no_cereb_edited2_rh.mgz")
 
 declare -a AUTODET_NEW_GW_STATS=("$O/surf/autodet-new.gw.stats.lh.dat" "$O/surf/autodet-new.gw.stats.rh.dat")
 
-declare -a RIBBON_EDIT_PIAL=("$O/surf/lh.ribbon_edit.pial" "$O/surf/rh.ribbon_edit.pial")
-declare -a RIBBON_EDIT_PIAL_SECOND_PASS=("$O/surf/lh.ribbon_edit-second-pass.pial" "$O/surf/rh.ribbon_edit-second-pass.pial")
+declare -a RIBBON_EDIT_PIAL=("$O/surf/RS_lh.ribbon_edit.pial" "$O/surf/RS_rh.ribbon_edit.pial")
+declare -a RIBBON_EDIT_PIAL_SECOND_PASS=("$O/surf/RS_lh.ribbon_edit-second-pass.pial" "$O/surf/RS_rh.ribbon_edit-second-pass.pial")
 
-declare -a RIBBON_EDIT_PIAL_THIRD_PASS=("$O/surf/lh.ribbon_edit.smooth-third-pass.pial" "$O/surf/rh.ribbon_edit.smooth-third-pass.pial")
+declare -a RIBBON_EDIT_PIAL_THIRD_PASS=("$O/surf/RS_lh.ribbon_edit.smooth-third-pass.pial" "$O/surf/RS_rh.ribbon_edit.smooth-third-pass.pial")
 
 # Curv + Thickness + Stats + APARC + APEG ...
 declare -a CURV=("$O/surf/lh.curv" "$O/surf/rh.curv")
@@ -915,8 +920,10 @@ declare -a PIAL=("$O/surf/lh.pial" "$O/surf/rh.pial") #Copy of the pial surface
 declare -a SPHERE=("$O/surf/lh.sphere" "$O/surf/rh.sphere")
 declare -a SPHERE_REG=("$O/surf/lh.sphere.reg" "$O/surf/rh.sphere.reg")
 
-RAWAVG_MASKED="$O/mri/rawavg.mgz"
-ORIG_MASKED="$O/mri/orig.mgz"
+RAWAVG="$O/mri/rawavg.mgz"
+RAWAVG_MASKED="$O/mri/RS_rawavg-masked.mgz"
+ORIG_VOLUME="$O/mri/orig.mgz"
+ORIG_MASKED="$O/mri/RS_orig-masked.mgz"
 
 declare -a CD_APARC_ANNOT=("$O/label/lh.aparc.a2009s.annot" "$O/label/rh.aparc.a2009s.annot")
 declare -a DKT_APARC_ANNOT=("$O/label/lh.aparc.DKTatlas.annot" "$O/label/rh.aparc.DKTatlas.annot")
@@ -997,6 +1004,7 @@ TALAIRACH_XFM="$O/mri/transforms/talairach.xfm"
 
 #Other files to complete collection
 ANTSDN_BRAIN="$O/mri/antsdn.brain.mgz"
+WM_SEG="$O/mri/wm.seg.mgz"
 
 #################
 ## New invocation in report.sh and create
@@ -1042,15 +1050,6 @@ cmd "Apply recon-all -autorecon 1 and 2 on $IMAGE_PADDED" \
 
 cmd "Change back SUBJECTS_DIR/SUBJID to SUBJECTS_DIR" \
 "export SUBJECTS_DIR=$(dirname $SUBJECTS_DIR)"
-
-#Copy image-padded.mgz to orig/001.mgz
-cmd "Copy $IMAGE_ORIG_FS" \
-"if [ ! -f $IMAGE_ORIG ]; then cp $IMAGE_ORIG_FS $IMAGE_ORIG; fi" 
-
-#Copy image-padded.mgz to orig/001.mgz
-cmd "Copy $RAWAVG_FS to get $RAWAVG if not already exists" \
-"if [ ! -f $RAWAVG ]; then cp $RAWAVG_FS $RAWAVG; fi" 
-
 fi
 
 #################
@@ -1141,7 +1140,7 @@ cmd "Use script $O/edit_aseg_presurf_based_on_ribbon.py on $ASEG_PRESURF_NOFIX_F
 fi
 
 #################
-## Compute WM_EDIT based on BRAIN_FINALSURFS masked by WM_BMASK_ALL
+## Compute WM_EDIT based on BRAIN_FINALSURFS_FS masked by WM_BMASK_ALL
 #################
 if ((TAG<=5))
 then
@@ -1149,7 +1148,7 @@ then
 cmd "Extract WM from $RIBBON_EDIT" \
 "mri_extract_label $RIBBON_EDIT ${LABEL_RIBBON_WM[0]} ${LABEL_RIBBON_WM[1]} $WM_BMASK_ALL" #0/128 binary mask
 
-cmd "Concatenate $WM_BMASK_ALL with $WM _FS into $WM_CONCAT" \
+cmd "Concatenate $WM_BMASK_ALL with $WM_FS into $WM_CONCAT" \
 "mri_concat --i $WM_BMASK_ALL --i $WM_FS --o $WM_CONCAT --sum" #ROI at 378 (128+250)
 
 cmd "Binarize $WM_CONCAT at 251 into $WM_BMASK_250" \
@@ -1158,7 +1157,7 @@ cmd "Binarize $WM_CONCAT at 251 into $WM_BMASK_250" \
 cmd "Replace 1 by 250 into $WM_BMASK_250" \
 "mri_binarize --i $WM_BMASK_250 --o $WM_BMASK_250 --replace 1 250"
 
-# May also use $BRAIN_FS_FINALSURFS
+# May also use $BRAIN_FINALSURFS_FS
 cmd "Mask $BRAIN_FS with $WM_BMASK_ALL into $WM_MASK" \
 "mri_mask -T 5 $BRAIN_FS $WM_BMASK_ALL $WM_MASK"
 
@@ -1166,7 +1165,7 @@ cmd "Concatenate $WM_MASK with $WM_BMASK_250 into $WM_ASEGEDIT" \
 "mri_concat --i $WM_MASK --i $WM_BMASK_250 --o $WM_ASEGEDIT --max"
 
 cmd "Pretess $WM_ASEGEDIT: Solve connectivity issue" \
-"mri_pretess $WM_ASEGEDIT wm $NORM_FS $WM_EDITED"
+"mri_pretess $WM_ASEGEDIT wm $NORM_FS $WM"
 fi
 
 #################
@@ -1260,8 +1259,8 @@ do
 	cmd "${H[$i]} Replace 128 by 1 into ${BMASK[$i]}" \
 	"mri_binarize --i ${BMASK[$i]} --o ${BMASK[$i]} --replace 128 1"
 
-	cmd "${H[$i]} Mask $BRAIN_FS_FINALSURFS with ${BMASK[$i]} into ${BRAIN_FINALSURFS_NO_CEREB[$i]}" \
-	"mri_mask $BRAIN_FS_FINALSURFS ${BMASK[$i]} ${BRAIN_FINALSURFS_NO_CEREB[$i]}"
+	cmd "${H[$i]} Mask $BRAIN_FINALSURFS_FS with ${BMASK[$i]} into ${BRAIN_FINALSURFS_NO_CEREB[$i]}" \
+	"mri_mask $BRAIN_FINALSURFS_FS ${BMASK[$i]} ${BRAIN_FINALSURFS_NO_CEREB[$i]}"
 
 	# Extract white matter from ribbon-edit to create wm-bmask.mgz
 	cmd "${H[$i]} Extract GM from $RIBBON_EDIT" \
@@ -1304,7 +1303,7 @@ do
 	
 	# Compute stats
 	cmd "${H[$i]} Computes stats for pial surface" \
-	"mris_autodet_gwstats --o ${AUTODET_NEW_GW_STATS[$i]} --i ${BRAIN_FINALSURFS_NO_CEREB_EDITED[$i]} --wm $WM_EDITED --surf ${ORIG[$i]}"
+	"mris_autodet_gwstats --o ${AUTODET_NEW_GW_STATS[$i]} --i ${BRAIN_FINALSURFS_NO_CEREB_EDITED[$i]} --wm $WM --surf ${ORIG[$i]}"
 	
 	if ((CHANGE_AUTODET==1))
 	then
@@ -1362,9 +1361,46 @@ done
 fi
 
 #################
-## Add last steps of autorecon3: stats, aseg, labels
+## Non hemisphere specific files to create
 # #################
 if ((TAG<=10))
+then
+#Copies from $SUBJID_freesurfer $SUBJID/output to complete collection
+#if [ ! -f "$RAWAVG_MASKED" ]; then 
+cmd "Copy $RAWAVG_FS to $RAWAVG" \
+"cp $RAWAVG_FS $RAWAVG"
+cmd "Copy $RAWAVG to $RAWAVG_MASKED" \
+"cp $RAWAVG $RAWAVG_MASKED"
+cmd "Mask $RAWAVG_MASKED with $BRAIN_MASK into $RAWAVG_MASKED" \
+"mri_mask $RAWAVG_MASKED $BRAIN_MASK $RAWAVG_MASKED"
+
+cmd "Copy $ORIG_FS to $ORIG_VOLUME" \
+"cp $ORIG_FS $ORIG_VOLUME"
+cmd "Copy $ORIG_FS to $ORIG_MASKED" \
+"cp $ORIG_FS $ORIG_MASKED"
+cmd "Mask $ORIG_MASKED with $BRAIN_MASK into $ORIG_MASKED" \
+"mri_mask $ORIG_MASKED $BRAIN_MASK $ORIG_MASKED"
+
+cmd "Copy $IMAGE_ORIG_FS" \
+"cp $IMAGE_ORIG_FS $IMAGE_ORIG" 
+
+cmd "Copy $BRAIN_FINALSURFS_FS" \
+"cp $BRAIN_FINALSURFS_FS $BRAIN_FINALSURFS" 
+cmd "Copy $BRAIN_FINALSURFS_MANEDIT_FS" \
+"cp $BRAIN_FINALSURFS_MANEDIT_FS $BRAIN_FINALSURFS_MANEDIT" 
+
+#ANTSDN_BRAIN and WM_SEG
+cmd "AntsDenoise $BRAIN to $ANTSDN_BRAIN" \
+"AntsDenoiseImageFs -i $BRAIN -o $ANTSDN_BRAIN"
+cmd "mri_segment -wsizemm 13 -mprage $ANTSDN_BRAIN $WM_SEG" \
+"mri_segment -wsizemm 13 -mprage $ANTSDN_BRAIN $WM_SEG"
+#fi
+fi
+
+#################
+## Add last steps of autorecon3: stats, aseg, labels
+# #################
+if ((TAG<=11))
 then
 for (( i=0; i<2; i++ ));
 do
@@ -1373,30 +1409,11 @@ do
 		continue;
 	else
 	
-	# Copies from freesurfer folder
+	# Copie with new name for later functions
 	cmd "${H[$i]} Copy white surface to ${WHITE[$i]}" \
 	"cp ${ORIG[$i]} ${WHITE[$i]}" 
 	cmd "${H[$i]} Copy pial surface to ${PIAL[$i]}" \
 	"cp ${RIBBON_EDIT_PIAL_THIRD_PASS[$i]} ${PIAL[$i]}" 
-	
-	if [ ! -f "$RAWAVG_MASKED" ]; then 
-	cmd "Copy $RAWAVG to $RAWAVG_MASKED" \
-	"cp $RAWAVG $RAWAVG_MASKED"
-	cmd "Mask $RAWAVG_MASKED with $BRAIN_MASK into $RAWAVG_MASKED" \
-"mri_mask $RAWAVG_MASKED $BRAIN_MASK $RAWAVG_MASKED"
-	fi
-
-	if [ ! -f "$ORIG_MASKED" ]; then
-	cmd "Copy $ORIG_FS to $ORIG_MASKED" \
-	"cp $ORIG_FS $ORIG_MASKED"
-	cmd "Mask $ORIG_MASKED with $BRAIN_MASK into $ORIG_MASKED" \
-"mri_mask $ORIG_MASKED $BRAIN_MASK $ORIG_MASKED"
-	fi
-	
-	# Files creation as recon-all
-	cmd "AntsDenoise $BRAIN to $ANTSDN_BRAIN" \
-	"AntsDenoiseImageFs -i $BRAIN -o $ANTSDN_BRAIN"
-	
 	
 	# Compute the stats
 	cmd "${H[$i]} pial curv" \
@@ -1452,7 +1469,7 @@ do
 	cmd "${H[$i]} Copy $TALAIRACH_XFM_FS to $TALAIRACH_XFM" \
 	"cp $TALAIRACH_XFM_FS $TALAIRACH_XFM"
  	cmd "${H[$i]} WMParc stats" \
- 	"mri_segstats --seed 1234 --seg $WMPARC --sum $WMPARC_STATS --pv $NORM_FS --excludeid 0 --brainmask $BRAIN_FS_FINALSURFS --in $NORM_FS --in-intensity-name norm --in-intensity-units MR --subject $SUBJID/$OUTPUT_FOLDER --surf-wm-vol --ctab $WMPARC_STATS_LUT --etiv --no-global-stats"
+ 	"mri_segstats --seed 1234 --seg $WMPARC --sum $WMPARC_STATS --pv $NORM_FS --excludeid 0 --brainmask $BRAIN_FINALSURFS_FS --in $NORM_FS --in-intensity-name norm --in-intensity-units MR --subject $SUBJID/$OUTPUT_FOLDER --surf-wm-vol --ctab $WMPARC_STATS_LUT --etiv --no-global-stats"
  	#Needs mri/transforms/talairach.xfm
  	
  	cmd "${H[$i]} Change SUBJID" \
@@ -1469,7 +1486,7 @@ do
  	"export SUBJID=`echo "$SUBJID" | cut -d/ -f1-1`"
  	
  	cmd "ASeg Stats" \
- 	"mri_segstats --seed 1234 --seg $ASEG --sum $ASEG_STATS --pv $NORM_FS --empty --brainmask $BRAIN_FS_FINALSURFS --brain-vol-from-seg --excludeid 0 --excl-ctxgmwm --supratent --subcortgray --in $NORM_FS --in-intensity-name norm --in-intensity-units MR --etiv --euler --ctab $ASEG_STATS_LUT --subject $SUBJID/$OUTPUT_FOLDER --no-global-stats"
+ 	"mri_segstats --seed 1234 --seg $ASEG --sum $ASEG_STATS --pv $NORM_FS --empty --brainmask $BRAIN_FINALSURFS_FS --brain-vol-from-seg --excludeid 0 --excl-ctxgmwm --supratent --subcortgray --in $NORM_FS --in-intensity-name norm --in-intensity-units MR --etiv --euler --ctab $ASEG_STATS_LUT --subject $SUBJID/$OUTPUT_FOLDER --no-global-stats"
  	
  	cmd "Create Symlink of $FSAVERAGE folder in SUBJECTS_DIR" \
  	"if [ ! -d "$SUBJECTS_DIR/fsaverage" ]; then ln -s $FSAVERAGE $SUBJECTS_DIR; fi"
