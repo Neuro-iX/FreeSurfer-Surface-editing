@@ -8,7 +8,7 @@ Help ()
 builtin echo "
 AUTHOR: Benoît Verreman
 
-LAST UPDATE: 2025-06-27
+LAST UPDATE: 2025-07-16
 
 DESCRIPTION: 
 Use ribbon and subcortical NIFTI files to recompute pial surface,
@@ -172,19 +172,19 @@ while getopts ${VALID_ARGS} opt; do
         ;;
     n) #subcortical labels
         LABELS_SUBCORTICAL=${OPTARG} #for previous subcortical files : "5 15 29 30 32 31"
-        string_arguments+="-n ${OPTARG} "
+        string_arguments+="-n '${OPTARG}' "
         ;;
     o) #HA image path
         HA=${OPTARG}
-        string_arguments+="-c ${OPTARG} "
+        string_arguments+="-o ${OPTARG} "
         ;;
     x) #HA labels left
         LABELS_HA_LEFT=${OPTARG}
-        string_arguments+="-c ${OPTARG} "
+        string_arguments+="-x '${OPTARG}' "
         ;;
     y) #HA labels right
         LABELS_HA_RIGHT=${OPTARG}
-        string_arguments+="-c ${OPTARG} "
+        string_arguments+="-y '${OPTARG}' "
         ;;
     t) #Tag to (re)start script from
 	TAG=${OPTARG}
@@ -201,11 +201,11 @@ while getopts ${VALID_ARGS} opt; do
 	;;
     d) #Number of dilation in ha_ribbon_edit.py
 	N_DILATION=${OPTARG}
-	string_arguments+="-f ${OPTARG} "
+	string_arguments+="-d ${OPTARG} "
 	;;
     e) #Number of erosion in ha_ribbon_edit.py
 	N_EROSION=${OPTARG}
-	string_arguments+="-f ${OPTARG} "
+	string_arguments+="-e ${OPTARG} "
 	;;
     h) #Help
 	Help
