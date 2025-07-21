@@ -8,7 +8,7 @@ Help ()
 builtin echo "
 AUTHOR: Benoît Verreman
 
-LAST UPDATE: 2025-07-16
+LAST UPDATE: 2025-07-21
 
 DESCRIPTION: 
 Use ribbon and subcortical NIFTI files to recompute pial surface,
@@ -972,10 +972,10 @@ declare -a FG1_MPM_VPNL_LABEL=("$O/label/lh.FG1.mpm.vpnl.label" "$O/label/rh.FG1
 declare -a FG2_MPM_VPNL_LABEL=("$O/label/lh.FG2.mpm.vpnl.label" "$O/label/rh.FG2.mpm.vpnl.label")
 declare -a FG3_MPM_VPNL_LABEL=("$O/label/lh.FG3.mpm.vpnl.label" "$O/label/rh.FG3.mpm.vpnl.label")
 declare -a FG4_MPM_VPNL_LABEL=("$O/label/lh.FG4.mpm.vpnl.label" "$O/label/rh.FG4.mpm.vpnl.label")
-declare -a HOC1_MPM_VPNL_LABEL=("$O/label/lh.hOc1.mpm.vpnl.label" "$O/label/rh.hOc1.mpm.vpnl.label")
-declare -a HOC2_MPM_VPNL_LABEL=("$O/label/lh.hOc2.mpm.vpnl.label" "$O/label/rh.hOc2.mpm.vpnl.label")
-declare -a HOC3V_MPM_VPNL_LABEL=("$O/label/lh.hOc3v.mpm.vpnl.label" "$O/label/rh.hOc3v.mpm.vpnl.label")
-declare -a HOC4V_MPM_VPNL_LABEL=("$O/label/lh.hOc4v.mpm.vpnl.label" "$O/label/rh.hOc4v.mpm.vpnl.label")
+declare -a HOC1_MPM_VPNL_LABEL=("$O/label/lh.h0c1.mpm.vpnl.label" "$O/label/rh.h0c1.mpm.vpnl.label")
+declare -a HOC2_MPM_VPNL_LABEL=("$O/label/lh.h0c2.mpm.vpnl.label" "$O/label/rh.h0c2.mpm.vpnl.label")
+declare -a HOC3V_MPM_VPNL_LABEL=("$O/label/lh.h0c3v.mpm.vpnl.label" "$O/label/rh.h0c3v.mpm.vpnl.label")
+declare -a HOC4V_MPM_VPNL_LABEL=("$O/label/lh.h0c4v.mpm.vpnl.label" "$O/label/rh.h0c4v.mpm.vpnl.label")
 
 declare -a BA1_EXVIVO_THRESH_LABEL=("$O/label/lh.BA1_exvivo.thresh.label" "$O/label/rh.BA1_exvivo.thresh.label")
 declare -a BA2_EXVIVO_THRESH_LABEL=("$O/label/lh.BA2_exvivo.thresh.label" "$O/label/rh.BA2_exvivo.thresh.label")
@@ -1528,14 +1528,14 @@ do
  	"mri_label2label --srcsubject fsaverage --srclabel $SUBJECTS_DIR/fsaverage/label/${H[$i]}.FG3.mpm.vpnl.label --trgsubject $SUBJID/$OUTPUT_FOLDER --trglabel ${FG3_MPM_VPNL_LABEL[$i]} --hemi ${H[$i]} --regmethod surface"
  	cmd "${H[$i]} mri_label2label fg4_mpm_vpnl" \
  	"mri_label2label --srcsubject fsaverage --srclabel $SUBJECTS_DIR/fsaverage/label/${H[$i]}.FG4.mpm.vpnl.label --trgsubject $SUBJID/$OUTPUT_FOLDER --trglabel ${FG4_MPM_VPNL_LABEL[$i]} --hemi ${H[$i]} --regmethod surface"
- 	cmd "${H[$i]} mri_label2label hOc1_mpm_vpnl" \
- 	"mri_label2label --srcsubject fsaverage --srclabel $SUBJECTS_DIR/fsaveage/label/${H[$i]}.hOc1.mpm.vpnl.label --trgsubject $SUBJID/$OUTPUT_FOLDER --trglabel ${HOC1_MPM_VPNL_LABEL[$i]} --hemi ${H[$i]} --regmethod surface"
- 	cmd "${H[$i]} mri_label2label hOc2_mpm_vpnl" \
- 	"mri_label2label --srcsubject fsaverage --srclabel $SUBJECTS_DIR/fsaverage/label/${H[$i]}.hOc2.mpm.vpnl.label --trgsubject $SUBJID/$OUTPUT_FOLDER --trglabel ${HOC2_MPM_VPNL_LABEL[$i]} --hemi ${H[$i]} --regmethod surface"
- 	cmd "${H[$i]} mri_label2label hOc3v_mpm_vpnl" \
- 	"mri_label2label --srcsubject fsaverage --srclabel $SUBJECTS_DIR/fsaverage/label/${H[$i]}.hOc3v.mpm.vpnl.label --trgsubject $SUBJID/$OUTPUT_FOLDER --trglabel ${HOC3V_MPM_VPNL_LABEL[$i]} --hemi ${H[$i]} --regmethod surface"
- 	cmd "${H[$i]} mri_label2label hOc4v_mpm_vpnl" \
- 	"mri_label2label --srcsubject fsaverage --srclabel $SUBJECTS_DIR/fsaverage/label/${H[$i]}.hOc4v.mpm.vpnl.label --trgsubject $SUBJID/$OUTPUT_FOLDER --trglabel ${HOC4V_MPM_VPNL_LABEL[$i]} --hemi ${H[$i]} --regmethod surface"
+ 	cmd "${H[$i]} mri_label2label h0c1_mpm_vpnl" \
+ 	"mri_label2label --srcsubject fsaverage --srclabel $SUBJECTS_DIR/fsaveage/label/${H[$i]}.h0c1.mpm.vpnl.label --trgsubject $SUBJID/$OUTPUT_FOLDER --trglabel ${HOC1_MPM_VPNL_LABEL[$i]} --hemi ${H[$i]} --regmethod surface"
+ 	cmd "${H[$i]} mri_label2label h0c2_mpm_vpnl" \
+ 	"mri_label2label --srcsubject fsaverage --srclabel $SUBJECTS_DIR/fsaverage/label/${H[$i]}.h0c2.mpm.vpnl.label --trgsubject $SUBJID/$OUTPUT_FOLDER --trglabel ${HOC2_MPM_VPNL_LABEL[$i]} --hemi ${H[$i]} --regmethod surface"
+ 	cmd "${H[$i]} mri_label2label h0c3v_mpm_vpnl" \
+ 	"mri_label2label --srcsubject fsaverage --srclabel $SUBJECTS_DIR/fsaverage/label/${H[$i]}.h0c3v.mpm.vpnl.label --trgsubject $SUBJID/$OUTPUT_FOLDER --trglabel ${HOC3V_MPM_VPNL_LABEL[$i]} --hemi ${H[$i]} --regmethod surface"
+ 	cmd "${H[$i]} mri_label2label h0c4v_mpm_vpnl" \
+ 	"mri_label2label --srcsubject fsaverage --srclabel $SUBJECTS_DIR/fsaverage/label/${H[$i]}.h0c4v.mpm.vpnl.label --trgsubject $SUBJID/$OUTPUT_FOLDER --trglabel ${HOC4V_MPM_VPNL_LABEL[$i]} --hemi ${H[$i]} --regmethod surface"
  	
  	if [ -f "$O/label/${H[$i]}.mpm.vpnl.annot" ]
 	then
