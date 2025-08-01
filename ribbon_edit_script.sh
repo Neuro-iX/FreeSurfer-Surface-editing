@@ -1529,13 +1529,13 @@ do
  	cmd "${H[$i]} mri_label2label fg4_mpm_vpnl" \
  	"mri_label2label --srcsubject fsaverage --srclabel $SUBJECTS_DIR/fsaverage/label/${H[$i]}.FG4.mpm.vpnl.label --trgsubject $SUBJID/$OUTPUT_FOLDER --trglabel ${FG4_MPM_VPNL_LABEL[$i]} --hemi ${H[$i]} --regmethod surface"
  	cmd "${H[$i]} mri_label2label h0c1_mpm_vpnl" \
- 	"mri_label2label --srcsubject fsaverage --srclabel $SUBJECTS_DIR/fsaveage/label/${H[$i]}.h0c1.mpm.vpnl.label --trgsubject $SUBJID/$OUTPUT_FOLDER --trglabel ${HOC1_MPM_VPNL_LABEL[$i]} --hemi ${H[$i]} --regmethod surface"
+ 	"mri_label2label --srcsubject fsaverage --srclabel $SUBJECTS_DIR/fsaverage/label/${H[$i]}.hOc1.mpm.vpnl.label --trgsubject $SUBJID/$OUTPUT_FOLDER --trglabel ${HOC1_MPM_VPNL_LABEL[$i]} --hemi ${H[$i]} --regmethod surface"
  	cmd "${H[$i]} mri_label2label h0c2_mpm_vpnl" \
- 	"mri_label2label --srcsubject fsaverage --srclabel $SUBJECTS_DIR/fsaverage/label/${H[$i]}.h0c2.mpm.vpnl.label --trgsubject $SUBJID/$OUTPUT_FOLDER --trglabel ${HOC2_MPM_VPNL_LABEL[$i]} --hemi ${H[$i]} --regmethod surface"
+ 	"mri_label2label --srcsubject fsaverage --srclabel $SUBJECTS_DIR/fsaverage/label/${H[$i]}.hOc2.mpm.vpnl.label --trgsubject $SUBJID/$OUTPUT_FOLDER --trglabel ${HOC2_MPM_VPNL_LABEL[$i]} --hemi ${H[$i]} --regmethod surface"
  	cmd "${H[$i]} mri_label2label h0c3v_mpm_vpnl" \
- 	"mri_label2label --srcsubject fsaverage --srclabel $SUBJECTS_DIR/fsaverage/label/${H[$i]}.h0c3v.mpm.vpnl.label --trgsubject $SUBJID/$OUTPUT_FOLDER --trglabel ${HOC3V_MPM_VPNL_LABEL[$i]} --hemi ${H[$i]} --regmethod surface"
+ 	"mri_label2label --srcsubject fsaverage --srclabel $SUBJECTS_DIR/fsaverage/label/${H[$i]}.hOc3v.mpm.vpnl.label --trgsubject $SUBJID/$OUTPUT_FOLDER --trglabel ${HOC3V_MPM_VPNL_LABEL[$i]} --hemi ${H[$i]} --regmethod surface"
  	cmd "${H[$i]} mri_label2label h0c4v_mpm_vpnl" \
- 	"mri_label2label --srcsubject fsaverage --srclabel $SUBJECTS_DIR/fsaverage/label/${H[$i]}.h0c4v.mpm.vpnl.label --trgsubject $SUBJID/$OUTPUT_FOLDER --trglabel ${HOC4V_MPM_VPNL_LABEL[$i]} --hemi ${H[$i]} --regmethod surface"
+ 	"mri_label2label --srcsubject fsaverage --srclabel $SUBJECTS_DIR/fsaverage/label/${H[$i]}.hOc4v.mpm.vpnl.label --trgsubject $SUBJID/$OUTPUT_FOLDER --trglabel ${HOC4V_MPM_VPNL_LABEL[$i]} --hemi ${H[$i]} --regmethod surface"
  	
  	if [ -f "$O/label/${H[$i]}.mpm.vpnl.annot" ]
 	then
@@ -1570,7 +1570,7 @@ do
  	cmd "${H[$i]} mri_label2label v2_exvivo_thresh" \
  	"mri_label2label --srcsubject fsaverage --srclabel $SUBJECTS_DIR/fsaverage/label/${H[$i]}.V2_exvivo.thresh.label --trgsubject $SUBJID/$OUTPUT_FOLDER --trglabel ${V2_EXVIVO_THRESH_LABEL[$i]} --hemi ${H[$i]} --regmethod surface"
  	cmd "${H[$i]} mri_label2label mt_exvivo_thresh" \
- 	"mri_label2label --srcsubject fsaverage --srclabel $SUBJECTS_DIR/fsaverage/label/${H[$i]}.MT_exvivo.thresh.label --trgsubject $SUBJID/$OUTPUT_FOLDER --trglabel ${MT_EXVIVO_THRESH_LABEL[$i]} --hemi ${H[$i]} --regmethod surface"
+ 	"mri_label2label --srcsubject fsaverage --srclabel $SUBJECTS_DIR/fsaverage/label/${H[$i]}.MT_exvivo.thresh.label --trgsubject $SUBJID/$OUTPUT_FOLDER --trglabel ${MT_EXVIVO_THRESH_LABEL[$i]} --hemi ${H[$i]} --regmethod surface"fsaverage
  	cmd "${H[$i]} mri_label2label entorhinal_exvivo_thresh" \
  	"mri_label2label --srcsubject fsaverage --srclabel $SUBJECTS_DIR/fsaverage/label/${H[$i]}.entorhinal_exvivo.thresh.label --trgsubject $SUBJID/$OUTPUT_FOLDER --trglabel ${ENTORHINAL_EXVIVO_THRESH_LABEL[$i]} --hemi ${H[$i]} --regmethod surface"
  	cmd "${H[$i]} mri_label2label perirhinal_exvivo_thresh" \
