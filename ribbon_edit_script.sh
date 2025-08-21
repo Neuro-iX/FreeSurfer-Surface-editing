@@ -8,7 +8,7 @@ Help ()
 builtin echo "
 AUTHOR: Benoît Verreman
 
-LAST UPDATE: 2025-07-21
+LAST UPDATE: 2025-08-21
 
 DESCRIPTION: 
 Use ribbon and subcortical NIFTI files to recompute pial surface,
@@ -289,27 +289,11 @@ Echo ()
 #################
 CreateFolders()
 {
-if [ ! -d "$SUBJECTS_DIR/$SUBJID" ]
-then
-	echo "Create $SUBJECTS_DIR/$SUBJID"
-	mkdir $SUBJECTS_DIR/$SUBJID;
-fi
-
-if [ ! -d "$O" ]
-then
-	echo "Create $O and subfolders"
-	mkdir $O;
-	mkdir $O/scripts;
-	mkdir $O/surf;
-	mkdir $O/mri;
-	mkdir $O/mri/orig;
-	mkdir $O/mri/transforms;
-	mkdir $O/label;
-	mkdir $O/stats;
-	mkdir $O/tmp;
-	mkdir $O/touch;
-	mkdir $O/trash;
-fi
+echo "Create or confirm existence of $SUBJECTS_DIR/$SUBJID"
+mkdir -p $SUBJECTS_DIR/$SUBJID;
+	
+echo "Create or confirm existence of $O and subfolders"
+mkdir -p $O $O/scripts $O/surf $O/mri $O/mri/orig $O/mri/transforms $O/label $O/stats $O/tmp $O/touch $O/trash;
 }
 
 CreateScripts()
