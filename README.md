@@ -10,8 +10,7 @@ Help function:
 
 AUTHOR: Benoît Verreman
 
-LAST UPDATE: 2024-06-25
-
+LAST UPDATE: 2025-10-08
 DESCRIPTION: 
 Use ribbon and subcortical NIFTI files to recompute pial surface,
 based on previously created <subjid> folder using Freesurfer 7.4.1
@@ -83,7 +82,8 @@ TAG
 -t 7: (brain.finalsurfs-edit) edit brain.finalsurfs with GM from RIBBON_EDIT
 -t 8: (stats) Start from computing stats
 -t 9: (pial) Start from computing pial surface
--t 10: (aseg+aparc) Compute stats and other files
+-t 10: Non hemisphere specific files to create
+-t 11: (aseg+aparc) Compute stats and other files
 -t 12: BONUS: test some command lines
 
 HA IMPROVEMENT
