@@ -8,7 +8,7 @@ Help ()
 builtin echo "
 AUTHOR: Benoît Verreman
 
-LAST UPDATE: 2025-08-21
+LAST UPDATE: 2025-10-08
 
 DESCRIPTION: 
 Use ribbon and subcortical NIFTI files to recompute pial surface,
@@ -370,29 +370,30 @@ labels_ha_rh = list(map(int,labels_ha_rh.split()))
 labels_ha_rib_lh = int(labels_ha_rib_lh)
 labels_ha_rib_rh = int(labels_ha_rib_rh)
 
-#Edit ribbon with HA from -o file
-list_HA=[]
-for x in range(a):
-    for y in range(b):
-        for z in range(c):
-            aparc=data_aparc[x,y,z]
-            if aparc in labels_ha_lh:
-                list_HA.append((labels_ha_rib_lh,[x,y,z]))
-                data_out[x,y,z]=labels_ha_rib_lh #21 #lh HA
-            elif aparc in labels_ha_rh:
-                list_HA.append((labels_ha_rib_rh,[x,y,z]))
-                data_out[x,y,z]=labels_ha_rib_rh #22 #rh HA
-
-###Add three diffusion and three erosion steps of HA in GM of ribbon
-### Create labels class
+#Create labels class
 class L:    
     l_wm = 2 # lh white matter
     r_wm = 41 # rh white matter
     
     l_gm = 3 # lh gray matter
     r_gm = 42 # rh gray matter
-    
-### Motions
+
+#Edit ribbon with HA from -o file
+list_HA=[]
+for x in range(a):
+    for y in range(b):
+        for z in range(c):
+            aparc=data_aparc[x,y,z]
+            rib=data_ribbon[x,y,z]
+            if aparc in labels_ha_lh and rib != L.l_wm:
+                list_HA.append((labels_ha_rib_lh,[x,y,z]))
+                data_out[x,y,z]=labels_ha_rib_lh #21 #lh HA
+            elif aparc in labels_ha_rh and rib != L.r_wm:
+                list_HA.append((labels_ha_rib_rh,[x,y,z]))
+                data_out[x,y,z]=labels_ha_rib_rh #22 #rh HA
+
+###Add three diffusion and three erosion steps of HA in GM of ribbon
+#Motions
 d = numpy.eye(3, dtype=int).reshape(-1, 3)
 motion1 = numpy.concatenate((d, -d), axis=0)
 
