@@ -8,7 +8,7 @@ Help ()
 builtin echo "
 AUTHOR: Benoît Verreman
 
-LAST UPDATE: 2025-10-08
+LAST UPDATE: 2025-10-15
 
 DESCRIPTION: 
 Use ribbon and subcortical NIFTI files to recompute pial surface,
@@ -630,6 +630,9 @@ class L:
     wmh = 77 # WM Hypointensities
     oc = 85 # optic chasm
     csf = 24 # Cerebrospinal fluid
+    tv = 14 # 3rd ventricle
+    fv = 15 # 4th ventricle
+    bs = 16 # brain stem
     
     l_wm = 2 # lh white matter
     r_wm = 41 # rh white matter
@@ -675,10 +678,6 @@ class L:
     
     #CEREBELUM
     
-    bs = 16 # brain stem
-    
-    fv = 15 # 4th ventricle
-    
     l_cw = 7 # lh cerebellum white matter
     r_cw = 46 # rh cerebellum white matter
     
@@ -712,14 +711,14 @@ for x in range(a):
             	    case L.r_edit:
             	        data_new_aseg[x,y,z] = L.r_a
             	    case L.l_wm:
-            	        if aseg_voxel in [0, L.l_gm, L.bs]:
+            	        if aseg_voxel in [0, L.l_gm, L.bs, L.l_h, L.l_ilv, L.l_a]:
             	            data_new_aseg[x,y,z] = L.l_wm
-            	        elif aseg_voxel in [L.l_p,L.l_pd,L.l_v,L.l_lv,L.l_aa,L.l_t,L.l_c,L.l_cp,L.l_ilv,L.l_h,L.l_a,L.l_vs,L.wmh,L.oc,L.csf]: #SUBCORTICAL structure lh only
+            	        elif aseg_voxel in [L.l_p,L.l_pd,L.l_v,L.l_lv,L.l_aa,L.l_t,L.l_c,L.l_cp,L.l_h,L.l_vs,L.wmh,L.oc,L.csf,L.tv]: #SUBCORTICAL structure lh that should not be in wo_subc only
             	            list_LH.append((aseg_voxel,[x,y,z]))
             	    case L.r_wm:
-            	        if aseg_voxel in [0, L.r_gm, L.bs]:
+            	        if aseg_voxel in [0, L.r_gm, L.bs, L.r_h, L.r_ilv, L.r_a]:
             	            data_new_aseg[x,y,z] = L.r_wm
-            	        elif aseg_voxel in [L.r_p,L.r_pd,L.r_v,L.r_lv,L.r_aa,L.r_t,L.r_c,L.r_cp,L.r_ilv,L.r_h,L.r_a,L.r_vs,L.wmh,L.oc,L.csf]: #SUBCORTICAL structure rh only
+            	        elif aseg_voxel in [L.r_p,L.r_pd,L.r_v,L.r_lv,L.r_aa,L.r_t,L.r_c,L.r_cp,L.r_vs,L.wmh,L.oc,L.csf,L.tv]: #SUBCORTICAL structure rh only that should not be in wo_subc only
             	            list_RH.append((aseg_voxel,[x,y,z]))
 
 ### Copy data_new_aseg
@@ -1332,15 +1331,15 @@ do
 	else
 	# PIAL first pass: BRAIN_FINALSURFS_NO_CEREB_EDITED2
 	cmd "${H[$i]} Computes pial surface - first pass" \
-	"mris_place_surface --i ${ORIG[$i]} --o ${RIBBON_EDIT_PIAL[$i]} --nsmooth 1 --adgws-in ${AUTODET_NEW_GW_STATS[$i]} --pial --${H[$i]} --repulse-surf ${ORIG[$i]} --invol ${BRAIN_FINALSURFS_NO_CEREB_EDITED2[$i]} --threads 6 --white-surf ${ORIG[$i]} --pin-medial-wall ${CORTEX_LABEL[$i]} --seg $ASEG_PRESURF_WO_SUBC --no-rip"
+	"mris_place_surface --i ${ORIG[$i]} --o ${RIBBON_EDIT_PIAL[$i]} --nsmooth 2 --adgws-in ${AUTODET_NEW_GW_STATS[$i]} --pial --${H[$i]} --repulse-surf ${ORIG[$i]} --invol ${BRAIN_FINALSURFS_NO_CEREB_EDITED2[$i]} --threads 6 --white-surf ${ORIG[$i]} --pin-medial-wall ${CORTEX_LABEL[$i]} --seg $ASEG_PRESURF_WO_SUBC --no-rip" #--nsmooth 1 originally
 	
 	# PIAL second pass: BRAIN_FINALSURFS_NO_CEREB_UNIFORM_GM_80
-	cmd "${H[$i]} Computes pial surface - second pass: i+w" \
-	"mris_place_surface --i ${RIBBON_EDIT_PIAL[$i]} --o ${RIBBON_EDIT_PIAL_SECOND_PASS[$i]} --nsmooth 0 --adgws-in ${AUTODET_NEW_GW_STATS[$i]} --pial --${H[$i]} --repulse-surf ${ORIG[$i]} --invol ${BRAIN_FINALSURFS_NO_CEREB_UNIFORM_GM_80[$i]} --threads 6 --white-surf ${RIBBON_EDIT_PIAL[$i]} --pin-medial-wall ${CORTEX_LABEL[$i]} --seg $ASEG_PRESURF_WO_SUBC --no-rip"
+	#cmd "${H[$i]} Computes pial surface - second pass: i+w" \
+	#"mris_place_surface --i ${RIBBON_EDIT_PIAL[$i]} --o ${RIBBON_EDIT_PIAL_SECOND_PASS[$i]} --nsmooth 0 --adgws-in ${AUTODET_NEW_GW_STATS[$i]} --pial --${H[$i]} --repulse-surf ${ORIG[$i]} --invol ${BRAIN_FINALSURFS_NO_CEREB_UNIFORM_GM_80[$i]} --threads 6 --white-surf ${RIBBON_EDIT_PIAL[$i]} --pin-medial-wall ${CORTEX_LABEL[$i]} --seg $ASEG_PRESURF_WO_SUBC --no-rip"
 	
 	# PIAL third pass: nsmooth 1
-	cmd "${H[$i]} Computes pial surface - third pass: smooth" \
-	"mris_place_surface --i ${RIBBON_EDIT_PIAL_SECOND_PASS[$i]} --o ${RIBBON_EDIT_PIAL_THIRD_PASS[$i]} --nsmooth 1 --adgws-in ${AUTODET_NEW_GW_STATS[$i]} --pial --${H[$i]} --repulse-surf ${RIBBON_EDIT_PIAL_SECOND_PASS[$i]} --invol ${BRAIN_FINALSURFS_NO_CEREB_EDITED2[$i]} --threads 6 --white-surf ${ORIG[$i]} --pin-medial-wall ${CORTEX_LABEL[$i]} --seg $ASEG_PRESURF_WO_SUBC --no-rip"
+	#cmd "${H[$i]} Computes pial surface - third pass: smooth" \
+	#"mris_place_surface --i ${RIBBON_EDIT_PIAL_SECOND_PASS[$i]} --o ${RIBBON_EDIT_PIAL_THIRD_PASS[$i]} --nsmooth 1 --adgws-in ${AUTODET_NEW_GW_STATS[$i]} --pial --${H[$i]} --repulse-surf ${RIBBON_EDIT_PIAL_SECOND_PASS[$i]} --invol ${BRAIN_FINALSURFS_NO_CEREB_EDITED2[$i]} --threads 6 --white-surf ${ORIG[$i]} --pin-medial-wall ${CORTEX_LABEL[$i]} --seg $ASEG_PRESURF_WO_SUBC --no-rip"
 	fi
 done
 fi
@@ -1398,7 +1397,7 @@ do
 	cmd "${H[$i]} Copy white surface to ${WHITE[$i]}" \
 	"cp ${ORIG[$i]} ${WHITE[$i]}" 
 	cmd "${H[$i]} Copy pial surface to ${PIAL[$i]}" \
-	"cp ${RIBBON_EDIT_PIAL_THIRD_PASS[$i]} ${PIAL[$i]}" 
+	"cp ${RIBBON_EDIT_PIAL[$i]} ${PIAL[$i]}" #RIBBON_EDIT_PIAL_THIRD_PASS
 	
 	# Compute the stats
 	cmd "${H[$i]} pial curv" \
