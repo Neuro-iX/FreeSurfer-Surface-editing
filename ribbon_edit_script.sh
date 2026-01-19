@@ -8,7 +8,7 @@ Help ()
 builtin echo "
 AUTHOR: Benoît Verreman
 
-LAST UPDATE: 2025-10-15
+LAST UPDATE: 2026-01-19
 
 DESCRIPTION: 
 Use ribbon and subcortical NIFTI files to recompute pial surface,
@@ -25,9 +25,8 @@ Export SUBJECTS_DIR and FREESURFER_HOME correctly
 Test if you have access to python: 'which python'
 Install two python libraries: 'pip install nibabel scipy'
 OR use conda environment:
-conda create --name env_ribbon_edit_script
+conda create --name env_ribbon_edit_script python=3.10 nibabel scipy -c conda-forge
 conda activate env_ribbon_edit_script
-conda install nibabel scipy -c conda-forge
 conda list | grep -E 'nibabel|scipy'
 
 *Freesurfer output folder:
@@ -707,9 +706,11 @@ for x in range(a):
             	    case L.l_gm | L.r_gm: 
             	        data_new_aseg[x,y,z] = ribbon_voxel
             	    case L.l_edit:
-            	        data_new_aseg[x,y,z] = L.l_a
+            	        #data_new_aseg[x,y,z] = L.l_a
+						pass #keep amygdala, hippocampus and inf-lat-vent labels
             	    case L.r_edit:
-            	        data_new_aseg[x,y,z] = L.r_a
+            	        #data_new_aseg[x,y,z] = L.r_a
+						pass #keep amygdala, hippocampus and inf-lat-vent labels
             	    case L.l_wm:
             	        if aseg_voxel in [0, L.l_gm, L.bs, L.l_h, L.l_ilv, L.l_a]:
             	            data_new_aseg[x,y,z] = L.l_wm
@@ -1030,7 +1031,7 @@ cmd "Add SUBJID to SUBJECTS_DIR" \
 
 #-xopts-overwrite is used when expert file already used before
 cmd "Apply recon-all -autorecon 1 and 2 on $IMAGE_PADDED" \
-"recon-all -autorecon1 -autorecon2 -s ${SUBJID}_freesurfer -i $IMAGE_PADDED -hires -parallel -openmp 4 -expert expert_file.txt -xopts-overwrite -cw256" 
+"recon-all -autorecon1 -autorecon2 -autorecon3 -s ${SUBJID}_freesurfer -i $IMAGE_PADDED -hires -parallel -openmp 4 -expert expert_file.txt -xopts-overwrite -cw256" 
 
 cmd "Change back SUBJECTS_DIR/SUBJID to SUBJECTS_DIR" \
 "export SUBJECTS_DIR=$(dirname $SUBJECTS_DIR)"
@@ -1392,7 +1393,6 @@ do
 	then
 		continue;
 	else
-	
 	# Copie with new name for later functions
 	cmd "${H[$i]} Copy white surface to ${WHITE[$i]}" \
 	"cp ${ORIG[$i]} ${WHITE[$i]}" 
@@ -1410,14 +1410,14 @@ do
 	
 	cmd "${H[$i]} Curvature Stats" \
 	"mris_curvature_stats -m --writeCurvatureFiles -G -o ${CURV_STATS[$i]} -F smoothwm $SUBJID/$OUTPUT_FOLDER ${H[$i]} curv sulc"
-
+ 	
 	cmd "${H[$i]} Cortical ribbon mask" \
 	"mris_volmask --aseg_name aseg.presurf --label_left_white ${LABEL_RIBBON_WM[0]} --label_left_ribbon ${LABEL_RIBBON_GM[0]} --label_right_white ${LABEL_RIBBON_WM[1]} --label_right_ribbon ${LABEL_RIBBON_GM[1]} --save_ribbon --out_root ribbon_script_${H[$i]} --${H[$i]}-only $SUBJID/$OUTPUT_FOLDER" #Searching for surf/rh.white and surf/rh.pial, and --surf_white and --surf_pial don't help, can use arg 
 	#cmd "Copy $RH_SMOOTHW_NOFIX to $RH_SMOOTHW" \
 	#"cp $RH_SMOOTHW_NOFIX $RH_SMOOTHW"
 	#cmd "Inflation2 rh" \
 	#"mris_inflate -n 30 $RH_SMOOTHW $RH_INFLATED"
-
+ 	
 	cmd "${H[$i]} Cortical Parc 2" \
 	"mris_ca_label -l ${CORTEX_LABEL[$i]} -aseg $ASEG_PRESURF -seed 1234 $SUBJID/$OUTPUT_FOLDER ${H[$i]} ${SPHERE_REG[$i]} ${CD_APARC_ATLAS[$i]} ${CD_APARC_ANNOT[$i]}"
 	#Use surf/rh.smoothwm and surf/rh.sphere.reg
@@ -1437,23 +1437,24 @@ do
  	cmd "${H[$i]} Relabel Hypointensities" \
  	"mri_relabel_hypointensities -${H[$i]} $ASEG_PRESURF $O/surf $ASEG_PRESURF_HYPOS"
  	cmd "${H[$i]} APas-to-ASeg" \
- 	"mri_surf2volseg --o $ASEG --i $ASEG_PRESURF_HYPOS --fix-presurf-with-ribbon $RIBBON_EDIT --threads 1 --${H[$i]}-cortex-mask ${CORTEX_LABEL[$i]} --${H[$i]}-white ${ORIG[$i]} --${H[$i]}-pial ${RIBBON_EDIT_PIAL[$i]} --${H[$i]}"
- 	
+ 	"mri_surf2volseg --o $ASEG --i $ASEG_PRESURF_HYPOS --fix-presurf-with-ribbon $RIBBON_EDIT --threads 4 --${H[$i]}-cortex-mask ${CORTEX_LABEL[$i]} --${H[$i]}-white ${ORIG[$i]} --${H[$i]}-pial ${RIBBON_EDIT_PIAL[$i]} --${H[$i]}"
  	
  	cmd "${H[$i]} AParc-to-ASeg aparc" \
- 	"mri_surf2volseg --o $APARC_PLUS_ASEG --label-cortex --i $ASEG --threads 1 --${H[$i]}-annot ${APARC_ANNOT[$i]} 2000 --${H[$i]}-cortex-mask ${CORTEX_LABEL[$i]} --${H[$i]}-white ${ORIG[$i]} --${H[$i]}-pial ${RIBBON_EDIT_PIAL[$i]} --${H[$i]}"
+ 	"mri_surf2volseg --o $APARC_PLUS_ASEG --label-cortex --i $ASEG --threads 4 --${H[$i]}-annot ${APARC_ANNOT[$i]} 1000 --${H[$i]}-cortex-mask ${CORTEX_LABEL[$i]} --${H[$i]}-white ${ORIG[$i]} --${H[$i]}-pial ${RIBBON_EDIT_PIAL[$i]} --${H[$((1 - i))]}-annot ${APARC_ANNOT[$((1 - i))]} 2000 --${H[$((1 - i))]}-cortex-mask ${CORTEX_LABEL[$((1 - i))]} --${H[$((1 - i))]}-white ${ORIG[$((1 - i))]} --${H[$((1 - i))]}-pial ${RIBBON_EDIT_PIAL[$((1 - i))]}"
+ 	#Same for lh and rh
+ 	
  	cmd "${H[$i]} AParc-to-ASeg aparc.a2009s" \
- 	"mri_surf2volseg --o $APARC_A2009S_ASEG --label-cortex --i $ASEG --threads 1 --${H[$i]}-annot ${APARC_A2009S_ANNOT[$i]} 12100 --${H[$i]}-cortex-mask ${CORTEX_LABEL[$i]} --${H[$i]}-white ${ORIG[$i]} --${H[$i]}-pial ${RIBBON_EDIT_PIAL[$i]} --${H[$i]}"
+ 	"mri_surf2volseg --o $APARC_A2009S_ASEG --label-cortex --i $ASEG --threads 4 --${H[$i]}-annot ${APARC_A2009S_ANNOT[$i]} 11100 --${H[$i]}-cortex-mask ${CORTEX_LABEL[$i]} --${H[$i]}-white ${ORIG[$i]} --${H[$i]}-pial ${RIBBON_EDIT_PIAL[$i]} --${H[$((1 - i))]}-annot ${APARC_A2009S_ANNOT[$((1 - i))]} 12100 --${H[$((1 - i))]}-cortex-mask ${CORTEX_LABEL[$((1 - i))]} --${H[$((1 - i))]}-white ${ORIG[$((1 - i))]} --${H[$((1 - i))]}-pial ${RIBBON_EDIT_PIAL[$((1 - i))]}"
  	cmd "${H[$i]} AParc-to-ASeg aparc.DKTatlas" \
- 	"mri_surf2volseg --o $APARC_DKT_ATLAS_ASEG --label-cortex --i $ASEG --threads 1 --${H[$i]}-annot ${DKT_APARC_ANNOT[$i]} 2000 --${H[$i]}-cortex-mask ${CORTEX_LABEL[$i]} --${H[$i]}-white ${ORIG[$i]} --${H[$i]}-pial ${RIBBON_EDIT_PIAL[$i]} --${H[$i]}"
-
- 	cmd "${H[$i]} WMParc" \
- 	"mri_surf2volseg --o $WMPARC --label-wm --i $APARC_PLUS_ASEG --threads 1 --${H[$i]}-annot ${APARC_ANNOT[$i]} 4000 --${H[$i]}-cortex-mask ${CORTEX_LABEL[$i]} --${H[$i]}-white ${ORIG[$i]} --${H[$i]}-pial ${RIBBON_EDIT_PIAL[$i]} --${H[$i]}"	
+ 	"mri_surf2volseg --o $APARC_DKT_ATLAS_ASEG --label-cortex --i $ASEG --threads 4 --${H[$i]}-annot ${DKT_APARC_ANNOT[$i]} 1000 --${H[$i]}-cortex-mask ${CORTEX_LABEL[$i]} --${H[$i]}-white ${ORIG[$i]} --${H[$i]}-pial ${RIBBON_EDIT_PIAL[$i]} --${H[$((1 - i))]}-annot ${APARC_A2009S_ANNOT[$((1 - i))]} 2000 --${H[$((1 - i))]}-cortex-mask ${CORTEX_LABEL[$((1 - i))]} --${H[$((1 - i))]}-white ${ORIG[$((1 - i))]} --${H[$((1 - i))]}-pial ${RIBBON_EDIT_PIAL[$((1 - i))]}"
+ 	
+	cmd "${H[$i]} WMParc" \
+ 	"mri_surf2volseg --o $WMPARC --label-wm --i $APARC_PLUS_ASEG --threads 4 --${H[$i]}-annot ${APARC_ANNOT[$i]} 3000 --${H[$i]}-cortex-mask ${CORTEX_LABEL[$i]} --${H[$i]}-white ${ORIG[$i]} --${H[$i]}-pial ${RIBBON_EDIT_PIAL[$i]} --${H[$((1 - i))]}-annot ${APARC_A2009S_ANNOT[$((1 - i))]} 4000 --${H[$((1 - i))]}-cortex-mask ${CORTEX_LABEL[$((1 - i))]} --${H[$((1 - i))]}-white ${ORIG[$((1 - i))]} --${H[$((1 - i))]}-pial ${RIBBON_EDIT_PIAL[$((1 - i))]}"	
  	
 	cmd "${H[$i]} Copy $TALAIRACH_XFM_FS to $TALAIRACH_XFM" \
 	"cp $TALAIRACH_XFM_FS $TALAIRACH_XFM"
  	cmd "${H[$i]} WMParc stats" \
- 	"mri_segstats --seed 1234 --seg $WMPARC --sum $WMPARC_STATS --pv $NORM_FS --excludeid 0 --brainmask $BRAIN_FINALSURFS_FS --in $NORM_FS --in-intensity-name norm --in-intensity-units MR --subject $SUBJID/$OUTPUT_FOLDER --surf-wm-vol --ctab $WMPARC_STATS_LUT --etiv --no-global-stats"
+ 	"mri_segstats --seed 1234 --seg $WMPARC --sum $WMPARC_STATS --pv $NORM_FS --excludeid 0 --brainmask $BRAIN_FINALSURFS_FS --in $NORM_FS --in-intensity-name norm --in-intensity-units MR --subject $SUBJID/$OUTPUT_FOLDER --surf-wm-vol --ctab $WMPARC_STATS_LUT --etiv"
  	#Needs mri/transforms/talairach.xfm
  	
  	cmd "${H[$i]} Change SUBJID" \
