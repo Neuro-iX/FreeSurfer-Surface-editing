@@ -706,11 +706,9 @@ for x in range(a):
             	    case L.l_gm | L.r_gm: 
             	        data_new_aseg[x,y,z] = ribbon_voxel
             	    case L.l_edit:
-            	        #data_new_aseg[x,y,z] = L.l_a
-						pass #keep amygdala, hippocampus and inf-lat-vent labels
+            	        pass #keep amygdala, hippocampus and inf-lat-vent labels #data_new_aseg[x,y,z] = L.l_a
             	    case L.r_edit:
-            	        #data_new_aseg[x,y,z] = L.r_a
-						pass #keep amygdala, hippocampus and inf-lat-vent labels
+            	        pass #keep amygdala, hippocampus and inf-lat-vent labels #data_new_aseg[x,y,z] = L.r_a
             	    case L.l_wm:
             	        if aseg_voxel in [0, L.l_gm, L.bs, L.l_h, L.l_ilv, L.l_a]:
             	            data_new_aseg[x,y,z] = L.l_wm
