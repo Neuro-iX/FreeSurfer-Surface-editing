@@ -8,7 +8,7 @@ Help ()
 builtin echo "
 AUTHOR: Benoît Verreman
 
-LAST UPDATE: 2026-01-19
+LAST UPDATE: 2026-01-20
 
 DESCRIPTION: 
 Use ribbon and subcortical NIFTI files to recompute pial surface,
@@ -81,8 +81,9 @@ TAG
 -t 8: (stats) Start from computing stats
 -t 9: (pial) Start from computing pial surface
 -t 10: Non hemisphere specific files to create
--t 11: (aseg+aparc) Compute stats and other files
--t 12: BONUS: test some command lines
+-t 11: autorecon3: Compute stats and other files
+-t 12: autorecon3: aseg+aparc
+-t 13: BONUS: test some command lines
 
 HA IMPROVEMENT
 -d: Number of dilation in ha_ribbon_edit.py
@@ -599,6 +600,7 @@ path_aseg = sys.argv[1] #Path to aseg.presurf.old.mgz
 path_ribbon = sys.argv[2] #Path to ribbon-edit.mgz
 path_out = sys.argv[3] #Path to output aseg.presurf.mgz
 path_out2 = sys.argv[4] #Path to output aseg.presurf_wo_subc.mgz
+path_out3 = sys.argv[5] #Path to output ribbon-wo-edit.mgz
 
 ### Get images
 if not os.path.isfile(path_aseg):
@@ -691,6 +693,7 @@ class L:
 ### Instantiate lists
 list_LH=[] #Subcortical structures in lh
 list_RH=[] #Subcortical structures in rh
+list_edit=[] #edit in ribbon
 
 ### Modify BG, WM, GM, CC_anterior and subcortical structures based on ribbon
 for x in range(a):
@@ -698,6 +701,10 @@ for x in range(a):
         for z in range(c):
             ribbon_voxel = int(data_ribbon[x,y,z]) #ribbon-edit.mgz
             aseg_voxel = int(data_aseg[x,y,z])
+            
+            match ribbon_voxel: #List the voxels of HA complex in ribbon, to remove them in ribbon_wo_edit
+                case L.l_edit | L.r_edit:
+                    list_edit.append((ribbon_voxel,[x,y,z]))
             
             if aseg_voxel != ribbon_voxel: #Voxel for which label may have to be changed
                 match ribbon_voxel:
@@ -722,19 +729,27 @@ for x in range(a):
 
 ### Copy data_new_aseg
 data_new_aseg_wo_subc = copy.deepcopy(data_new_aseg) #Copy to be edited
+data_ribbon_wo_edit = copy.deepcopy(data_ribbon) #Copy to be edited
 
 ### Replace different subcortical structures by WM (Putamen, VentralDC, CC_Anterior)
 for (label,[x,y,z]) in list_LH:
     data_new_aseg_wo_subc[x,y,z] = L.l_wm
 for (label,[x,y,z]) in list_RH:
     data_new_aseg_wo_subc[x,y,z] = L.r_wm
-    
+
+### Replace Edit in ribbon by GM
+for (label,[x,y,z]) in list_edit:
+    data_ribbon_wo_edit[x, y, z] = L.l_gm if label == L.l_edit else L.r_gm
+
 ### Save both new aseg
 img_new_aseg = nib.Nifti1Image(data_new_aseg, img_aseg.affine.copy())
 nib.save(img_new_aseg, path_out)
 
 img_new_aseg_wo_subc = nib.Nifti1Image(data_new_aseg_wo_subc, img_aseg.affine.copy())
 nib.save(img_new_aseg_wo_subc, path_out2)
+
+img_ribbon_wo_edit = nib.Nifti1Image(data_ribbon_wo_edit, img_aseg.affine.copy())
+nib.save(img_ribbon_wo_edit, path_out3)
 EOF
 fi
 }
@@ -830,6 +845,7 @@ RIBBON_PADDED="$O/mri/RS_ribbon-precorrection.mgz"
 SUBCORTICAL_PADDED="$O/mri/RS_subcortical-precorrection.mgz"
 RIBBON_CONVERT="$O/mri/RS_ribbon-convert.mgz"
 RIBBON_EDIT="$O/mri/ribbon-edit.mgz"
+RIBBON_WO_EDIT="$O/mri/ribbon-wo-edit.mgz"
 SUBCORTICAL_EDIT="$O/mri/RS_subcortical-edit.mgz"
 
 BRAIN_FINALSURFS="$O/mri/brain.finalsurfs.mgz"
@@ -1118,7 +1134,7 @@ then
 
 ## Create aseg.presurf.mgz and aseg.presurf_wo_subc.mgz based on ribbon-edit.mgz
 cmd "Use script $O/edit_aseg_presurf_based_on_ribbon.py on $ASEG_PRESURF_NOFIX_FS" \
-"python $O/edit_aseg_presurf_based_on_ribbon.py $ASEG_PRESURF_NOFIX_FS $RIBBON_EDIT $ASEG_PRESURF $ASEG_PRESURF_WO_SUBC"
+"python $O/edit_aseg_presurf_based_on_ribbon.py $ASEG_PRESURF_NOFIX_FS $RIBBON_EDIT $ASEG_PRESURF $ASEG_PRESURF_WO_SUBC $RIBBON_WO_EDIT"
 
 fi
 
@@ -1129,7 +1145,7 @@ if ((TAG<=5))
 then
 # Extract white matter from ribbon-edit to create wm-bmask.mgz
 cmd "Extract WM from $RIBBON_EDIT" \
-"mri_extract_label $RIBBON_EDIT ${LABEL_RIBBON_WM[0]} ${LABEL_RIBBON_WM[1]} $WM_BMASK_ALL" #0/128 binary mask
+"mri_extract_label $RIBBON_WO_EDIT ${LABEL_RIBBON_WM[0]} ${LABEL_RIBBON_WM[1]} $WM_BMASK_ALL" #0/128 binary mask
 
 cmd "Concatenate $WM_BMASK_ALL with $WM_FS into $WM_CONCAT" \
 "mri_concat --i $WM_BMASK_ALL --i $WM_FS --o $WM_CONCAT --sum" #ROI at 378 (128+250)
@@ -1164,7 +1180,7 @@ do
 	else
 	# Compute directly ORIG_NOFIX
 	cmd "${H[$i]} Pretress WM from $RIBBON_EDIT" \
-	"mri_pretess $RIBBON_EDIT ${LABEL_RIBBON_WM[$i]} $NORM_FS ${FILLED_PRETRESS[$i]}"
+	"mri_pretess $RIBBON_WO_EDIT ${LABEL_RIBBON_WM[$i]} $NORM_FS ${FILLED_PRETRESS[$i]}"
 
 	cmd "${H[$i]} Tessellate WM surf" \
 	"mri_tessellate ${FILLED_PRETRESS[$i]} ${LABEL_RIBBON_WM[$i]} ${ORIG_NOFIX_PREDEC[$i]}"
@@ -1237,7 +1253,7 @@ do
 	else
 	# Extract brain from ribbon-edit to create bmask.mgz (no cerebellum), and use the latter on brain.finalsurfs
 	cmd "${H[$i]} Extract forebrain from $RIBBON_EDIT" \
-	"mri_extract_label $RIBBON_EDIT ${LABEL_RIBBON_GM[$i]} ${LABEL_RIBBON_WM[$i]} ${BMASK[$i]}" #0/128 binary mask
+	"mri_extract_label $RIBBON_WO_EDIT ${LABEL_RIBBON_GM[$i]} ${LABEL_RIBBON_WM[$i]} ${BMASK[$i]}" #0/128 binary mask
 
 	cmd "${H[$i]} Replace 128 by 1 into ${BMASK[$i]}" \
 	"mri_binarize --i ${BMASK[$i]} --o ${BMASK[$i]} --replace 128 1"
@@ -1247,7 +1263,7 @@ do
 
 	# Extract white matter from ribbon-edit to create wm-bmask.mgz
 	cmd "${H[$i]} Extract GM from $RIBBON_EDIT" \
-	"mri_extract_label $RIBBON_EDIT ${LABEL_RIBBON_WM[$i]} ${WM_BMASK[$i]}" #0/128 binary mask
+	"mri_extract_label $RIBBON_WO_EDIT ${LABEL_RIBBON_WM[$i]} ${WM_BMASK[$i]}" #0/128 binary mask
 
 	cmd "${H[$i]} Concatenate ${WM_BMASK[$i]} with ${BRAIN_FINALSURFS_NO_CEREB[$i]} into ${BRAIN_FINALSURFS_NO_CEREB_UNIFORM_WM_110[$i]}" \
 	"mri_concat --i ${WM_BMASK[$i]} --i ${BRAIN_FINALSURFS_NO_CEREB[$i]} --o ${BRAIN_FINALSURFS_NO_CEREB_UNIFORM_WM_110[$i]} --max"
@@ -1257,7 +1273,7 @@ do
 	
 	# Extract gray matter from ribbon-edit to create gm-bmask.mgz, and create with it bf_80
 	cmd "${H[$i]} Extract GM from $RIBBON_EDIT" \
-	"mri_extract_label $RIBBON_EDIT ${LABEL_RIBBON_GM[$i]} ${GM_BMASK[$i]}" #0/128 binary mask
+	"mri_extract_label $RIBBON_WO_EDIT ${LABEL_RIBBON_GM[$i]} ${GM_BMASK[$i]}" #0/128 binary mask
 
 	cmd "${H[$i]} Concatenate ${GM_BMASK[$i]} with ${BRAIN_FINALSURFS_NO_CEREB[$i]} into ${BRAIN_FINALSURFS_NO_CEREB_UNIFORM_GM_80[$i]}" \
 	"mri_concat --i ${GM_BMASK[$i]} --i ${BRAIN_FINALSURFS_NO_CEREB_UNIFORM_WM_110[$i]} --o ${BRAIN_FINALSURFS_NO_CEREB_UNIFORM_GM_80[$i]} --max"
@@ -1435,12 +1451,26 @@ do
  	cmd "${H[$i]} Relabel Hypointensities" \
  	"mri_relabel_hypointensities -${H[$i]} $ASEG_PRESURF $O/surf $ASEG_PRESURF_HYPOS"
  	cmd "${H[$i]} APas-to-ASeg" \
- 	"mri_surf2volseg --o $ASEG --i $ASEG_PRESURF_HYPOS --fix-presurf-with-ribbon $RIBBON_EDIT --threads 4 --${H[$i]}-cortex-mask ${CORTEX_LABEL[$i]} --${H[$i]}-white ${ORIG[$i]} --${H[$i]}-pial ${RIBBON_EDIT_PIAL[$i]} --${H[$i]}"
+ 	"mri_surf2volseg --o $ASEG --i $ASEG_PRESURF_HYPOS --fix-presurf-with-ribbon $RIBBON_WO_EDIT --threads 4 --${H[$i]}-cortex-mask ${CORTEX_LABEL[$i]} --${H[$i]}-white ${ORIG[$i]} --${H[$i]}-pial ${RIBBON_EDIT_PIAL[$i]} --${H[$i]}"
  	
  	cmd "${H[$i]} AParc-to-ASeg aparc" \
  	"mri_surf2volseg --o $APARC_PLUS_ASEG --label-cortex --i $ASEG --threads 4 --${H[$i]}-annot ${APARC_ANNOT[$i]} 1000 --${H[$i]}-cortex-mask ${CORTEX_LABEL[$i]} --${H[$i]}-white ${ORIG[$i]} --${H[$i]}-pial ${RIBBON_EDIT_PIAL[$i]} --${H[$((1 - i))]}-annot ${APARC_ANNOT[$((1 - i))]} 2000 --${H[$((1 - i))]}-cortex-mask ${CORTEX_LABEL[$((1 - i))]} --${H[$((1 - i))]}-white ${ORIG[$((1 - i))]} --${H[$((1 - i))]}-pial ${RIBBON_EDIT_PIAL[$((1 - i))]}"
  	#Same for lh and rh
- 	
+	fi
+done
+fi
+
+#################
+## autorecon3: aparc+aseg and the rest (needs rh.aparc.a2009s.annot)
+# #################
+if ((TAG<=12))
+then
+for (( i=0; i<2; i++ ));
+do
+	if ((HEMI>=0 && HEMI!=i)); #Cases when the current hemi ($i) is not to be processed
+	then
+		continue;
+	else
  	cmd "${H[$i]} AParc-to-ASeg aparc.a2009s" \
  	"mri_surf2volseg --o $APARC_A2009S_ASEG --label-cortex --i $ASEG --threads 4 --${H[$i]}-annot ${APARC_A2009S_ANNOT[$i]} 11100 --${H[$i]}-cortex-mask ${CORTEX_LABEL[$i]} --${H[$i]}-white ${ORIG[$i]} --${H[$i]}-pial ${RIBBON_EDIT_PIAL[$i]} --${H[$((1 - i))]}-annot ${APARC_A2009S_ANNOT[$((1 - i))]} 12100 --${H[$((1 - i))]}-cortex-mask ${CORTEX_LABEL[$((1 - i))]} --${H[$((1 - i))]}-white ${ORIG[$((1 - i))]} --${H[$((1 - i))]}-pial ${RIBBON_EDIT_PIAL[$((1 - i))]}"
  	cmd "${H[$i]} AParc-to-ASeg aparc.DKTatlas" \
@@ -1581,7 +1611,7 @@ fi
 #################
 ## BONUS FOR TESTING SOMETHING ALONE: use tag -t 12
 # #################
-if ((TAG<=12))
+if ((TAG<=13))
 then
 for (( i=0; i<2; i++ ));
 do
