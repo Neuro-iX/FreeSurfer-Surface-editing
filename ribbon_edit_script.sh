@@ -1394,6 +1394,26 @@ cmd "AntsDenoise $BRAIN to $ANTSDN_BRAIN" \
 cmd "mri_segment -wsizemm 13 -mprage $ANTSDN_BRAIN $WM_SEG" \
 "mri_segment -wsizemm 13 -mprage $ANTSDN_BRAIN $WM_SEG"
 #fi
+
+
+
+# Copie with new name for later functions
+cmd "${H[$i]} Copy white surface to ${WHITE[$i]}" \
+"cp ${ORIG[$i]} ${WHITE[$i]}" 
+cmd "${H[$i]} Copy pial surface to ${PIAL[$i]}" \
+"cp ${RIBBON_EDIT_PIAL[$i]} ${PIAL[$i]}" #RIBBON_EDIT_PIAL_THIRD_PASS
+
+# Compute the stats
+cmd "${H[$i]} pial curv" \
+"mris_place_surface --curv-map ${PIAL[$i]} 2 10 ${PIAL_CURV[$i]}"
+cmd "${H[$i]} pial area" \
+"mris_place_surface --area-map ${PIAL[$i]} ${PIAL_AREA[$i]}"
+cmd "${H[$i]} thickness" \
+"mris_place_surface --thickness ${ORIG[$i]} ${PIAL[$i]} 20 5 ${THICKNESS[$i]}"
+# same command again for "area and vertex vol rh" ??? 	
+
+cmd "${H[$i]} Curvature Stats" \
+"mris_curvature_stats -m --writeCurvatureFiles -G -o ${CURV_STATS[$i]} -F smoothwm $SUBJID/$OUTPUT_FOLDER ${H[$i]} curv sulc"
 fi
 
 #################
@@ -1407,24 +1427,6 @@ do
 	then
 		continue;
 	else
-	# Copie with new name for later functions
-	cmd "${H[$i]} Copy white surface to ${WHITE[$i]}" \
-	"cp ${ORIG[$i]} ${WHITE[$i]}" 
-	cmd "${H[$i]} Copy pial surface to ${PIAL[$i]}" \
-	"cp ${RIBBON_EDIT_PIAL[$i]} ${PIAL[$i]}" #RIBBON_EDIT_PIAL_THIRD_PASS
-	
-	# Compute the stats
-	cmd "${H[$i]} pial curv" \
-	"mris_place_surface --curv-map ${PIAL[$i]} 2 10 ${PIAL_CURV[$i]}"
-	cmd "${H[$i]} pial area" \
-	"mris_place_surface --area-map ${PIAL[$i]} ${PIAL_AREA[$i]}"
-	cmd "${H[$i]} thickness" \
-	"mris_place_surface --thickness ${ORIG[$i]} ${PIAL[$i]} 20 5 ${THICKNESS[$i]}"
-	# same command again for "area and vertex vol rh" ??? 	
-	
-	cmd "${H[$i]} Curvature Stats" \
-	"mris_curvature_stats -m --writeCurvatureFiles -G -o ${CURV_STATS[$i]} -F smoothwm $SUBJID/$OUTPUT_FOLDER ${H[$i]} curv sulc"
-	
 	cmd "${H[$i]} Cortical ribbon mask" \
 	"mris_volmask --aseg_name aseg.presurf --label_left_white ${LABEL_RIBBON_WM[0]} --label_left_ribbon ${LABEL_RIBBON_GM[0]} --label_right_white ${LABEL_RIBBON_WM[1]} --label_right_ribbon ${LABEL_RIBBON_GM[1]} --save_ribbon --out_root ribbon $SUBJID/$OUTPUT_FOLDER" 
 	#--out_root ribbon_script_${H[$i]}
