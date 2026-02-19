@@ -1424,9 +1424,12 @@ do
 	
 	cmd "${H[$i]} Curvature Stats" \
 	"mris_curvature_stats -m --writeCurvatureFiles -G -o ${CURV_STATS[$i]} -F smoothwm $SUBJID/$OUTPUT_FOLDER ${H[$i]} curv sulc"
- 	
+	
 	cmd "${H[$i]} Cortical ribbon mask" \
-	"mris_volmask --aseg_name aseg.presurf --label_left_white ${LABEL_RIBBON_WM[0]} --label_left_ribbon ${LABEL_RIBBON_GM[0]} --label_right_white ${LABEL_RIBBON_WM[1]} --label_right_ribbon ${LABEL_RIBBON_GM[1]} --save_ribbon --out_root ribbon_script_${H[$i]} --${H[$i]}-only $SUBJID/$OUTPUT_FOLDER" #Searching for surf/rh.white and surf/rh.pial, and --surf_white and --surf_pial don't help, can use arg 
+	"mris_volmask --aseg_name aseg.presurf --label_left_white ${LABEL_RIBBON_WM[0]} --label_left_ribbon ${LABEL_RIBBON_GM[0]} --label_right_white ${LABEL_RIBBON_WM[1]} --label_right_ribbon ${LABEL_RIBBON_GM[1]} --save_ribbon --out_root ribbon $SUBJID/$OUTPUT_FOLDER" 
+	#--out_root ribbon_script_${H[$i]}
+	#--${H[$i]}-only $SUBJID/$OUTPUT_FOLDER
+	#Searching for surf/rh.white and surf/rh.pial, and --surf_white and --surf_pial don't help, can use arg  
 	#cmd "Copy $RH_SMOOTHW_NOFIX to $RH_SMOOTHW" \
 	#"cp $RH_SMOOTHW_NOFIX $RH_SMOOTHW"
 	#cmd "Inflation2 rh" \
