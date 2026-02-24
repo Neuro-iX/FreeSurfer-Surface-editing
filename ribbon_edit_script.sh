@@ -814,6 +814,7 @@ ORIG_FS="$SUBJECTS_DIR/$SUBJID/${SUBJID}_freesurfer/mri/orig.mgz"
 #ADDED for mri_segstats
 TALAIRACH_XFM_FS="$SUBJECTS_DIR/$SUBJID/${SUBJID}_freesurfer/mri/transforms/talairach.xfm"
 
+BRAINMASK_FS="$SUBJECTS_DIR/$SUBJID/${SUBJID}_freesurfer/mri/brainmask.mgz"
 #RB_ALL_WITHSKULL="$FREESURFER_HOME/average/RB_all_withskull_2016-05-10.vc700.gca"
 #TALAIRACH_WITH_SKULL="$SUBJECTS_DIR/$SUBJID/${SUBJID}_freesurfer/mri/transforms/talairach_with_skull.lta"
 
@@ -870,6 +871,7 @@ WM_ASEGEDIT="$O/mri/RS_wm-asegedit.mgz"
 WM="$O/mri/wm.mgz" # Use this name for mri_fix_topology
 
 BRAIN="$O/mri/brain.mgz" # for mris_fix_topology
+BRAINMASK="$O/mri/brainmask.mgz" # for mris_fix_topology
 
 declare -a FILLED_PRETRESS=("$O/mri/RS_filled_pretress_lh.mgz" "$O/mri/RS_filled_pretress_rh.mgz")
 declare -a ORIG_NOFIX_PREDEC=("$O/surf/lh.orig.nofix.predec" "$O/surf/rh.orig.nofix.predec")
@@ -1393,7 +1395,9 @@ cmd "AntsDenoise $BRAIN to $ANTSDN_BRAIN" \
 "AntsDenoiseImageFs -i $BRAIN -o $ANTSDN_BRAIN"
 cmd "mri_segment -wsizemm 13 -mprage $ANTSDN_BRAIN $WM_SEG" \
 "mri_segment -wsizemm 13 -mprage $ANTSDN_BRAIN $WM_SEG"
-#fi
+
+cmd "Copy $BRAINMASK_FS" \
+"cp $BRAINMASK_FS $BRAINMASK"  #for WMParc stats
 fi
 
 #################
@@ -1412,6 +1416,8 @@ do
 	"cp ${ORIG[$i]} ${WHITE[$i]}" 
 	cmd "${H[$i]} Copy pial surface to ${PIAL[$i]}" \
 	"cp ${RIBBON_EDIT_PIAL[$i]} ${PIAL[$i]}" #RIBBON_EDIT_PIAL_THIRD_PASS
+	
+	
 	
 	# Compute the stats
 	cmd "${H[$i]} pial curv" \
