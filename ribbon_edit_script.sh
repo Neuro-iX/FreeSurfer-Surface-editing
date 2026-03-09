@@ -8,7 +8,7 @@ Help ()
 builtin echo "
 AUTHOR: Benoît Verreman
 
-LAST UPDATE: 2026-01-20
+LAST UPDATE: 2026-03-04
 
 DESCRIPTION: 
 Use ribbon and subcortical NIFTI files to recompute pial surface,
@@ -124,8 +124,10 @@ OUTPUT_FOLDER="outputs"
 N_DILATION=3
 N_EROSION=2
 #LABELS_SUBCORTICAL="7 8 15 16 46 47" #for previous subcortical files (given to -c) : "5 15 29 30 32 31"
+LABELS_SUBCORTICAL_OLD="1 18 31 29 16 9 11 13 4 5 15 20 22 3 7 25 27 2 19 32 30 17 10 12 14 21 23 8 26 28 24" #From HOA dseg
+LABELS_SUBCORTICAL_NEW="4 5 7 8 10 11 12 13 14 15 16 17 18 24 26 28 28 43 44 46 47 49 50 51 52 53 54 58 60 60 85" #Freesurfer's true label values
 #declare -a LABELS_HA=("5 17 18" "44 53 54") #HA in aparc+aseg / ('18 20 22' '19 21 23') in HOA_Subcortical_Labels
-declare -a LABELS_HA_RIB=("21" "22") #HA in ribbon (-n flag)
+#declare -a LABELS_HA_RIB=("21" "22") #HA in ribbon (-n flag)
 declare -a H=("lh" "rh") #Left then Right hemispheres
 declare -a LABEL_RIBBON_WM=("2" "41")
 declare -a LABEL_RIBBON_GM=("3" "42")
@@ -309,6 +311,8 @@ script_nifti_padding
 script_brain-finalsurfs-edit
 script_edit_aseg_presurf_based_on_ribbon
 script_expert_file
+script_merge_ribbon_subcortical
+script_remap_labels
 }
 
 Delete()
@@ -448,12 +452,34 @@ if [ ! -f "$O/nifti_padding.py" ]
 then
 
 cat > $O/nifti_padding.py <<EOF
+#!/usr/bin/env python3
+# ==============================================================================
+# Change MGZ Image Orientation to RAS and Pad to Cubic
+# ==============================================================================
+# This script reorients a MGZ/NIfTI image to RAS (Right-Anterior-Superior)
+# orientation and pads it with zeros to make it cubic (same size in all 3D).
+# The final size will be max_dim x max_dim x max_dim.
+#
+# Usage:
+#   python nifti_padding.py input.mgz output.mgz 0
+#
+# Requirements:
+#   pip install nibabel numpy
+# ==============================================================================
+
 import os
+import numpy as np
 import nibabel as nib
 import nibabel.processing #Used in nib.processing.conform
 import scipy.ndimage #Used in nib.processing.conform
 import sys #To add arguments
 import subprocess
+
+#Padding function: reshape the image to (max_dim, max_dim, max_dim) with same resolution and an orientation of 'RAS'
+def padding(img, new_name):
+    d = max(img.header.get_data_shape())
+    new_img = nib.processing.conform(img, out_shape=(d, d, d), voxel_size = img.header.get_zooms(), order=0, cval=0, orientation='RAS', out_class=None) #d
+    nib.save(new_img, new_name)
 
 # SUBJID directory
 img_in = sys.argv[1]
@@ -465,12 +491,8 @@ if not os.path.isfile(img_in):
     raise FileNotFoundError("The following path doesn't exist: " + img_in)
 else:
     img = nib.load(img_in)
-
-#Padding function: reshape the image to (max_dim, max_dim, max_dim) with same resolution and an orientation of 'LAS'
-def padding(img, new_name):
-    d = max(img.header.get_data_shape())
-    new_img = nib.processing.conform(img, out_shape=(d, d, d),     voxel_size = img.header.get_zooms(), order=0, cval=0, orientation='LAS', out_class=None) #d
-    nib.save(new_img, new_name)
+    #img = reorient_to_ras(img)
+    #img = pad_to_cubic(img)
 
 if is_t1:
     padding(img, img_padded)
@@ -596,22 +618,83 @@ import numpy
 from itertools import product  #for motion2
 
 #Outside parameters
-path_aseg = sys.argv[1] #Path to aseg.presurf.old.mgz
-path_ribbon = sys.argv[2] #Path to ribbon-edit.mgz
-path_out = sys.argv[3] #Path to output aseg.presurf.mgz
-path_out2 = sys.argv[4] #Path to output aseg.presurf_wo_subc.mgz
-path_out3 = sys.argv[5] #Path to output ribbon-wo-edit.mgz
+labels_ha_left = sys.argv[1] #Labels for HA left
+labels_ha_right = sys.argv[2] #Labels for HA right
+path_aseg = sys.argv[3] #Path to aseg.presurf.old.mgz
+path_ribbon = sys.argv[4] #Path to ribbon-edit.mgz
+path_out = sys.argv[5] #Path to output aseg.presurf.mgz
+path_out2 = sys.argv[6] #Path to output aseg.presurf_wo_subc.mgz
+path_out3 = sys.argv[7] #Path to output ribbon-wo-edit.mgz
+
+#Convert list of labels
+labels_ha_left = [int(v) for v in labels_ha_left.split()]
+labels_ha_right = [int(v) for v in labels_ha_right.split()]
+
+
+def reorient_to_ras(img):
+    """
+    Reorient image data and affine to RAS orientation.
+    
+    Args:
+        img: nibabel image object
+        
+    Returns:
+        nibabel image object in RAS orientation
+    """
+    # Get current orientation
+    current_orient = nib.aff2axcodes(img.affine)
+    print(f"Current orientation: {current_orient}")
+    
+    # Check if already in RAS
+    if current_orient == ('R', 'A', 'S'):
+        print("Image is already in RAS orientation")
+        return img
+    
+    # Reorient to RAS
+    # This transforms both the data array and the affine matrix
+    ras_img = nib.as_closest_canonical(img)
+    
+    # Verify the new orientation
+    new_orient = nib.aff2axcodes(ras_img.affine)
+    print(f"New orientation: {new_orient}")
+    
+    # If as_closest_canonical didn't get us to RAS, use orient transform
+    if new_orient != ('R', 'A', 'S'):
+        print("Applying explicit RAS transform...")
+        
+        # Get the orientation transform from current to RAS
+        ornt = nib.orientations.axcodes2ornt(current_orient)
+        ras_ornt = nib.orientations.axcodes2ornt(('R', 'A', 'S'))
+        transform = nib.orientations.ornt_transform(ornt, ras_ornt)
+        
+        # Apply the transform
+        data_reoriented = nib.orientations.apply_orientation(img.get_fdata(), transform)
+        
+        # Update the affine matrix
+        affine_reoriented = img.affine @ nib.orientations.inv_ornt_aff(transform, img.shape)
+        
+        # Create new image
+        ras_img = nib.MGHImage(data_reoriented, affine_reoriented)
+        
+        # Verify again
+        new_orient = nib.aff2axcodes(ras_img.affine)
+        print(f"Final orientation: {new_orient}")
+    
+    return ras_img
+
 
 ### Get images
 if not os.path.isfile(path_aseg):
     raise FileNotFoundError("Make sure the following path is correct: " + path_aseg)
 else:
     img_aseg = nib.load(path_aseg)
+    img_aseg = reorient_to_ras(img_aseg)
 
 if not os.path.isfile(path_ribbon):
     raise FileNotFoundError("Make sure the following path is correct: " + path_ribbon)
 else:
     img_ribbon = nib.load(path_ribbon)
+    img_ribbon = reorient_to_ras(img_ribbon)
 
 ### Get data
 data_aseg = img_aseg.get_fdata() #Not to be edited
@@ -687,8 +770,8 @@ class L:
     
     #EDIT RIBBON
     
-    l_edit = 21 #lh manuel edit in ribbon
-    r_edit = 22 #rh manuel edit in ribbon
+    #l_edit = [5, 17, 18] #'18 20 22' #21 #lh manuel edit in ribbon #labels_ha_left
+    #r_edit = [44, 53, 54] #'19 21 23' #22 #rh manuel edit in ribbon #labels_ha_right
 
 ### Instantiate lists
 list_LH=[] #Subcortical structures in lh
@@ -702,9 +785,9 @@ for x in range(a):
             ribbon_voxel = int(data_ribbon[x,y,z]) #ribbon-edit.mgz
             aseg_voxel = int(data_aseg[x,y,z])
             
-            match ribbon_voxel: #List the voxels of HA complex in ribbon, to remove them in ribbon_wo_edit
-                case L.l_edit | L.r_edit:
-                    list_edit.append((ribbon_voxel,[x,y,z]))
+            if ribbon_voxel in (labels_ha_left + labels_ha_right): #List the voxels of HA complex in ribbon, to remove them in ribbon_wo_edit
+                list_edit.append((ribbon_voxel,[x,y,z]))
+                data_new_aseg[x,y,z] = ribbon_voxel
             
             if aseg_voxel != ribbon_voxel: #Voxel for which label may have to be changed
                 match ribbon_voxel:
@@ -712,10 +795,6 @@ for x in range(a):
             	        data_new_aseg[x,y,z] = ribbon_voxel
             	    case L.l_gm | L.r_gm: 
             	        data_new_aseg[x,y,z] = ribbon_voxel
-            	    case L.l_edit:
-            	        pass #keep amygdala, hippocampus and inf-lat-vent labels #data_new_aseg[x,y,z] = L.l_a
-            	    case L.r_edit:
-            	        pass #keep amygdala, hippocampus and inf-lat-vent labels #data_new_aseg[x,y,z] = L.r_a
             	    case L.l_wm:
             	        if aseg_voxel in [0, L.l_gm, L.bs, L.l_h, L.l_ilv, L.l_a]:
             	            data_new_aseg[x,y,z] = L.l_wm
@@ -739,20 +818,808 @@ for (label,[x,y,z]) in list_RH:
 
 ### Replace Edit in ribbon by GM
 for (label,[x,y,z]) in list_edit:
-    data_ribbon_wo_edit[x, y, z] = L.l_gm if label == L.l_edit else L.r_gm
+    data_ribbon_wo_edit[x, y, z] = L.l_gm if label in labels_ha_left else L.r_gm
 
 ### Save both new aseg
-img_new_aseg = nib.Nifti1Image(data_new_aseg, img_aseg.affine.copy())
+img_new_aseg = nib.Nifti1Image(data_new_aseg, img_ribbon.affine.copy())
 nib.save(img_new_aseg, path_out)
 
-img_new_aseg_wo_subc = nib.Nifti1Image(data_new_aseg_wo_subc, img_aseg.affine.copy())
+img_new_aseg_wo_subc = nib.Nifti1Image(data_new_aseg_wo_subc, img_ribbon.affine.copy())
 nib.save(img_new_aseg_wo_subc, path_out2)
 
-img_ribbon_wo_edit = nib.Nifti1Image(data_ribbon_wo_edit, img_aseg.affine.copy())
+img_ribbon_wo_edit = nib.Nifti1Image(data_ribbon_wo_edit, img_ribbon.affine.copy())
 nib.save(img_ribbon_wo_edit, path_out3)
 EOF
 fi
 }
+
+#################erode_into_mask
+## Create a python script "merge_ribbon_subcortical.py"
+#################
+script_merge_ribbon_subcortical()
+{
+if [ ! -f "$O/merge_ribbon_subcortical.py" ]
+then
+
+cat > $O/merge_ribbon_subcortical.py <<EOF
+#!/usr/bin/env python3
+# ==============================================================================
+# Merge Subcortical Labels into Ribbon with Morphological Operations
+# ==============================================================================
+# This script merges selected subcortical labels into a ribbon file, with
+# optional morphological operations (dilation followed by erosion) applied
+# to specific labels, while preserving designated ribbon labels.
+#
+# Usage:
+#   python merge_ribbon_subcortical.py <RIBBON.nii.gz> <SUBCORTICAL.nii.gz> <OUTPUT.nii.gz>
+#                                      --subcortical-labels '18 20 22 19 21 23'
+#                                      --transform-labels '18 20 22 19 21 23'
+#                                      --n-dilate 3 --n-erode 2
+#                                      --preserve-ribbon '3 42'
+#                                      --dilate-into '2 41'
+#                                      --erode-into '2 41'
+#
+# Example:
+#   python merge_ribbon_subcortical.py ribbon.nii.gz subcortical.nii.gz output.nii.gz \
+#          --subcortical-labels '18 20 22 19 21 23' \
+#          --transform-labels '18 20 22 19 21 23' \
+#          --n-dilate 3 --n-erode 2 \
+#          --preserve-ribbon '3 42' \
+#          --dilate-into '2 41' \
+#          --erode-into '2 41'
+# ==============================================================================
+
+import argparse
+import sys
+import numpy as np
+import nibabel as nib
+from scipy import ndimage
+
+
+def parse_arguments():
+    """
+    Parse command-line arguments.
+
+    Returns:
+        argparse.Namespace: Parsed arguments containing file paths and parameters.
+    """
+    parser = argparse.ArgumentParser(
+        description="Merge subcortical labels into ribbon with morphological operations.",
+        formatter_class=argparse.RawTextHelpFormatter
+    )
+
+    # Positional arguments: input and output files
+    parser.add_argument(
+        "ribbon",
+        type=str,
+        help="Path to the RIBBON NIfTI file (.nii.gz)"
+    )
+    parser.add_argument(
+        "subcortical",
+        type=str,
+        help="Path to the SUBCORTICAL NIfTI file (.nii.gz)"
+    )
+    parser.add_argument(
+        "output",
+        type=str,
+        help="Path to the OUTPUT NIfTI file (.nii.gz)"
+    )
+
+    # Label specifications
+    parser.add_argument(
+        "--subcortical-labels",
+        type=str,
+        required=True,
+        metavar="LABELS",
+        help="Space-separated list of subcortical labels to merge into ribbon\n"
+             "Example: --subcortical-labels '18 20 22 19 21 23'"
+    )
+    parser.add_argument(
+        "--transform-labels",
+        type=str,
+        required=True,
+        metavar="LABELS",
+        help="Space-separated list of labels to apply morphological operations to\n"
+             "Must be a subset of --subcortical-labels\n"
+             "Example: --transform-labels '18 20 22'"
+    )
+
+    # Morphological operation parameters
+    parser.add_argument(
+        "--n-dilate",
+        type=int,
+        required=True,
+        metavar="N",
+        help="Number of dilation iterations to apply to transform-labels"
+    )
+    parser.add_argument(
+        "--n-erode",
+        type=int,
+        required=True,
+        metavar="N",
+        help="Number of erosion iterations to apply after dilation"
+    )
+    parser.add_argument(
+        "--erode-into",
+        type=str,
+        required=True,
+        metavar="LABEL",
+        help="Label values that eroded voxels will take\n"
+             "Erosion only occurs at borders with this label\n"
+             "Example: --erode-into '3 42'"
+    )
+    # Ribbon label specifications
+    parser.add_argument(
+        "--preserve-ribbon",
+        type=str,
+        required=True,
+        metavar="LABELS",
+        help="Space-separated list of ribbon labels to preserve (not overwritten)\n"
+             "Example: --preserve-ribbon '2 41'"
+    )
+    parser.add_argument(
+        "--dilate-into",
+        type=str,
+        required=True,
+        metavar="LABELS",
+        help="Space-separated list of ribbon labels that dilation can expand into\n"
+             "Example: --dilate-into '3 42'"
+    )
+    return parser.parse_args()
+
+
+def parse_label_string(label_str):
+    """
+    Parse a space-separated string of numbers into a list of integer values.
+
+    Args:
+        label_str (str): Space-separated string of numbers.
+
+    Returns:
+        list: List of integer label values.
+    """
+    try:
+        values = [int(float(v)) for v in label_str.split()]
+        return values
+    except ValueError:
+        print(f"Error: Could not parse label string '{label_str}'. "
+              f"Expected space-separated numbers.")
+        sys.exit(1)
+
+
+def validate_inputs(subcortical_labels, transform_labels, preserve_ribbon, dilate_into):
+    """
+    Validate input label lists for consistency.
+
+    Args:
+        subcortical_labels (list): Labels to merge from subcortical.
+        transform_labels (list): Labels to apply morphology to.
+        preserve_ribbon (list): Ribbon labels to preserve.
+        dilate_into (list): Ribbon labels to allow dilation into.
+
+    Raises:
+        SystemExit: If validation fails.
+    """
+    # Check that transform_labels is a subset of subcortical_labels
+    if not set(transform_labels).issubset(set(subcortical_labels)):
+        extra_labels = set(transform_labels) - set(subcortical_labels)
+        print(f"Error: --transform-labels contains labels not in --subcortical-labels: {extra_labels}")
+        sys.exit(1)
+
+    # Check that preserve and dilate-into don't overlap
+    overlap = set(preserve_ribbon) & set(dilate_into)
+    if overlap:
+        print(f"Warning: Labels appear in both --preserve-ribbon and --dilate-into: {overlap}")
+        print(f"         These labels will be preserved (dilate-into will be ignored for them)")
+
+
+def apply_single_dilation(label_value, current_output, dilate_into_mask, preserve_mask):
+    """
+    Apply a single dilation iteration to one label in the output volume.
+    
+    Args:
+        label_value (int): The label value to dilate.
+        current_output (np.ndarray): Current state of the output volume (modified in-place).
+        dilate_into_mask (np.ndarray): Binary mask of regions where dilation is allowed (bool).
+        preserve_mask (np.ndarray): Binary mask of voxels that should never be overwritten.
+
+    Returns:
+        int: Number of voxels after dilation.
+    """
+    # Define 3D structuring element (6-connectivity: faces only)
+    structure = ndimage.generate_binary_structure(3, 1)
+    
+    # Extract current mask for this label
+    label_mask = (current_output == label_value)
+    
+    # Dilate the current mask
+    dilated = ndimage.binary_dilation(label_mask, structure=structure)
+    
+    # Constrain dilation:
+    # - Can expand into dilate_into_mask regions
+    ## - Can expand into background (where current_output == 0)
+    # - Cannot overwrite preserved labels
+    # - Cannot overwrite other labels (check current_output)
+    allowed_expansion = dilate_into_mask #| (current_output == 0)
+    allowed_expansion = allowed_expansion & ~preserve_mask
+    
+    # Keep only expanded voxels that are allowed
+    result = dilated & (allowed_expansion | label_mask)
+    
+    # Update the current output volume with this label
+    # Remove this label from current output first, then add the expanded version
+    current_output[current_output == label_value] = 0
+    merge_mask = result & ~preserve_mask
+    current_output[merge_mask] = label_value
+    
+    return np.sum(result)
+
+
+def apply_single_erosion(label_value, erode_neighbor_labels, current_output, preserve_mask, ribbon_data):
+    """
+    Apply a single erosion iteration to one label in the output volume.
+    
+    Erosion only occurs where the label has a neighbor voxel with erode_neighbor_labels.
+    The eroded voxels take the value of erode_neighbor_labels.
+    
+    Args:
+        label_value (int): The label value to erode.
+        erode_neighbor_labels (list of int): Neighbor values to look for to erode.
+        current_output (np.ndarray): Current state of the output volume (modified in-place).
+        preserve_mask (np.ndarray): Binary mask of voxels that should never be overwritten.
+        ribbon_data (np.ndarray): Reference ribbon volume.
+
+    Returns:
+        tuple: (number of voxels after erosion, number of voxels eroded)
+    """
+    # Define 3D structuring element (6-connectivity: faces only)
+    structure = ndimage.generate_binary_structure(3, 1)
+    
+    # Extract current mask for this label
+    label_mask = (current_output == label_value)
+    
+    # Find voxels with erode_neighbor_labels
+    erode_into_mask = np.isin(current_output,erode_neighbor_labels)
+    
+    # Dilate the erode_into_mask to find border voxels
+    # These are positions where erode_neighbor_labels neighbors exist
+    erode_into_dilated = ndimage.binary_dilation(erode_into_mask, structure=structure)
+    
+    # Border voxels are those in label_mask that neighbor erode_neighbor_labels
+    border_voxels = label_mask & erode_into_dilated
+    
+    # Standard erosion of the label
+    eroded_mask = ndimage.binary_erosion(label_mask, structure=structure)
+    
+    # Voxels that would be removed by standard erosion
+    removed_by_erosion = label_mask & ~eroded_mask
+    
+    # Only actually erode voxels that are at the border with erode_neighbor_labels
+    actually_eroded = removed_by_erosion & border_voxels
+    
+    # The remaining label voxels
+    remaining_label = label_mask & ~actually_eroded
+    
+    # Update the current output volume
+    # First remove the label
+    current_output[current_output == label_value] = 0
+    # Add back the remaining label voxels
+    current_output[remaining_label & ~preserve_mask] = label_value
+    # Set eroded voxels to erode_neighbor_labels
+    current_output[actually_eroded & ~preserve_mask] = ribbon_data[actually_eroded & ~preserve_mask]
+    
+    n_remaining = np.sum(remaining_label)
+    n_eroded = np.sum(actually_eroded)
+    
+    return n_remaining, n_eroded
+
+
+def main():
+    """
+    Main function: loads files, merges labels with morphology, and saves result.
+    """
+    # --------------------------------------------------------------------------
+    # 1. Parse and validate arguments
+    # --------------------------------------------------------------------------
+    args = parse_arguments()
+
+    # Parse label strings into lists of integers
+    subcortical_labels = parse_label_string(args.subcortical_labels)
+    transform_labels = parse_label_string(args.transform_labels)
+    preserve_ribbon = parse_label_string(args.preserve_ribbon)
+    dilate_into = parse_label_string(args.dilate_into)
+    erode_into = parse_label_string(args.erode_into)
+
+    print("=" * 70)
+    print("Merge Subcortical into Ribbon with Morphological Operations")
+    print("=" * 70)
+    print(f"RIBBON file           : {args.ribbon}")
+    print(f"SUBCORTICAL file      : {args.subcortical}")
+    print(f"OUTPUT file           : {args.output}")
+    print(f"Subcortical labels    : {subcortical_labels}")
+    print(f"Transform labels      : {transform_labels}")
+    print(f"Dilations             : {args.n_dilate}")
+    print(f"Erosions              : {args.n_erode}")
+    print(f"Erode into label      : {erode_into}")
+    print(f"Preserve ribbon       : {preserve_ribbon}")
+    print(f"Dilate into           : {dilate_into}")
+    print("=" * 70)
+
+    # Validate label lists
+    validate_inputs(subcortical_labels, transform_labels, preserve_ribbon, dilate_into)
+
+    # --------------------------------------------------------------------------
+    # 2. Load the NIfTI files
+    # --------------------------------------------------------------------------
+    print(f"\nLoading RIBBON: {args.ribbon}")
+    try:
+        ribbon_img = nib.load(args.ribbon)
+        ribbon_img = nib.as_closest_canonical(ribbon_img)
+        ribbon_data = ribbon_img.get_fdata().astype(np.int32)
+    except Exception as e:
+        print(f"Error loading ribbon file: {e}")
+        sys.exit(1)
+
+    print(f"Loading SUBCORTICAL: {args.subcortical}")
+    try:
+        subcortical_img = nib.load(args.subcortical)
+        subcortical_img = nib.as_closest_canonical(subcortical_img)
+        subcortical_data = subcortical_img.get_fdata().astype(np.int32)
+    except Exception as e:
+        print(f"Error loading subcortical file: {e}")
+        sys.exit(1)
+
+    # Verify that both images have the same shape
+    if ribbon_data.shape != subcortical_data.shape:
+        print(f"Error: RIBBON shape {ribbon_data.shape} != SUBCORTICAL shape {subcortical_data.shape}")
+        sys.exit(1)
+
+    print(f"Image shape: {ribbon_data.shape}")
+
+    # --------------------------------------------------------------------------
+    # 3. Create output array starting from ribbon
+    # --------------------------------------------------------------------------
+    # Start with a copy of the ribbon data
+    output_data = ribbon_data.copy()
+
+    # Create a mask of ribbon labels to preserve (these will never be overwritten)
+    preserve_mask = np.isin(ribbon_data, preserve_ribbon)
+    print(f"\nPreserving {np.sum(preserve_mask)} voxels with ribbon labels {preserve_ribbon}")
+
+    # Create a mask of ribbon labels that dilation can expand into
+    dilate_into_mask = np.isin(ribbon_data, dilate_into)
+    print(f"Allowing dilation into {np.sum(dilate_into_mask)} voxels with labels {dilate_into}")
+
+    # --------------------------------------------------------------------------
+    # 4. Process subcortical labels
+    # --------------------------------------------------------------------------
+    print(f"\n{'='*70}")
+    print("Processing subcortical labels...")
+    print(f"{'='*70}")
+
+    # Separate labels into transform and non-transform groups
+    non_transform_labels = [l for l in subcortical_labels if l not in transform_labels]
+
+    # Process non-transform labels first (simple merge)
+    if non_transform_labels:
+        print(f"\nMerging non-transformed labels: {non_transform_labels}")
+        for label in non_transform_labels:
+            # Extract this label from subcortical
+            label_mask = (subcortical_data == label)
+            n_voxels = np.sum(label_mask)
+
+            if n_voxels == 0:
+                print(f"  Label {label}: not found in subcortical, skipping")
+                continue
+
+            # Merge into output, but don't overwrite preserved ribbon labels
+            merge_mask = label_mask & ~preserve_mask
+            n_merged = np.sum(merge_mask)
+
+            output_data[merge_mask] = label
+            print(f"  Label {label}: merged {n_merged}/{n_voxels} voxels "
+                  f"({n_voxels - n_merged} blocked by preserved labels)")
+
+    # Process transform labels with morphological operations
+    if transform_labels:
+        print(f"\nProcessing transformed labels with morphology: {transform_labels}")
+        print(f"  Dilation iterations: {args.n_dilate}")
+        print(f"  Erosion iterations : {args.n_erode}")
+        print(f"  Note: All labels receive each dilation iteration together,")
+        print(f"        then all labels receive each erosion iteration together")
+        print()
+        
+        # First, add all transform labels to the output (starting state)
+        print("  Initializing transform labels in output:")
+        for label in transform_labels:
+            label_mask = (subcortical_data == label)
+            n_voxels = np.sum(label_mask)
+            
+            if n_voxels == 0:
+                print(f"    Label {label}: not found in subcortical, skipping")
+                transform_labels.remove(label)
+                continue
+            
+            # Add to output (respecting preserve mask)
+            merge_mask = label_mask & ~preserve_mask
+            output_data[merge_mask] = label
+            print(f"    Label {label}: {n_voxels} voxels initialized")
+        
+        # Track voxel counts for each label
+        voxel_counts = {label: np.sum(output_data == label) for label in transform_labels}
+        
+        # Create a mask of ribbon labels that dilation can expand into AFTER adding other labels
+        dilate_into_mask = np.isin(output_data, dilate_into)  #dilate_into is a list of values, to make a mask of
+        print(f"Allowing dilation into {np.sum(dilate_into_mask)} voxels with labels {dilate_into}")
+        
+        # Apply dilation iterations - ALL labels get each iteration together
+        if args.n_dilate > 0:
+            print(f"\n  Applying {args.n_dilate} dilation iteration(s) to all labels:")
+            allowed_expansion = dilate_into_mask #| (output_data == 0) #Consider background in ribbon correct
+            
+            for iteration in range(args.n_dilate):
+                print(f"\n    Dilation iteration {iteration + 1}/{args.n_dilate}:")
+                
+                # Apply this dilation iteration to each label
+                for label in transform_labels:
+                    complete_preserve_mask=preserve_mask & np.isin(output_data, transform_labels) #add labels to be transformed to the preserve_mask
+                    n_voxels = apply_single_dilation(label, output_data, 
+                                                     allowed_expansion, complete_preserve_mask)
+                    delta = n_voxels - voxel_counts[label]
+                    print(f"      Label {label}: {n_voxels} voxels (Δ{delta:+d})")
+                    voxel_counts[label] = n_voxels
+        
+        # Apply erosion iterations - ALL labels get each iteration together
+        if args.n_erode > 0:
+            print(f"\n  Applying {args.n_erode} erosion iteration(s) to all labels:")
+            print(f"  (Erosion only at borders with label {erode_into}, eroded voxels become {erode_into})")
+            
+            for iteration in range(args.n_erode):
+                print(f"\n    Erosion iteration {iteration + 1}/{args.n_erode}:")
+                
+                # Apply this erosion iteration to each label
+                for label in transform_labels:
+                    complete_preserve_mask=preserve_mask & np.isin(output_data, transform_labels) #add labels to be transformed to the preserve_mask
+                    n_voxels, n_eroded_voxels = apply_single_erosion(label, erode_into, output_data, complete_preserve_mask, ribbon_data)
+                    delta = n_voxels - voxel_counts[label]
+                    print(f"      Label {label}: {n_voxels} voxels (Δ{delta:+d}, {n_eroded_voxels} eroded into {erode_into})")
+                    voxel_counts[label] = n_voxels
+        
+        # Print final summary for transformed labels
+        print(f"\n  Final voxel counts after morphology:")
+        for label in transform_labels:
+            n_original = np.sum(subcortical_data == label)
+            n_final = voxel_counts[label]
+            print(f"    Label {label}: {n_final} voxels (original: {n_original}, Δ{n_final - n_original:+d})")
+
+    # --------------------------------------------------------------------------
+    # 5. Summary statistics
+    # --------------------------------------------------------------------------
+    print(f"\n{'='*70}")
+    print("Summary")
+    print(f"{'='*70}")
+
+    # Count voxels by source
+    ribbon_labels_final = np.isin(output_data, list(set(ribbon_data.flatten())))
+    subcortical_labels_final = np.isin(output_data, subcortical_labels)
+
+    n_from_ribbon = np.sum(ribbon_labels_final & ~subcortical_labels_final)
+    n_from_subcortical = np.sum(subcortical_labels_final)
+    n_background = np.sum(output_data == 0)
+
+    print(f"Voxels from original ribbon    : {n_from_ribbon}")
+    print(f"Voxels from subcortical        : {n_from_subcortical}")
+    print(f"Background voxels (0)          : {n_background}")
+    print(f"Total voxels                   : {output_data.size}")
+
+    # List final labels
+    final_labels = np.unique(output_data)
+    final_labels = final_labels[final_labels != 0]
+    print(f"\nFinal labels in output: {sorted(final_labels.tolist())}")
+
+    # --------------------------------------------------------------------------
+    # 6. Save the output NIfTI file
+    # --------------------------------------------------------------------------
+    # Use the ribbon's affine and header to preserve spatial information
+    output_img = nib.Nifti1Image(output_data.astype(np.int32),
+                                  ribbon_img.affine,
+                                  ribbon_img.header)
+    print(f"\nSaving output: {args.output}")
+    try:
+        nib.save(output_img, args.output)
+    except Exception as e:
+        print(f"Error saving output file: {e}")
+        sys.exit(1)
+
+    print("\n" + "=" * 70)
+    print("Done!")
+    print("=" * 70)
+
+
+if __name__ == "__main__":
+    main()
+
+EOF
+fi
+}
+
+#################
+## Create a python script "remap_labels.py"
+#################
+script_remap_labels()
+{
+if [ ! -f "$O/remap_labels.py" ]
+then
+
+cat > $O/remap_labels.py <<EOF
+#!/usr/bin/env python3
+# ==============================================================================
+# NIfTI Label Remapping Script
+# ==============================================================================
+# This script takes a NIfTI label file (.nii.gz) and remaps label values
+# from a source list to a target list (one-to-one correspondence).
+# Optionally, labels not present in the source list can be set to 0.
+#
+# Usage:
+#   python remap_labels.py <input.nii.gz> <output.nii.gz>
+#                          --src '1 2 3' --dst '10 20 30'
+#                          [--remove-unlisted]
+#
+# Examples:
+#   # Remap labels 1,2,3 to 10,20,30, keep unlisted labels
+#   python remap_labels.py input.nii.gz output.nii.gz --src '1 2 3' --dst '10 20 30'
+#
+#   # Remap labels 1,2,3 to 10,20,30, set all other labels to 0
+#   python remap_labels.py input.nii.gz output.nii.gz --src '1 2 3' --dst '10 20 30' --remove-unlisted
+# ==============================================================================
+
+import argparse
+import sys
+import numpy as np
+import nibabel as nib
+
+
+def parse_arguments():
+    """
+    Parse command-line arguments.
+
+    Returns:
+        argparse.Namespace: Parsed arguments containing input file, output file,
+                            source labels, destination labels, and options.
+    """
+    parser = argparse.ArgumentParser(
+        description="Remap labels in a NIfTI (.nii.gz) file from a source list "
+                    "to a destination list, with optional removal of unlisted labels.",
+        formatter_class=argparse.RawTextHelpFormatter
+    )
+
+    # Positional arguments
+    parser.add_argument(
+        "input",
+        type=str,
+        help="Path to the input NIfTI file (.nii.gz)"
+    )
+    parser.add_argument(
+        "output",
+        type=str,
+        help="Path to the output NIfTI file (.nii.gz)"
+    )
+
+    # Source and destination label lists
+    parser.add_argument(
+        "--src",
+        type=str,          # Changed from float to str
+        nargs=1,           # Changed from "+" to 1 (single quoted string)
+        required=True,
+        metavar="LABELS",
+        help="Quoted space-separated list of source labels (e.g. --src '1 2 3')"
+    )
+    parser.add_argument(
+        "--dst",
+        type=str,          # Changed from float to str
+        nargs=1,           # Changed from "+" to 1 (single quoted string)
+        required=True,
+        metavar="LABELS",
+        help="Quoted space-separated list of destination labels (e.g. --dst '10 20 30')"
+    )
+
+    # Optional flag to remove unlisted labels
+    parser.add_argument(
+        "--remove-unlisted",
+        action="store_true",
+        default=False,
+        help="If set, labels not present in --src will be set to 0 (background).\n"
+             "By default, unlisted labels are kept unchanged."
+    )
+
+    return parser.parse_args()
+
+
+def validate_inputs(src_labels, dst_labels):
+    """
+    Validate that source and destination label lists are compatible.
+
+    Args:
+        src_labels (list): Source label values.
+        dst_labels (list): Destination label values.
+
+    Raises:
+        SystemExit: If validation fails.
+    """
+    # Check that both lists have the same length
+    if len(src_labels) != len(dst_labels):
+        print(f"Error: --src ({len(src_labels)} values) and --dst ({len(dst_labels)} values) "
+              f"must have the same number of elements.")
+        sys.exit(1)
+
+    # Check for duplicate source labels
+    if len(src_labels) != len(set(src_labels)):
+        print("Error: --src contains duplicate values. Each source label must be unique.")
+        sys.exit(1)
+
+    # Warn if two source labels map to the same destination
+    if len(dst_labels) != len(set(dst_labels)):
+        print("Warning: --dst contains duplicate values. Multiple source labels "
+              "will map to the same destination label.")
+
+def parse_label_string(label_str):
+    """
+    Parse a quoted space-separated string of numbers into a list of values.
+
+    Args:
+        label_str (list): Single-element list containing the quoted string.
+
+    Returns:
+        list: List of numeric label values (int or float).
+    """
+    try:
+        values = [float(v) for v in label_str[0].split()]
+        return [int(v) if v == int(v) else v for v in values]
+    except ValueError:
+        print(f"Error: Could not parse label string '{label_str[0]}'. "
+              f"Expected space-separated numbers.")
+        sys.exit(1)
+
+def remap_labels(data, src_labels, dst_labels, remove_unlisted=False):
+    """
+    Remap label values in a numpy array.
+
+    For each voxel, if its value is in src_labels, it is replaced by the
+    corresponding value in dst_labels. If remove_unlisted is True, voxels
+    with labels not in src_labels are set to 0.
+
+    Args:
+        data        (np.ndarray): Input label array (any integer dtype).
+        src_labels  (list)      : Source label values to remap.
+        dst_labels  (list)      : Destination label values (same order as src).
+        remove_unlisted (bool)  : If True, set unlisted labels to 0.
+
+    Returns:
+        np.ndarray: Remapped label array (same shape as input).
+    """
+    # Build the output array:
+    # - Start with zeros if removing unlisted labels
+    # - Start with a copy of input to preserve unlisted labels otherwise
+    if remove_unlisted:
+        output = np.zeros_like(data)
+    else:
+        output = data.copy()
+
+    # Apply each source -> destination mapping
+    for src, dst in zip(src_labels, dst_labels):
+        # Create a boolean mask for voxels matching this source label
+        mask = (data == src)
+        n_voxels = np.sum(mask)
+
+        if n_voxels == 0:
+            # Warn if a requested label is not found in the data
+            print(f"  Warning: Source label {src} not found in the image.")
+        else:
+            # Apply remapping
+            output[mask] = dst
+            print(f"  {src:>10.0f}  -->  {dst:<10.0f}  ({n_voxels} voxels)")
+
+    return output
+
+
+def main():
+    """
+    Main function: loads NIfTI, remaps labels, and saves the result.
+    """
+    # --------------------------------------------------------------------------
+    # 1. Parse and validate arguments
+    # --------------------------------------------------------------------------
+    args = parse_arguments()
+
+    # Convert label lists to integers if they are whole numbers,
+    # keeping floats otherwise (to support float-valued label files)
+    ##src_labels = [int(v) if v == int(v) else v for v in args.src]
+    ##dst_labels = [int(v) if v == int(v) else v for v in args.dst]
+    # Parse quoted space-separated label strings
+    src_labels = parse_label_string(args.src)
+    dst_labels = parse_label_string(args.dst)
+
+    print("=" * 60)
+    print("NIfTI Label Remapping")
+    print("=" * 60)
+    print(f"Input file      : {args.input}")
+    print(f"Output file     : {args.output}")
+    print(f"Source labels   : {src_labels}")
+    print(f"Dest labels     : {dst_labels}")
+    print(f"Remove unlisted : {args.remove_unlisted}")
+    print("=" * 60)
+
+    # Validate source and destination lists
+    validate_inputs(src_labels, dst_labels)
+
+    # --------------------------------------------------------------------------
+    # 2. Load the NIfTI file
+    # --------------------------------------------------------------------------
+    print(f"\nLoading: {args.input}")
+    try:
+        img = nib.load(args.input)
+    except FileNotFoundError:
+        print(f"Error: Input file '{args.input}' not found.")
+        sys.exit(1)
+    except Exception as e:
+        print(f"Error loading NIfTI file: {e}")
+        sys.exit(1)
+
+    # Get the voxel data as a numpy array
+    data = img.get_fdata()
+
+    # Report existing labels in the file (excluding 0/background)
+    existing_labels = np.unique(data)
+    existing_labels = existing_labels[existing_labels != 0]
+    print(f"Labels found in image: {[int(l) for l in existing_labels]}")
+    print(f"Image shape          : {data.shape}")
+    print(f"Image dtype          : {data.dtype}")
+
+    # --------------------------------------------------------------------------
+    # 3. Remap labels
+    # --------------------------------------------------------------------------
+    print("\nRemapping labels:")
+    print(f"  {'Source':>10}  -->  {'Dest':<10}  (voxels)")
+    print(f"  {'-'*45}")
+
+    remapped_data = remap_labels(data, src_labels, dst_labels, args.remove_unlisted)
+
+    # Report summary
+    if args.remove_unlisted:
+        # Count voxels that were set to 0 because they were unlisted
+        unlisted_mask = ~np.isin(data, src_labels + [0])
+        n_removed = int(np.sum(unlisted_mask))
+        print(f"\n  {n_removed} voxels from unlisted labels set to 0")
+
+    # --------------------------------------------------------------------------
+    # 4. Save the output NIfTI file
+    # --------------------------------------------------------------------------
+    # Preserve the original header and affine matrix to keep spatial info intact
+    out_img = nib.Nifti1Image(remapped_data, img.affine, img.header)
+
+    print(f"\nSaving: {args.output}")
+    try:
+        nib.save(out_img, args.output)
+    except Exception as e:
+        print(f"Error saving output file: {e}")
+        sys.exit(1)
+
+    # Final report
+    new_labels = np.unique(remapped_data)
+    new_labels = new_labels[new_labels != 0]
+    print(f"Labels in output: {[int(l) for l in new_labels]}")
+
+    print("\n" + "=" * 60)
+    print("Done!")
+    print("=" * 60)
+
+
+if __name__ == "__main__":
+    main()
+EOF
+fi
+}
+
 
 #################
 ## Create an expert_file.txt for FreeSurfer
@@ -848,6 +1715,7 @@ RIBBON_CONVERT="$O/mri/RS_ribbon-convert.mgz"
 RIBBON_EDIT="$O/mri/ribbon-edit.mgz"
 RIBBON_WO_EDIT="$O/mri/ribbon-wo-edit.mgz"
 SUBCORTICAL_EDIT="$O/mri/RS_subcortical-edit.mgz"
+SUBCORTICAL_REMAPPED="$O/mri/RS_subcortical-remapped.mgz"
 
 BRAIN_FINALSURFS="$O/mri/brain.finalsurfs.mgz"
 BRAIN_FINALSURFS_MANEDIT="$O/mri/brain.finalsurfs.manedit.mgz"
@@ -902,9 +1770,9 @@ declare -a BRAIN_FINALSURFS_NO_CEREB_EDITED2=("$O/mri/RS_brain.finalsurfs_no_cer
 declare -a AUTODET_NEW_GW_STATS=("$O/surf/autodet-new.gw.stats.lh.dat" "$O/surf/autodet-new.gw.stats.rh.dat")
 
 declare -a RIBBON_EDIT_PIAL=("$O/surf/RS_lh.ribbon_edit.pial" "$O/surf/RS_rh.ribbon_edit.pial")
-declare -a RIBBON_EDIT_PIAL_SECOND_PASS=("$O/surf/RS_lh.ribbon_edit-second-pass.pial" "$O/surf/RS_rh.ribbon_edit-second-pass.pial")
+#declare -a RIBBON_EDIT_PIAL_SECOND_PASS=("$O/surf/RS_lh.ribbon_edit-second-pass.pial" "$O/surf/RS_rh.ribbon_edit-second-pass.pial")
 
-declare -a RIBBON_EDIT_PIAL_THIRD_PASS=("$O/surf/RS_lh.ribbon_edit.smooth-third-pass.pial" "$O/surf/RS_rh.ribbon_edit.smooth-third-pass.pial")
+#declare -a RIBBON_EDIT_PIAL_THIRD_PASS=("$O/surf/RS_lh.ribbon_edit.smooth-third-pass.pial" "$O/surf/RS_rh.ribbon_edit.smooth-third-pass.pial")
 
 # Curv + Thickness + Stats + APARC + APEG ...
 declare -a CURV=("$O/surf/lh.curv" "$O/surf/rh.curv")
@@ -1089,15 +1957,23 @@ fi
 fi
 
 #################
-## Exctract labels from ribbon and subcortical into brain_mask
+## Correct label values in Subcortical, convert HA reference, and fuse it with RIBBON_CONVERTED
 #################
 if ((TAG<=1))
 then
 
-# Test if user provided HA information
+cmd "Use script $O/remap_labels.py" \
+"python $O/remap_labels.py $SUBCORTICAL_EDIT $SUBCORTICAL_REMAPPED --src '${LABELS_SUBCORTICAL_OLD}' --dst '${LABELS_SUBCORTICAL_NEW}' --remove-unlisted"
+
+# Test if source of HA (hippocampus-amygdala-inf_horn complex) was given
 : ${HA:?Missing argument -o} ${LABELS_HA_LEFT:?Missing argument -x} ${LABELS_HA_RIGHT:?Missing argument -y}
 
-#If needed, correcting the dimensions of the image with padding
+if [[ "$HA" == "$SUBCORTICAL" ]]; then #Usually the case
+cmd "Copy $SUBCORTICAL_REMAPPED in $HA_CONVERT" \
+"cp $SUBCORTICAL_REMAPPED $HA_CONVERT" 
+
+else
+# Convert HA if needed
 cmd "Use script $O/nifti_padding.py on $HA" \
 "result=`python $O/nifti_padding.py $HA $HA_PADDED 0`"
 
@@ -1106,24 +1982,41 @@ cmd "Convert $HA" \
 "mri_convert $HA_PADDED $HA_CONVERT -rt nearest -ns 1 --conform_min"
 else
 cmd "Copy $HA in $HA_CONVERT" \
-"cp $HA $HA_CONVERT" 
+"cp $HA $HA_CONVERT"
+fi
+fi
 fi
 
-cmd "Use script $O/ha_ribbon_edit.py on $RIBBON_CONVERT to add HA from $SUBCORTICAL_EDIT" \
-"python $O/ha_ribbon_edit.py $RIBBON_CONVERT $HA_CONVERT $RIBBON_EDIT '${LABELS_HA_LEFT}' '${LABELS_HA_RIGHT}' ${LABELS_HA_RIB[0]} ${LABELS_HA_RIB[1]} $N_DILATION $N_EROSION"
+#################
+## Dilate-erode HA complex to merge in ribbon
+#################
+if ((TAG<=2))
+then
+#cmd "Use script $O/ha_ribbon_edit.py on $RIBBON_CONVERT to add HA from $SUBCORTICAL_EDIT" \
+#"python $O/ha_ribbon_edit.py $RIBBON_CONVERT $HA_CONVERT $RIBBON_EDIT '${LABELS_HA_LEFT}' '${LABELS_HA_RIGHT}' ${LABELS_HA_RIB[0]} ${LABELS_HA_RIB[1]} $N_DILATION $N_EROSION"
 
+cmd "Merge HA complex in Ribbon with $O/merge_ribbon_subcortical.py" \
+"python $O/merge_ribbon_subcortical.py $RIBBON_CONVERT $HA_CONVERT $RIBBON_EDIT  \
+--subcortical-labels '${LABELS_HA_LEFT} ${LABELS_HA_RIGHT}'  \
+--transform-labels '${LABELS_HA_LEFT} ${LABELS_HA_RIGHT}' \
+--n-dilate $N_DILATION --n-erode $N_EROSION \
+--preserve-ribbon '${LABEL_RIBBON_WM[0]} ${LABEL_RIBBON_WM[1]}'  \
+--dilate-into '${LABEL_RIBBON_GM[0]} ${LABEL_RIBBON_GM[1]}'  \
+--erode-into '${LABEL_RIBBON_GM[0]} ${LABEL_RIBBON_GM[1]}'"
+#0 not in preserve-ribbon to fill holes in HA complex area
+fi
+
+#################
+## Apply BRAIN_MASK on T1_FS to get T1_MASKED
+#################
+if ((TAG<=3))
+then
 cmd "Extract labels from $SUBCORTICAL_EDIT (Cerebellum, Medulla oblongata, Pons and Midbrain) into $SUBCORTICAL_MASK" \
 "mri_extract_label $SUBCORTICAL_EDIT $LABELS_SUBCORTICAL $SUBCORTICAL_MASK"
 
 cmd "Concatenate $RIBBON_EDIT with $SUBCORTICAL_MASK into $BRAIN_MASK" \
 "mri_concat --i $RIBBON_EDIT --i $SUBCORTICAL_MASK --o $BRAIN_MASK --combine"
-fi
 
-#################
-## Recompute brain.finalsurfs.mgz
-#################
-if ((TAG<=2))
-then
 cmd "Mask $T1_FS with $BRAIN_MASK into $T1_MASKED" \
 "mri_mask $T1_FS $BRAIN_MASK $T1_MASKED"
 fi
@@ -1133,11 +2026,9 @@ fi
 #################
 if ((TAG<=4))
 then
-
 ## Create aseg.presurf.mgz and aseg.presurf_wo_subc.mgz based on ribbon-edit.mgz
 cmd "Use script $O/edit_aseg_presurf_based_on_ribbon.py on $ASEG_PRESURF_NOFIX_FS" \
-"python $O/edit_aseg_presurf_based_on_ribbon.py $ASEG_PRESURF_NOFIX_FS $RIBBON_EDIT $ASEG_PRESURF $ASEG_PRESURF_WO_SUBC $RIBBON_WO_EDIT"
-
+"python $O/edit_aseg_presurf_based_on_ribbon.py '${LABELS_HA_LEFT}' '${LABELS_HA_RIGHT}' $ASEG_PRESURF_NOFIX_FS $RIBBON_EDIT $ASEG_PRESURF $ASEG_PRESURF_WO_SUBC $RIBBON_WO_EDIT"
 fi
 
 #################
