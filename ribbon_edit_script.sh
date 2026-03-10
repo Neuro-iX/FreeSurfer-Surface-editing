@@ -8,7 +8,7 @@ Help ()
 builtin echo "
 AUTHOR: Benoît Verreman
 
-LAST UPDATE: 2026-03-04
+LAST UPDATE: 2026-03-10
 
 DESCRIPTION: 
 Use ribbon and subcortical NIFTI files to recompute pial surface,
@@ -454,9 +454,9 @@ then
 cat > $O/nifti_padding.py <<EOF
 #!/usr/bin/env python3
 # ==============================================================================
-# Change MGZ Image Orientation to RAS and Pad to Cubic
+# Change MGZ Image Orientation to LIA and Pad to Cubic
 # ==============================================================================
-# This script reorients a MGZ/NIfTI image to RAS (Right-Anterior-Superior)
+# This script reorients a MGZ/NIfTI image to LIA (Right-Anterior-Superior)
 # orientation and pads it with zeros to make it cubic (same size in all 3D).
 # The final size will be max_dim x max_dim x max_dim.
 #
@@ -475,10 +475,10 @@ import scipy.ndimage #Used in nib.processing.conform
 import sys #To add arguments
 import subprocess
 
-#Padding function: reshape the image to (max_dim, max_dim, max_dim) with same resolution and an orientation of 'RAS'
+#Padding function: reshape the image to (max_dim, max_dim, max_dim) with same resolution and an orientation of 'LIA' used by recon-all
 def padding(img, new_name):
     d = max(img.header.get_data_shape())
-    new_img = nib.processing.conform(img, out_shape=(d, d, d), voxel_size = img.header.get_zooms(), order=0, cval=0, orientation='RAS', out_class=None) #d
+    new_img = nib.processing.conform(img, out_shape=(d, d, d), voxel_size = img.header.get_zooms(), order=0, cval=0, orientation='LIA', out_class=None) #d
     nib.save(new_img, new_name)
 
 # SUBJID directory
@@ -491,8 +491,6 @@ if not os.path.isfile(img_in):
     raise FileNotFoundError("The following path doesn't exist: " + img_in)
 else:
     img = nib.load(img_in)
-    #img = reorient_to_ras(img)
-    #img = pad_to_cubic(img)
 
 if is_t1:
     padding(img, img_padded)
@@ -630,71 +628,16 @@ path_out3 = sys.argv[7] #Path to output ribbon-wo-edit.mgz
 labels_ha_left = [int(v) for v in labels_ha_left.split()]
 labels_ha_right = [int(v) for v in labels_ha_right.split()]
 
-
-def reorient_to_ras(img):
-    """
-    Reorient image data and affine to RAS orientation.
-    
-    Args:
-        img: nibabel image object
-        
-    Returns:
-        nibabel image object in RAS orientation
-    """
-    # Get current orientation
-    current_orient = nib.aff2axcodes(img.affine)
-    print(f"Current orientation: {current_orient}")
-    
-    # Check if already in RAS
-    if current_orient == ('R', 'A', 'S'):
-        print("Image is already in RAS orientation")
-        return img
-    
-    # Reorient to RAS
-    # This transforms both the data array and the affine matrix
-    ras_img = nib.as_closest_canonical(img)
-    
-    # Verify the new orientation
-    new_orient = nib.aff2axcodes(ras_img.affine)
-    print(f"New orientation: {new_orient}")
-    
-    # If as_closest_canonical didn't get us to RAS, use orient transform
-    if new_orient != ('R', 'A', 'S'):
-        print("Applying explicit RAS transform...")
-        
-        # Get the orientation transform from current to RAS
-        ornt = nib.orientations.axcodes2ornt(current_orient)
-        ras_ornt = nib.orientations.axcodes2ornt(('R', 'A', 'S'))
-        transform = nib.orientations.ornt_transform(ornt, ras_ornt)
-        
-        # Apply the transform
-        data_reoriented = nib.orientations.apply_orientation(img.get_fdata(), transform)
-        
-        # Update the affine matrix
-        affine_reoriented = img.affine @ nib.orientations.inv_ornt_aff(transform, img.shape)
-        
-        # Create new image
-        ras_img = nib.MGHImage(data_reoriented, affine_reoriented)
-        
-        # Verify again
-        new_orient = nib.aff2axcodes(ras_img.affine)
-        print(f"Final orientation: {new_orient}")
-    
-    return ras_img
-
-
 ### Get images
 if not os.path.isfile(path_aseg):
     raise FileNotFoundError("Make sure the following path is correct: " + path_aseg)
 else:
     img_aseg = nib.load(path_aseg)
-    img_aseg = reorient_to_ras(img_aseg)
 
 if not os.path.isfile(path_ribbon):
     raise FileNotFoundError("Make sure the following path is correct: " + path_ribbon)
 else:
     img_ribbon = nib.load(path_ribbon)
-    img_ribbon = reorient_to_ras(img_ribbon)
 
 ### Get data
 data_aseg = img_aseg.get_fdata() #Not to be edited
@@ -1717,6 +1660,7 @@ RIBBON_WO_EDIT="$O/mri/ribbon-wo-edit.mgz"
 SUBCORTICAL_EDIT="$O/mri/RS_subcortical-edit.mgz"
 SUBCORTICAL_REMAPPED="$O/mri/RS_subcortical-remapped.mgz"
 
+BRAIN="$O/mri/brain.mgz"
 BRAIN_FINALSURFS="$O/mri/brain.finalsurfs.mgz"
 BRAIN_FINALSURFS_MANEDIT="$O/mri/brain.finalsurfs.manedit.mgz"
 
@@ -1726,8 +1670,12 @@ HA_CONVERT="$O/mri/RS_ha-convert.mgz"
 SUBCORTICAL_MASK="$O/mri/RS_subcortical-mask.mgz"
 BRAIN_MASK="$O/mri/RS_brain-mask.mgz"
 
+T1="$O/mri/T1.mgz"
 T1_MASKED="$O/mri/RS_T1-masked.mgz"
 
+NORM="$O/mri/norm.mgz"
+
+ASEG_PRESURF_NOFIX="$O/mri/RS_aseg.presurf_nofix.mgz"
 ASEG_PRESURF="$O/mri/aseg.presurf.mgz"
 ASEG_PRESURF_WO_SUBC="$O/mri/RS_aseg.presurf_wo_subc.mgz"
 
@@ -2017,8 +1965,11 @@ cmd "Extract labels from $SUBCORTICAL_EDIT (Cerebellum, Medulla oblongata, Pons 
 cmd "Concatenate $RIBBON_EDIT with $SUBCORTICAL_MASK into $BRAIN_MASK" \
 "mri_concat --i $RIBBON_EDIT --i $SUBCORTICAL_MASK --o $BRAIN_MASK --combine"
 
-cmd "Mask $T1_FS with $BRAIN_MASK into $T1_MASKED" \
-"mri_mask $T1_FS $BRAIN_MASK $T1_MASKED"
+cmd "Copy $T1_FS into $T1" \
+"cp $T1_FS $T1"
+
+cmd "Mask $T1 with $BRAIN_MASK into $T1_MASKED" \
+"mri_mask $T1 $BRAIN_MASK $T1_MASKED"
 fi
 
 #################
@@ -2027,8 +1978,10 @@ fi
 if ((TAG<=4))
 then
 ## Create aseg.presurf.mgz and aseg.presurf_wo_subc.mgz based on ribbon-edit.mgz
-cmd "Use script $O/edit_aseg_presurf_based_on_ribbon.py on $ASEG_PRESURF_NOFIX_FS" \
-"python $O/edit_aseg_presurf_based_on_ribbon.py '${LABELS_HA_LEFT}' '${LABELS_HA_RIGHT}' $ASEG_PRESURF_NOFIX_FS $RIBBON_EDIT $ASEG_PRESURF $ASEG_PRESURF_WO_SUBC $RIBBON_WO_EDIT"
+cmd "Copy $ASEG_PRESURF_NOFIX_FS into $ASEG_PRESURF_NOFIX" \
+"cp $ASEG_PRESURF_NOFIX_FS $ASEG_PRESURF_NOFIX"
+cmd "Use script $O/edit_aseg_presurf_based_on_ribbon.py on $ASEG_PRESURF_NOFIX" \
+"python $O/edit_aseg_presurf_based_on_ribbon.py '${LABELS_HA_LEFT}' '${LABELS_HA_RIGHT}' $ASEG_PRESURF_NOFIX $RIBBON_EDIT $ASEG_PRESURF $ASEG_PRESURF_WO_SUBC $RIBBON_WO_EDIT"
 fi
 
 #################
@@ -2040,8 +1993,10 @@ then
 cmd "Extract WM from $RIBBON_EDIT" \
 "mri_extract_label $RIBBON_WO_EDIT ${LABEL_RIBBON_WM[0]} ${LABEL_RIBBON_WM[1]} $WM_BMASK_ALL" #0/128 binary mask
 
-cmd "Concatenate $WM_BMASK_ALL with $WM_FS into $WM_CONCAT" \
-"mri_concat --i $WM_BMASK_ALL --i $WM_FS --o $WM_CONCAT --sum" #ROI at 378 (128+250)
+cmd "Copy $WM_FS into $WM" \
+"cp $WM_FS $WM"
+cmd "Concatenate $WM_BMASK_ALL with $WM into $WM_CONCAT" \
+"mri_concat --i $WM_BMASK_ALL --i $WM --o $WM_CONCAT --sum" #ROI at 378 (128+250)
 
 cmd "Binarize $WM_CONCAT at 251 into $WM_BMASK_250" \
 "mri_binarize --i $WM_CONCAT --o $WM_BMASK_250 --match 378"
@@ -2050,14 +2005,19 @@ cmd "Replace 1 by 250 into $WM_BMASK_250" \
 "mri_binarize --i $WM_BMASK_250 --o $WM_BMASK_250 --replace 1 250"
 
 # May also use $BRAIN_FINALSURFS_FS
-cmd "Mask $BRAIN_FS with $WM_BMASK_ALL into $WM_MASK" \
-"mri_mask -T 5 $BRAIN_FS $WM_BMASK_ALL $WM_MASK"
+cmd "Copy $BRAIN_FS into $BRAIN" \
+"cp $BRAIN_FS $BRAIN"
+cmd "Mask $BRAIN with $WM_BMASK_ALL into $WM_MASK" \
+"mri_mask -T 5 $BRAIN $WM_BMASK_ALL $WM_MASK"
 
 cmd "Concatenate $WM_MASK with $WM_BMASK_250 into $WM_ASEGEDIT" \
 "mri_concat --i $WM_MASK --i $WM_BMASK_250 --o $WM_ASEGEDIT --max"
 
+cmd "Copy $NORM_FS into $NORM" \
+"cp $NORM_FS $NORM"
+
 cmd "Pretess $WM_ASEGEDIT: Solve connectivity issue" \
-"mri_pretess $WM_ASEGEDIT wm $NORM_FS $WM"
+"mri_pretess $WM_ASEGEDIT wm $NORM $WM"
 fi
 
 #################
@@ -2259,27 +2219,27 @@ if ((TAG<=10))
 then
 #Copies from $SUBJID_freesurfer $SUBJID/output to complete collection
 #if [ ! -f "$RAWAVG_MASKED" ]; then 
-cmd "Copy $RAWAVG_FS to $RAWAVG" \
+cmd "Copy $RAWAVG_FS into $RAWAVG" \
 "cp $RAWAVG_FS $RAWAVG"
 cmd "Copy $RAWAVG to $RAWAVG_MASKED" \
 "cp $RAWAVG $RAWAVG_MASKED"
 cmd "Mask $RAWAVG_MASKED with $BRAIN_MASK into $RAWAVG_MASKED" \
 "mri_mask $RAWAVG_MASKED $BRAIN_MASK $RAWAVG_MASKED"
 
-cmd "Copy $ORIG_FS to $ORIG_VOLUME" \
+cmd "Copy $ORIG_FS into $ORIG_VOLUME" \
 "cp $ORIG_FS $ORIG_VOLUME"
-cmd "Copy $ORIG_FS to $ORIG_MASKED" \
+cmd "Copy $ORIG_FS into $ORIG_MASKED" \
 "cp $ORIG_FS $ORIG_MASKED"
 cmd "Mask $ORIG_MASKED with $BRAIN_MASK into $ORIG_MASKED" \
 "mri_mask $ORIG_MASKED $BRAIN_MASK $ORIG_MASKED"
 
-cmd "Copy $IMAGE_ORIG_FS" \
-"cp $IMAGE_ORIG_FS $IMAGE_ORIG" 
+cmd "Copy $IMAGE_ORIG_FS into $IMAGE_ORIG" \
+"cp $IMAGE_ORIG_FS $IMAGE_ORIG"
 
-cmd "Copy $BRAIN_FINALSURFS_FS" \
-"cp $BRAIN_FINALSURFS_FS $BRAIN_FINALSURFS" 
-cmd "Copy $BRAIN_FINALSURFS_MANEDIT_FS" \
-"cp $BRAIN_FINALSURFS_MANEDIT_FS $BRAIN_FINALSURFS_MANEDIT" 
+cmd "Copy $BRAIN_FINALSURFS_FS into $BRAIN_FINALSURFS" \
+"cp $BRAIN_FINALSURFS_FS $BRAIN_FINALSURFS"
+cmd "Copy $BRAIN_FINALSURFS_MANEDIT_FS into $BRAIN_FINALSURFS_MANEDIT" \
+"cp $BRAIN_FINALSURFS_MANEDIT_FS $BRAIN_FINALSURFS_MANEDIT"
 
 #ANTSDN_BRAIN and WM_SEG
 cmd "AntsDenoise $BRAIN to $ANTSDN_BRAIN" \
@@ -2287,8 +2247,8 @@ cmd "AntsDenoise $BRAIN to $ANTSDN_BRAIN" \
 cmd "mri_segment -wsizemm 13 -mprage $ANTSDN_BRAIN $WM_SEG" \
 "mri_segment -wsizemm 13 -mprage $ANTSDN_BRAIN $WM_SEG"
 
-cmd "Copy $BRAINMASK_FS" \
-"cp $BRAINMASK_FS $BRAINMASK"  #for WMParc stats
+cmd "Copy $BRAINMASK_FS into $BRAINMASK" \
+"cp $BRAINMASK_FS $BRAINMASK" #for WMParc stats
 fi
 
 #################
