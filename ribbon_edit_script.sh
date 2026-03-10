@@ -484,7 +484,6 @@ def padding(img, new_name):
 # SUBJID directory
 img_in = sys.argv[1]
 img_padded = sys.argv[2]
-is_t1 = int(sys.argv[3])
 
 #Load image to be treated
 if not os.path.isfile(img_in):
@@ -492,17 +491,7 @@ if not os.path.isfile(img_in):
 else:
     img = nib.load(img_in)
 
-if is_t1:
-    padding(img, img_padded)
-    print('apply_recon_all')
-else:
-    a = img.affine.copy()
-    if int(a[0,3]) == 90:
-        padding(img, img_padded)
-        print('convert')
-    else:
-        print('no_convert')
-
+padding(img, img_padded)
 EOF
 fi
 }
@@ -1652,12 +1641,10 @@ declare -a DKAPARC_ATLAS_ACFB40=("$FREESURFER_HOME/average/lh.DKaparc.atlas.acfb
 IMAGE_PADDED="$SUBJECTS_DIR/$SUBJID/RS_image-padded.mgz"
 IMAGE_ORIG="$O/mri/orig/001.mgz"
 
-RIBBON_PADDED="$O/mri/RS_ribbon-precorrection.mgz"
-SUBCORTICAL_PADDED="$O/mri/RS_subcortical-precorrection.mgz"
-RIBBON_CONVERT="$O/mri/RS_ribbon-convert.mgz"
+RIBBON_PADDED="$O/mri/RS_ribbon-padded.mgz"
+SUBCORTICAL_PADDED="$O/mri/RS_subcortical-padded.mgz"
 RIBBON_EDIT="$O/mri/ribbon-edit.mgz"
 RIBBON_WO_EDIT="$O/mri/ribbon-wo-edit.mgz"
-SUBCORTICAL_EDIT="$O/mri/RS_subcortical-edit.mgz"
 SUBCORTICAL_REMAPPED="$O/mri/RS_subcortical-remapped.mgz"
 
 BRAIN="$O/mri/brain.mgz"
@@ -1665,7 +1652,6 @@ BRAIN_FINALSURFS="$O/mri/brain.finalsurfs.mgz"
 BRAIN_FINALSURFS_MANEDIT="$O/mri/brain.finalsurfs.manedit.mgz"
 
 HA_PADDED="$O/mri/RS_ha-padded.mgz"
-HA_CONVERT="$O/mri/RS_ha-convert.mgz"
 
 SUBCORTICAL_MASK="$O/mri/RS_subcortical-mask.mgz"
 BRAIN_MASK="$O/mri/RS_brain-mask.mgz"
@@ -1856,7 +1842,7 @@ then
 fi
 
 cmd "Compensate for future translation in recon-all" \
-"result=`python $O/nifti_padding.py $IMAGE $IMAGE_PADDED 1`"
+"python $O/nifti_padding.py $IMAGE $IMAGE_PADDED"
 
 cmd "Add SUBJID to SUBJECTS_DIR" \
 "export SUBJECTS_DIR=$SUBJECTS_DIR/$SUBJID"
@@ -1880,59 +1866,28 @@ Echo "# Given ribbon: $RIBBON"
 Echo "# Given subcortical: $SUBCORTICAL"
 
 #If needed, correcting the dimensions of the image with padding
-cmd "Use script $O/nifti_padding.py on $RIBBON" \
-"result=`python $O/nifti_padding.py $RIBBON $RIBBON_PADDED 0`"
+cmd "Use script $O/nifti_padding.py on $RIBBON to get $RIBBON_PADDED" \
+"python $O/nifti_padding.py $RIBBON $RIBBON_PADDED"
 
-if [[ "$result" == "convert" ]]; then
-cmd "Convert $RIBBON_PADDED" \
-"mri_convert $RIBBON_PADDED $RIBBON_CONVERT -rt nearest -ns 1 --conform_min"
-else
-cmd "Copy $RIBBON in $RIBBON_CONVERT" \
-"cp $RIBBON $RIBBON_CONVERT" 
-fi
-
-cmd "Use script $O/nifti_padding.py on $SUBCORTICAL" \
-"result=`python $O/nifti_padding.py $SUBCORTICAL $SUBCORTICAL_PADDED 0`"
-
-if [[ "$result" == "convert" ]]; then
-cmd "Convert $SUBCORTICAL_PADDED" \
-"mri_convert $SUBCORTICAL_PADDED $SUBCORTICAL_EDIT -rt nearest -ns 1 --conform_min"
-else
-cmd "Copy $SUBCORTICAL in $SUBCORTICAL_EDIT" \
-"cp $SUBCORTICAL $SUBCORTICAL_EDIT" 
-fi
-
+cmd "Use script $O/nifti_padding.py on $SUBCORTICAL to get $SUBCORTICAL_PADDED" \
+"python $O/nifti_padding.py $SUBCORTICAL $SUBCORTICAL_PADDED"
 fi
 
 #################
-## Correct label values in Subcortical, convert HA reference, and fuse it with RIBBON_CONVERTED
+## Correct label values in Subcortical, convert HA reference, and fuse it with RIBBON_PADDED
 #################
 if ((TAG<=1))
 then
 
 cmd "Use script $O/remap_labels.py" \
-"python $O/remap_labels.py $SUBCORTICAL_EDIT $SUBCORTICAL_REMAPPED --src '${LABELS_SUBCORTICAL_OLD}' --dst '${LABELS_SUBCORTICAL_NEW}' --remove-unlisted"
+"python $O/remap_labels.py $SUBCORTICAL_PADDED $SUBCORTICAL_REMAPPED --src '${LABELS_SUBCORTICAL_OLD}' --dst '${LABELS_SUBCORTICAL_NEW}' --remove-unlisted"
 
 # Test if source of HA (hippocampus-amygdala-inf_horn complex) was given
 : ${HA:?Missing argument -o} ${LABELS_HA_LEFT:?Missing argument -x} ${LABELS_HA_RIGHT:?Missing argument -y}
 
-if [[ "$HA" == "$SUBCORTICAL" ]]; then #Usually the case
-cmd "Copy $SUBCORTICAL_REMAPPED in $HA_CONVERT" \
-"cp $SUBCORTICAL_REMAPPED $HA_CONVERT" 
-
-else
-# Convert HA if needed
+# Convert HA
 cmd "Use script $O/nifti_padding.py on $HA" \
-"result=`python $O/nifti_padding.py $HA $HA_PADDED 0`"
-
-if [[ "$result" == "convert" ]]; then
-cmd "Convert $HA" \
-"mri_convert $HA_PADDED $HA_CONVERT -rt nearest -ns 1 --conform_min"
-else
-cmd "Copy $HA in $HA_CONVERT" \
-"cp $HA $HA_CONVERT"
-fi
-fi
+"python $O/nifti_padding.py $HA $HA_PADDED"
 fi
 
 #################
@@ -1940,11 +1895,11 @@ fi
 #################
 if ((TAG<=2))
 then
-#cmd "Use script $O/ha_ribbon_edit.py on $RIBBON_CONVERT to add HA from $SUBCORTICAL_EDIT" \
-#"python $O/ha_ribbon_edit.py $RIBBON_CONVERT $HA_CONVERT $RIBBON_EDIT '${LABELS_HA_LEFT}' '${LABELS_HA_RIGHT}' ${LABELS_HA_RIB[0]} ${LABELS_HA_RIB[1]} $N_DILATION $N_EROSION"
+#cmd "Use script $O/ha_ribbon_edit.py on $RIBBON_PADDED to add HA from $SUBCORTICAL_PADDED" \
+#"python $O/ha_ribbon_edit.py $RIBBON_PADDED $HA_PADDED $RIBBON_PADDED '${LABELS_HA_LEFT}' '${LABELS_HA_RIGHT}' ${LABELS_HA_RIB[0]} ${LABELS_HA_RIB[1]} $N_DILATION $N_EROSION"
 
 cmd "Merge HA complex in Ribbon with $O/merge_ribbon_subcortical.py" \
-"python $O/merge_ribbon_subcortical.py $RIBBON_CONVERT $HA_CONVERT $RIBBON_EDIT  \
+"python $O/merge_ribbon_subcortical.py $RIBBON_PADDED $HA_PADDED $RIBBON_EDIT  \
 --subcortical-labels '${LABELS_HA_LEFT} ${LABELS_HA_RIGHT}'  \
 --transform-labels '${LABELS_HA_LEFT} ${LABELS_HA_RIGHT}' \
 --n-dilate $N_DILATION --n-erode $N_EROSION \
@@ -1959,8 +1914,8 @@ fi
 #################
 if ((TAG<=3))
 then
-cmd "Extract labels from $SUBCORTICAL_EDIT (Cerebellum, Medulla oblongata, Pons and Midbrain) into $SUBCORTICAL_MASK" \
-"mri_extract_label $SUBCORTICAL_EDIT $LABELS_SUBCORTICAL $SUBCORTICAL_MASK"
+cmd "Extract labels from $SUBCORTICAL_PADDED (Cerebellum, Medulla oblongata, Pons and Midbrain) into $SUBCORTICAL_MASK" \
+"mri_extract_label $SUBCORTICAL_PADDED $LABELS_SUBCORTICAL $SUBCORTICAL_MASK"
 
 cmd "Concatenate $RIBBON_EDIT with $SUBCORTICAL_MASK into $BRAIN_MASK" \
 "mri_concat --i $RIBBON_EDIT --i $SUBCORTICAL_MASK --o $BRAIN_MASK --combine"
