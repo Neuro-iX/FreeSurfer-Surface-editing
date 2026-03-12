@@ -1885,9 +1885,14 @@ cmd "Use script $O/remap_labels.py" \
 # Test if source of HA (hippocampus-amygdala-inf_horn complex) was given
 : ${HA:?Missing argument -o} ${LABELS_HA_LEFT:?Missing argument -x} ${LABELS_HA_RIGHT:?Missing argument -y}
 
+if [[ "$HA" == "$SUBCORTICAL" ]]; then #Usually the case
+cmd "Copy $SUBCORTICAL_REMAPPED in $HA_PADDED" \
+"cp $SUBCORTICAL_REMAPPED $HA_PADDED" 
+else
 # Convert HA
 cmd "Use script $O/nifti_padding.py on $HA" \
 "python $O/nifti_padding.py $HA $HA_PADDED"
+fi
 fi
 
 #################
