@@ -1086,7 +1086,7 @@ def main():
     print(f"\nLoading RIBBON: {args.ribbon}")
     try:
         ribbon_img = nib.load(args.ribbon)
-        ribbon_img = nib.as_closest_canonical(ribbon_img)
+        #ribbon_img = nib.as_closest_canonical(ribbon_img) #RAS orientation
         ribbon_data = ribbon_img.get_fdata().astype(np.int32)
     except Exception as e:
         print(f"Error loading ribbon file: {e}")
@@ -1095,7 +1095,7 @@ def main():
     print(f"Loading SUBCORTICAL: {args.subcortical}")
     try:
         subcortical_img = nib.load(args.subcortical)
-        subcortical_img = nib.as_closest_canonical(subcortical_img)
+        #subcortical_img = nib.as_closest_canonical(subcortical_img) #RAS orientation
         subcortical_data = subcortical_img.get_fdata().astype(np.int32)
     except Exception as e:
         print(f"Error loading subcortical file: {e}")
