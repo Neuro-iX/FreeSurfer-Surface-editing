@@ -2024,8 +2024,14 @@ do
 	cmd "${H[$i]} Fix tolpology WM surf" \
 	"mris_fix_topology -mgz -sphere qsphere.nofix -inflated inflated.nofix -orig orig.nofix -out orig.premesh -ga -seed 1234 $SUBJID/$OUTPUT_FOLDER ${H[$i]}"
 	#-threads 1 #7.4.1: no difference seen; 7.4.0: small differences with different threads ? (https://surfer.nmr.mgh.harvard.edu/fswiki/ReleaseNotes)
-	#Takes $SUBJID/$OUTPUT_FOLDER/mri/wm.mgz and brain.mgz
-	
+	#Takes $O/mri/wm.mgz and brain.mgz
+    #CAN LEAD TO TRANSLATION OF ONE VOXEL UP: orig.nofix to orig.premesh
+    # mris_info lh.orig.nofix | grep vox2ras #(should be c_(ras) : (-0.6500, -17.1500, 17.9500))
+    # mris_info lh.orig.premesh | grep vox2ras #(should not be c_(ras) : (-0.6500, -17.1500, 18.6500))
+
+	cmd "${H[$i]} Fix ${ORIG_PREMESH[$i]}" \
+	"mris_copy_header ${ORIG_PREMESH[$i]} ${ORIG_NOFIX[$i]} ${ORIG_PREMESH[$i]}"
+    
 	# Remesh
 	cmd "${H[$i]} Remesh WM surf" \
 	"mris_remesh --remesh --iters 3 --input ${ORIG_PREMESH[$i]} --output ${ORIG[$i]}"
