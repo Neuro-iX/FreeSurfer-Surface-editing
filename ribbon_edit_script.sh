@@ -8,7 +8,7 @@ Help ()
 builtin echo "
 AUTHOR: Benoît Verreman
 
-LAST UPDATE: 2026-03-10
+LAST UPDATE: 2026-03-18
 
 DESCRIPTION: 
 Use ribbon and subcortical NIFTI files to recompute pial surface,
@@ -126,6 +126,7 @@ N_EROSION=2
 #LABELS_SUBCORTICAL="7 8 15 16 46 47" #for previous subcortical files (given to -c) : "5 15 29 30 32 31"
 LABELS_SUBCORTICAL_OLD="1 18 31 29 16 9 11 13 4 5 15 20 22 3 7 25 27 2 19 32 30 17 10 12 14 21 23 8 26 28 24" #From HOA dseg
 LABELS_SUBCORTICAL_NEW="4 5 7 8 10 11 12 13 14 15 16 17 18 24 26 28 28 43 44 46 47 49 50 51 52 53 54 58 60 60 85" #Freesurfer's true label values
+LABELS_SUBCORTICAL_WM="4 10 11 12 13 26 28 28 43 49 50 51 52 58 60"
 #declare -a LABELS_HA=("5 17 18" "44 53 54") #HA in aparc+aseg / ('18 20 22' '19 21 23') in HOA_Subcortical_Labels
 #declare -a LABELS_HA_RIB=("21" "22") #HA in ribbon (-n flag)
 declare -a H=("lh" "rh") #Left then Right hemispheres
@@ -454,9 +455,9 @@ then
 cat > $O/nifti_padding.py <<EOF
 #!/usr/bin/env python3
 # ==============================================================================
-# Change MGZ Image Orientation to LIA and Pad to Cubic
+# Change MGZ Image Orientation to RAS and Pad to Cubic
 # ==============================================================================
-# This script reorients a MGZ/NIfTI image to LIA (Right-Anterior-Superior)
+# This script reorients a MGZ/NIfTI image to RAS (Right-Anterior-Superior)
 # orientation and pads it with zeros to make it cubic (same size in all 3D).
 # The final size will be max_dim x max_dim x max_dim.
 #
@@ -475,10 +476,10 @@ import scipy.ndimage #Used in nib.processing.conform
 import sys #To add arguments
 import subprocess
 
-#Padding function: reshape the image to (max_dim, max_dim, max_dim) with same resolution and an orientation of 'LIA' used by recon-all
+#Padding function: reshape the image to (max_dim, max_dim, max_dim) with same resolution and an orientation of 'RAS' used by recon-all
 def padding(img, new_name):
     d = max(img.header.get_data_shape())
-    new_img = nib.processing.conform(img, out_shape=(d, d, d), voxel_size = img.header.get_zooms(), order=0, cval=0, orientation='LIA', out_class=None) #d
+    new_img = nib.processing.conform(img, out_shape=(d, d, d), voxel_size = img.header.get_zooms(), order=0, cval=0, orientation='RAS', out_class=None) #d
     nib.save(new_img, new_name)
 
 # SUBJID directory
@@ -1662,6 +1663,7 @@ T1_MASKED="$O/mri/RS_T1-masked.mgz"
 NORM="$O/mri/norm.mgz"
 
 ASEG_PRESURF_NOFIX="$O/mri/RS_aseg.presurf_nofix.mgz"
+ASEG_PRESURF_FIX="$O/mri/RS_aseg.presurf_fix.mgz"
 ASEG_PRESURF="$O/mri/aseg.presurf.mgz"
 ASEG_PRESURF_WO_SUBC="$O/mri/RS_aseg.presurf_wo_subc.mgz"
 
@@ -1731,7 +1733,8 @@ ORIG_MASKED="$O/mri/RS_orig-masked.mgz"
 declare -a CD_APARC_ANNOT=("$O/label/lh.aparc.a2009s.annot" "$O/label/rh.aparc.a2009s.annot")
 declare -a DKT_APARC_ANNOT=("$O/label/lh.aparc.DKTatlas.annot" "$O/label/rh.aparc.DKTatlas.annot")
 
-ASEG_PRESURF_HYPOS="$O/mri/aseg.presurf.hypos.mgz" 
+RIBBON="$O/mri/ribbon.mgz"
+ASEG_PRESURF_HYPOS="$O/mri/aseg.presurf.hypos.mgz"
 ASEG="$O/mri/aseg.mgz"
 APARC_PLUS_ASEG="$O/mri/aparc+aseg.mgz"
 
@@ -1869,8 +1872,14 @@ Echo "# Given subcortical: $SUBCORTICAL"
 cmd "Use script $O/nifti_padding.py on $RIBBON to get $RIBBON_PADDED" \
 "python $O/nifti_padding.py $RIBBON $RIBBON_PADDED"
 
+cmd "Convert $RIBBON_PADDED" \
+"mri_convert $RIBBON_PADDED $RIBBON_PADDED -rt nearest -ns 1 --conform_min"
+
 cmd "Use script $O/nifti_padding.py on $SUBCORTICAL to get $SUBCORTICAL_PADDED" \
 "python $O/nifti_padding.py $SUBCORTICAL $SUBCORTICAL_PADDED"
+
+cmd "Convert $SUBCORTICAL_PADDED" \
+"mri_convert $SUBCORTICAL_PADDED $SUBCORTICAL_PADDED -rt nearest -ns 1 --conform_min"
 fi
 
 #################
@@ -1919,8 +1928,8 @@ fi
 #################
 if ((TAG<=3))
 then
-cmd "Extract labels from $SUBCORTICAL_PADDED (Cerebellum, Medulla oblongata, Pons and Midbrain) into $SUBCORTICAL_MASK" \
-"mri_extract_label $SUBCORTICAL_PADDED $LABELS_SUBCORTICAL $SUBCORTICAL_MASK"
+cmd "Extract labels from $SUBCORTICAL_REMAPPED (Cerebellum, Medulla oblongata, Pons and Midbrain) into $SUBCORTICAL_MASK" \
+"mri_extract_label $SUBCORTICAL_REMAPPED $LABELS_SUBCORTICAL $SUBCORTICAL_MASK" #$SUBCORTICAL_PADDED
 
 cmd "Concatenate $RIBBON_EDIT with $SUBCORTICAL_MASK into $BRAIN_MASK" \
 "mri_concat --i $RIBBON_EDIT --i $SUBCORTICAL_MASK --o $BRAIN_MASK --combine"
@@ -1941,7 +1950,16 @@ then
 cmd "Copy $ASEG_PRESURF_NOFIX_FS into $ASEG_PRESURF_NOFIX" \
 "cp $ASEG_PRESURF_NOFIX_FS $ASEG_PRESURF_NOFIX"
 cmd "Use script $O/edit_aseg_presurf_based_on_ribbon.py on $ASEG_PRESURF_NOFIX" \
-"python $O/edit_aseg_presurf_based_on_ribbon.py '${LABELS_HA_LEFT}' '${LABELS_HA_RIGHT}' $ASEG_PRESURF_NOFIX $RIBBON_EDIT $ASEG_PRESURF $ASEG_PRESURF_WO_SUBC $RIBBON_WO_EDIT"
+"python $O/edit_aseg_presurf_based_on_ribbon.py '${LABELS_HA_LEFT}' '${LABELS_HA_RIGHT}' $ASEG_PRESURF_NOFIX $RIBBON_EDIT $ASEG_PRESURF_FIX $ASEG_PRESURF_WO_SUBC $RIBBON_WO_EDIT"
+
+cmd "Merge subcorticals except HA in $ASEG_PRESURF_WO_SUBC with $O/merge_ribbon_subcortical.py" \
+"python $O/merge_ribbon_subcortical.py $ASEG_PRESURF_WO_SUBC $SUBCORTICAL_REMAPPED $ASEG_PRESURF  \
+--subcortical-labels '${LABELS_SUBCORTICAL_WM}'  \
+--transform-labels '' \
+--n-dilate 0 --n-erode 0 \
+--preserve-ribbon '${LABEL_RIBBON_GM[0]} ${LABEL_RIBBON_GM[1]} 251 252 253 254 255 0 15 16 46 47 7 8 ${LABELS_HA_LEFT} ${LABELS_HA_RIGHT}'  \
+--dilate-into ''  \
+--erode-into ''"
 fi
 
 #################
@@ -2232,9 +2250,7 @@ do
 	cmd "${H[$i]} Copy white surface to ${WHITE[$i]}" \
 	"cp ${ORIG[$i]} ${WHITE[$i]}" 
 	cmd "${H[$i]} Copy pial surface to ${PIAL[$i]}" \
-	"cp ${RIBBON_EDIT_PIAL[$i]} ${PIAL[$i]}" #RIBBON_EDIT_PIAL_THIRD_PASS
-	
-	
+	"cp ${RIBBON_EDIT_PIAL[$i]} ${PIAL[$i]}"
 	
 	# Compute the stats
 	cmd "${H[$i]} pial curv" \
@@ -2243,7 +2259,6 @@ do
 	"mris_place_surface --area-map ${PIAL[$i]} ${PIAL_AREA[$i]}"
 	cmd "${H[$i]} thickness" \
 	"mris_place_surface --thickness ${ORIG[$i]} ${PIAL[$i]} 20 5 ${THICKNESS[$i]}"
-	# same command again for "area and vertex vol rh" ??? 	
 	
 	cmd "${H[$i]} Curvature Stats" \
 	"mris_curvature_stats -m --writeCurvatureFiles -G -o ${CURV_STATS[$i]} -F smoothwm $SUBJID/$OUTPUT_FOLDER ${H[$i]} curv sulc"
@@ -2256,47 +2271,28 @@ fi
 # #################
 if ((TAG<=12))
 then
+cmd "Cortical ribbon mask" \
+"mris_volmask --aseg_name aseg.presurf --label_left_white ${LABEL_RIBBON_WM[0]} --label_left_ribbon ${LABEL_RIBBON_GM[0]} --label_right_white ${LABEL_RIBBON_WM[1]} --label_right_ribbon ${LABEL_RIBBON_GM[1]} --save_ribbon --out_root ribbon $SUBJID/$OUTPUT_FOLDER" 
+#${H[$i]}
+#--out_root ribbon_script_${H[$i]}
+#--${H[$i]}-only $SUBJID/$OUTPUT_FOLDER
+#Searching for surf/rh.white and surf/rh.pial, and --surf_white and --surf_pial don't help, can use arg  
+#cmd "Copy $RH_SMOOTHW_NOFIX to $RH_SMOOTHW" \
+#"cp $RH_SMOOTHW_NOFIX $RH_SMOOTHW"
+#cmd "Inflation2 rh" \
+#"mris_inflate -n 30 $RH_SMOOTHW $RH_INFLATED"
 for (( i=0; i<2; i++ ));
 do
 	if ((HEMI>=0 && HEMI!=i)); #Cases when the current hemi ($i) is not to be processed
 	then
 		continue;
-	else
-	cmd "${H[$i]} Cortical ribbon mask" \
-	"mris_volmask --aseg_name aseg.presurf --label_left_white ${LABEL_RIBBON_WM[0]} --label_left_ribbon ${LABEL_RIBBON_GM[0]} --label_right_white ${LABEL_RIBBON_WM[1]} --label_right_ribbon ${LABEL_RIBBON_GM[1]} --save_ribbon --out_root ribbon $SUBJID/$OUTPUT_FOLDER" 
-	#--out_root ribbon_script_${H[$i]}
-	#--${H[$i]}-only $SUBJID/$OUTPUT_FOLDER
-	#Searching for surf/rh.white and surf/rh.pial, and --surf_white and --surf_pial don't help, can use arg  
-	#cmd "Copy $RH_SMOOTHW_NOFIX to $RH_SMOOTHW" \
-	#"cp $RH_SMOOTHW_NOFIX $RH_SMOOTHW"
-	#cmd "Inflation2 rh" \
-	#"mris_inflate -n 30 $RH_SMOOTHW $RH_INFLATED"
- 	
+	else	
 	cmd "${H[$i]} Cortical Parc 2" \
 	"mris_ca_label -l ${CORTEX_LABEL[$i]} -aseg $ASEG_PRESURF -seed 1234 $SUBJID/$OUTPUT_FOLDER ${H[$i]} ${SPHERE_REG[$i]} ${CD_APARC_ATLAS[$i]} ${CD_APARC_ANNOT[$i]}"
 	#Use surf/rh.smoothwm and surf/rh.sphere.reg
 	cmd "${H[$i]} Cortical Parc 3" \
 	"mris_ca_label -l ${CORTEX_LABEL[$i]} -aseg $ASEG_PRESURF -seed 1234 $SUBJID/$OUTPUT_FOLDER ${H[$i]} ${SPHERE_REG[$i]} ${DKT_APARC_ATLAS[$i]} ${DKT_APARC_ANNOT[$i]}"
-	
-	cmd "${H[$i]} Change SUBJECTS_DIR to SUBJECTS_DIR/SUBJID" \
-	"export SUBJECTS_DIR=$SUBJECTS_DIR/$SUBJID"
-	cmd "${H[$i]} WM/GM Contrast" \
-	"pctsurfcon --s $OUTPUT_FOLDER --${H[$i]}-only"
-	#Need to change $SUBJECTS_DIR because doesn't accept $SUBJID/$OUTPUT_FOLDER 
-	#Need $RAWAVG_COPY, $ORIG_COPY and $RH_APARC_ANNOT
-	#PROBLEM in $RH_APARC_ANNOT: # elements (127231) in rh.aparc.annot does not match # vertices (138041)
-	cmd "${H[$i]} Change back SUBJECTS_DIR/SUBJID to SUBJECTS_DIR" \
-	"export SUBJECTS_DIR=$(dirname $SUBJECTS_DIR)"
- 	
- 	cmd "${H[$i]} Relabel Hypointensities" \
- 	"mri_relabel_hypointensities -${H[$i]} $ASEG_PRESURF $O/surf $ASEG_PRESURF_HYPOS"
- 	cmd "${H[$i]} APas-to-ASeg" \
- 	"mri_surf2volseg --o $ASEG --i $ASEG_PRESURF_HYPOS --fix-presurf-with-ribbon $RIBBON_WO_EDIT --threads 4 --${H[$i]}-cortex-mask ${CORTEX_LABEL[$i]} --${H[$i]}-white ${ORIG[$i]} --${H[$i]}-pial ${RIBBON_EDIT_PIAL[$i]} --${H[$i]}"
- 	
- 	cmd "${H[$i]} AParc-to-ASeg aparc" \
- 	"mri_surf2volseg --o $APARC_PLUS_ASEG --label-cortex --i $ASEG --threads 4 --${H[$i]}-annot ${APARC_ANNOT[$i]} 1000 --${H[$i]}-cortex-mask ${CORTEX_LABEL[$i]} --${H[$i]}-white ${ORIG[$i]} --${H[$i]}-pial ${RIBBON_EDIT_PIAL[$i]} --${H[$((1 - i))]}-annot ${APARC_ANNOT[$((1 - i))]} 2000 --${H[$((1 - i))]}-cortex-mask ${CORTEX_LABEL[$((1 - i))]} --${H[$((1 - i))]}-white ${ORIG[$((1 - i))]} --${H[$((1 - i))]}-pial ${RIBBON_EDIT_PIAL[$((1 - i))]}"
- 	#Same for lh and rh
-	fi
+ 	fi
 done
 fi
 
@@ -2305,6 +2301,28 @@ fi
 # #################
 if ((TAG<=13))
 then
+cmd "${H[$i]} Change SUBJECTS_DIR to SUBJECTS_DIR/SUBJID" \
+"export SUBJECTS_DIR=$SUBJECTS_DIR/$SUBJID"
+cmd "${H[$i]} WM/GM Contrast" \
+"pctsurfcon --s $OUTPUT_FOLDER" 
+#--${H[$i]}-only
+#Need to change $SUBJECTS_DIR because doesn't accept $SUBJID/$OUTPUT_FOLDER 
+#Need $RAWAVG_COPY, $ORIG_COPY and $RH_APARC_ANNOT
+#PROBLEM in $RH_APARC_ANNOT: # elements (127231) in rh.aparc.annot does not match # vertices (138041)
+cmd "${H[$i]} Change back SUBJECTS_DIR/SUBJID to SUBJECTS_DIR" \
+"export SUBJECTS_DIR=$(dirname $SUBJECTS_DIR)"
+
+cmd "${H[$i]} Relabel Hypointensities" \
+"mri_relabel_hypointensities $ASEG_PRESURF $O/surf $ASEG_PRESURF_HYPOS"
+#-${H[$i]}
+
+cmd "${H[$i]} APas-to-ASeg" \
+"mri_surf2volseg --o $ASEG --i $ASEG_PRESURF_HYPOS --fix-presurf-with-ribbon $RIBBON --threads 4 --${H[$i]}-cortex-mask ${CORTEX_LABEL[$i]} --${H[$i]}-white ${ORIG[$i]} --${H[$i]}-pial ${RIBBON_EDIT_PIAL[$i]} --${H[$((1 - i))]}-cortex-mask ${CORTEX_LABEL[$((1 - i))]} --${H[$((1 - i))]}-white ${ORIG[$((1 - i))]} --${H[$((1 - i))]}-pial ${RIBBON_EDIT_PIAL[$((1 - i))]}"
+#--${H[$i]} 
+
+cmd "${H[$i]} AParc-to-ASeg aparc+aseg" \
+"mri_surf2volseg --o $APARC_PLUS_ASEG --label-cortex --i $ASEG --threads 4 --${H[$i]}-annot ${APARC_ANNOT[$i]} 1000 --${H[$i]}-cortex-mask ${CORTEX_LABEL[$i]} --${H[$i]}-white ${ORIG[$i]} --${H[$i]}-pial ${RIBBON_EDIT_PIAL[$i]} --${H[$((1 - i))]}-annot ${APARC_A2009S_ANNOT[$((1 - i))]} 2000 --${H[$((1 - i))]}-cortex-mask ${CORTEX_LABEL[$((1 - i))]} --${H[$((1 - i))]}-white ${ORIG[$((1 - i))]} --${H[$((1 - i))]}-pial ${RIBBON_EDIT_PIAL[$((1 - i))]}"
+#--${H[$i]}
 for (( i=0; i<2; i++ ));
 do
 	if ((HEMI>=0 && HEMI!=i)); #Cases when the current hemi ($i) is not to be processed
