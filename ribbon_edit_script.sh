@@ -1733,7 +1733,7 @@ ORIG_MASKED="$O/mri/RS_orig-masked.mgz"
 declare -a CD_APARC_ANNOT=("$O/label/lh.aparc.a2009s.annot" "$O/label/rh.aparc.a2009s.annot")
 declare -a DKT_APARC_ANNOT=("$O/label/lh.aparc.DKTatlas.annot" "$O/label/rh.aparc.DKTatlas.annot")
 
-RIBBON="$O/mri/ribbon.mgz"
+RIBBON_NEW="$O/mri/ribbon.mgz"
 ASEG_PRESURF_HYPOS="$O/mri/aseg.presurf.hypos.mgz"
 ASEG="$O/mri/aseg.mgz"
 APARC_PLUS_ASEG="$O/mri/aparc+aseg.mgz"
@@ -2279,27 +2279,27 @@ cmd "Cortical ribbon mask" \
 #--out_root ribbon_script_${H[$i]}
 #--${H[$i]}-only $SUBJID/$OUTPUT_FOLDER
 #Searching for surf/rh.white and surf/rh.pial, and --surf_white and --surf_pial don't help, can use arg  
+
 #cmd "Copy $RH_SMOOTHW_NOFIX to $RH_SMOOTHW" \
 #"cp $RH_SMOOTHW_NOFIX $RH_SMOOTHW"
 #cmd "Inflation2 rh" \
 #"mris_inflate -n 30 $RH_SMOOTHW $RH_INFLATED"
 for (( i=0; i<2; i++ ));
 do
-	if ((HEMI>=0 && HEMI!=i)); #Cases when the current hemi ($i) is not to be processed
-	then
-		continue;
-	else	
+    if ((HEMI>=0 && HEMI!=i)); #Cases when the current hemi ($i) is not to be processed
+    then
+        continue;
+    else	
 	cmd "${H[$i]} Cortical Parc 2" \
 	"mris_ca_label -l ${CORTEX_LABEL[$i]} -aseg $ASEG_PRESURF -seed 1234 $SUBJID/$OUTPUT_FOLDER ${H[$i]} ${SPHERE_REG[$i]} ${CD_APARC_ATLAS[$i]} ${CD_APARC_ANNOT[$i]}"
 	#Use surf/rh.smoothwm and surf/rh.sphere.reg
 	cmd "${H[$i]} Cortical Parc 3" \
 	"mris_ca_label -l ${CORTEX_LABEL[$i]} -aseg $ASEG_PRESURF -seed 1234 $SUBJID/$OUTPUT_FOLDER ${H[$i]} ${SPHERE_REG[$i]} ${DKT_APARC_ATLAS[$i]} ${DKT_APARC_ANNOT[$i]}"
- 	
+	
     cmd "${H[$i]} Change SUBJECTS_DIR to SUBJECTS_DIR/SUBJID" \
     "export SUBJECTS_DIR=$SUBJECTS_DIR/$SUBJID"
     cmd "${H[$i]} WM/GM Contrast" \
-    "pctsurfcon --s $OUTPUT_FOLDER" 
-    #--${H[$i]}-only
+    "pctsurfcon --s $OUTPUT_FOLDER --${H[$i]}-only" 
     #Need to change $SUBJECTS_DIR because doesn't accept $SUBJID/$OUTPUT_FOLDER 
     #Need $RAWAVG_COPY, $ORIG_COPY and $RH_APARC_ANNOT
     #PROBLEM in $RH_APARC_ANNOT: # elements (127231) in rh.aparc.annot does not match # vertices (138041)
@@ -2307,6 +2307,15 @@ do
     "export SUBJECTS_DIR=$(dirname $SUBJECTS_DIR)"
     fi
 done
+cmd "${H[$i]} Relabel Hypointensities" \
+"mri_relabel_hypointensities $ASEG_PRESURF $O/surf $ASEG_PRESURF_HYPOS"
+
+cmd "${H[$i]} APas-to-ASeg" \
+"mri_surf2volseg --o $ASEG --i $ASEG_PRESURF_HYPOS --fix-presurf-with-ribbon $RIBBON_NEW --threads 1 --${H[0]}-cortex-mask ${CORTEX_LABEL[0]} --${H[0]}-white ${ORIG[0]} --${H[0]}-pial ${RIBBON_EDIT_PIAL[0]} --${H[1]}-cortex-mask ${CORTEX_LABEL[1]} --${H[1]}-white ${ORIG[1]} --${H[1]}-pial ${RIBBON_EDIT_PIAL[1]}"
+
+cmd "AParc-to-ASeg aparc" \
+"mri_surf2volseg --o $APARC_PLUS_ASEG --label-cortex --i $ASEG --threads 1 --${H[0]}-annot ${APARC_ANNOT[0]} 1000 --${H[0]}-cortex-mask ${CORTEX_LABEL[0]} --${H[0]}-white ${ORIG[0]} --${H[0]}-pial ${RIBBON_EDIT_PIAL[0]} --${H[1]}-annot ${APARC_ANNOT[1]} 2000 --${H[1]}-cortex-mask ${CORTEX_LABEL[1]} --${H[1]}-white ${ORIG[1]} --${H[1]}-pial ${RIBBON_EDIT_PIAL[1]}"
+
 fi
 
 #################
@@ -2314,32 +2323,12 @@ fi
 # #################
 if ((TAG<=13))
 then
-#cmd "Relabel Hypointensities" \
-#"mri_relabel_hypointensities $ASEG_PRESURF $O/surf $ASEG_PRESURF_HYPOS -${H[$i]}"
-#-${H[$i]}
-
-#cmd "APas-to-ASeg" \
-#"mri_surf2volseg --o $ASEG --i $ASEG_PRESURF_HYPOS --fix-presurf-with-ribbon $RIBBON --threads 4 --${H[0]}-cortex-mask ${CORTEX_LABEL[$i]} --${H[0]}-white ${ORIG[0]} --${H[0]}-pial ${RIBBON_EDIT_PIAL[0]} --${H[1]}-cortex-mask ${CORTEX_LABEL[1]} --${H[1]}-white ${ORIG[1]} --${H[1]}-pial ${RIBBON_EDIT_PIAL[1]}"
-#--${H[$i]} 
-
-#cmd "AParc-to-ASeg aparc+aseg" \
-#"mri_surf2volseg --o $APARC_PLUS_ASEG --label-cortex --i $ASEG --threads 4 --${H[0]}-annot ${APARC_ANNOT[0]} 1000 --${H[0]}-cortex-mask ${CORTEX_LABEL[0]} --${H[0]}-white ${ORIG[0]} --${H[0]}-pial ${RIBBON_EDIT_PIAL[0]} --${H[1]}-annot ${APARC_A2009S_ANNOT[1]} 2000 --${H[1]}-cortex-mask ${CORTEX_LABEL[1]} --${H[1]}-white ${ORIG[1]} --${H[1]}-pial ${RIBBON_EDIT_PIAL[1]}"
-#--${H[$i]}
 for (( i=0; i<2; i++ ));
 do
 	if ((HEMI>=0 && HEMI!=i)); #Cases when the current hemi ($i) is not to be processed
 	then
 		continue;
 	else
-	cmd "${H[$i]} Relabel Hypointensities" \
-	"mri_relabel_hypointensities $ASEG_PRESURF $O/surf $ASEG_PRESURF_HYPOS -${H[$i]}"
-	
-	cmd "${H[$i]} APas-to-ASeg" \
-	"mri_surf2volseg --o $ASEG --i $ASEG_PRESURF_HYPOS --${H[$i]} --fix-presurf-with-ribbon $RIBBON --threads 4 --${H[$i]}-cortex-mask ${CORTEX_LABEL[$i]} --${H[$i]}-white ${ORIG[$i]} --${H[$i]}-pial ${RIBBON_EDIT_PIAL[$i]}"
-	
-	cmd "${H[$i]} AParc-to-ASeg aparc+aseg" \
-	"mri_surf2volseg --o $APARC_PLUS_ASEG --label-cortex --i $ASEG --${H[$i]} --threads 4 --${H[$i]}-annot ${APARC_ANNOT[$i]} 1000 --${H[$i]}-cortex-mask ${CORTEX_LABEL[$i]} --${H[$i]}-white ${ORIG[$i]} --${H[$i]}-pial ${RIBBON_EDIT_PIAL[$i]}"
-
  	cmd "${H[$i]} AParc-to-ASeg aparc.a2009s" \
  	"mri_surf2volseg --o $APARC_A2009S_ASEG --label-cortex --i $ASEG --threads 4 --${H[$i]}-annot ${APARC_A2009S_ANNOT[$i]} 11100 --${H[$i]}-cortex-mask ${CORTEX_LABEL[$i]} --${H[$i]}-white ${ORIG[$i]} --${H[$i]}-pial ${RIBBON_EDIT_PIAL[$i]} --${H[$((1 - i))]}-annot ${APARC_A2009S_ANNOT[$((1 - i))]} 12100 --${H[$((1 - i))]}-cortex-mask ${CORTEX_LABEL[$((1 - i))]} --${H[$((1 - i))]}-white ${ORIG[$((1 - i))]} --${H[$((1 - i))]}-pial ${RIBBON_EDIT_PIAL[$((1 - i))]}"
  	cmd "${H[$i]} AParc-to-ASeg aparc.DKTatlas" \
@@ -2516,7 +2505,7 @@ do
         RIBBON="$(find $SUB -maxdepth 1 -name "*ribbon*")"
         SUBCORTICAL="$(find $SUB -maxdepth 1 -name "*subcortical*")"
         
-        HA=$RIBBON #TO BE CHANGED IF NECESSARY
+        HA=$SUBCORTICAL #TO BE CHANGED IF NECESSARY
         
         #remove last character if /
 	export var="${SUB: -1}"
