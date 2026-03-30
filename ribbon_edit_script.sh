@@ -8,7 +8,7 @@ Help ()
 builtin echo "
 AUTHOR: Benoît Verreman
 
-LAST UPDATE: 2026-03-18
+LAST UPDATE: 2026-03-30
 
 DESCRIPTION: 
 Use ribbon and subcortical NIFTI files to recompute pial surface,
@@ -1737,6 +1737,8 @@ RIBBON="$O/mri/ribbon.mgz"
 ASEG_PRESURF_HYPOS="$O/mri/aseg.presurf.hypos.mgz"
 ASEG="$O/mri/aseg.mgz"
 APARC_PLUS_ASEG="$O/mri/aparc+aseg.mgz"
+declare -a ASEG2=("$O/mri/aseg_lh.mgz" "$O/mri/aseg_rh.mgz")
+declare -a APARC_PLUS_ASEG2=("$O/mri/aparc+aseg_lh.mgz" "$O/mri/aparc+aseg_rh.mgz")
 
 declare -a APARC_ANNOT=("$O/label/lh.aparc.annot" "$O/label/rh.aparc.annot")
 APARC_A2009S_ASEG="$O/mri/aparc.a2009s+aseg.mgz"
@@ -2292,7 +2294,18 @@ do
 	#Use surf/rh.smoothwm and surf/rh.sphere.reg
 	cmd "${H[$i]} Cortical Parc 3" \
 	"mris_ca_label -l ${CORTEX_LABEL[$i]} -aseg $ASEG_PRESURF -seed 1234 $SUBJID/$OUTPUT_FOLDER ${H[$i]} ${SPHERE_REG[$i]} ${DKT_APARC_ATLAS[$i]} ${DKT_APARC_ANNOT[$i]}"
- 	fi
+ 	
+    cmd "${H[$i]} Change SUBJECTS_DIR to SUBJECTS_DIR/SUBJID" \
+    "export SUBJECTS_DIR=$SUBJECTS_DIR/$SUBJID"
+    cmd "${H[$i]} WM/GM Contrast" \
+    "pctsurfcon --s $OUTPUT_FOLDER" 
+    #--${H[$i]}-only
+    #Need to change $SUBJECTS_DIR because doesn't accept $SUBJID/$OUTPUT_FOLDER 
+    #Need $RAWAVG_COPY, $ORIG_COPY and $RH_APARC_ANNOT
+    #PROBLEM in $RH_APARC_ANNOT: # elements (127231) in rh.aparc.annot does not match # vertices (138041)
+    cmd "${H[$i]} Change back SUBJECTS_DIR/SUBJID to SUBJECTS_DIR" \
+    "export SUBJECTS_DIR=$(dirname $SUBJECTS_DIR)"
+    fi
 done
 fi
 
@@ -2301,27 +2314,16 @@ fi
 # #################
 if ((TAG<=13))
 then
-cmd "${H[$i]} Change SUBJECTS_DIR to SUBJECTS_DIR/SUBJID" \
-"export SUBJECTS_DIR=$SUBJECTS_DIR/$SUBJID"
-cmd "${H[$i]} WM/GM Contrast" \
-"pctsurfcon --s $OUTPUT_FOLDER" 
-#--${H[$i]}-only
-#Need to change $SUBJECTS_DIR because doesn't accept $SUBJID/$OUTPUT_FOLDER 
-#Need $RAWAVG_COPY, $ORIG_COPY and $RH_APARC_ANNOT
-#PROBLEM in $RH_APARC_ANNOT: # elements (127231) in rh.aparc.annot does not match # vertices (138041)
-cmd "${H[$i]} Change back SUBJECTS_DIR/SUBJID to SUBJECTS_DIR" \
-"export SUBJECTS_DIR=$(dirname $SUBJECTS_DIR)"
-
-cmd "${H[$i]} Relabel Hypointensities" \
-"mri_relabel_hypointensities $ASEG_PRESURF $O/surf $ASEG_PRESURF_HYPOS"
+#cmd "Relabel Hypointensities" \
+#"mri_relabel_hypointensities $ASEG_PRESURF $O/surf $ASEG_PRESURF_HYPOS -${H[$i]}"
 #-${H[$i]}
 
-cmd "${H[$i]} APas-to-ASeg" \
-"mri_surf2volseg --o $ASEG --i $ASEG_PRESURF_HYPOS --fix-presurf-with-ribbon $RIBBON --threads 4 --${H[$i]}-cortex-mask ${CORTEX_LABEL[$i]} --${H[$i]}-white ${ORIG[$i]} --${H[$i]}-pial ${RIBBON_EDIT_PIAL[$i]} --${H[$((1 - i))]}-cortex-mask ${CORTEX_LABEL[$((1 - i))]} --${H[$((1 - i))]}-white ${ORIG[$((1 - i))]} --${H[$((1 - i))]}-pial ${RIBBON_EDIT_PIAL[$((1 - i))]}"
+#cmd "APas-to-ASeg" \
+#"mri_surf2volseg --o $ASEG --i $ASEG_PRESURF_HYPOS --fix-presurf-with-ribbon $RIBBON --threads 4 --${H[0]}-cortex-mask ${CORTEX_LABEL[$i]} --${H[0]}-white ${ORIG[0]} --${H[0]}-pial ${RIBBON_EDIT_PIAL[0]} --${H[1]}-cortex-mask ${CORTEX_LABEL[1]} --${H[1]}-white ${ORIG[1]} --${H[1]}-pial ${RIBBON_EDIT_PIAL[1]}"
 #--${H[$i]} 
 
-cmd "${H[$i]} AParc-to-ASeg aparc+aseg" \
-"mri_surf2volseg --o $APARC_PLUS_ASEG --label-cortex --i $ASEG --threads 4 --${H[$i]}-annot ${APARC_ANNOT[$i]} 1000 --${H[$i]}-cortex-mask ${CORTEX_LABEL[$i]} --${H[$i]}-white ${ORIG[$i]} --${H[$i]}-pial ${RIBBON_EDIT_PIAL[$i]} --${H[$((1 - i))]}-annot ${APARC_A2009S_ANNOT[$((1 - i))]} 2000 --${H[$((1 - i))]}-cortex-mask ${CORTEX_LABEL[$((1 - i))]} --${H[$((1 - i))]}-white ${ORIG[$((1 - i))]} --${H[$((1 - i))]}-pial ${RIBBON_EDIT_PIAL[$((1 - i))]}"
+#cmd "AParc-to-ASeg aparc+aseg" \
+#"mri_surf2volseg --o $APARC_PLUS_ASEG --label-cortex --i $ASEG --threads 4 --${H[0]}-annot ${APARC_ANNOT[0]} 1000 --${H[0]}-cortex-mask ${CORTEX_LABEL[0]} --${H[0]}-white ${ORIG[0]} --${H[0]}-pial ${RIBBON_EDIT_PIAL[0]} --${H[1]}-annot ${APARC_A2009S_ANNOT[1]} 2000 --${H[1]}-cortex-mask ${CORTEX_LABEL[1]} --${H[1]}-white ${ORIG[1]} --${H[1]}-pial ${RIBBON_EDIT_PIAL[1]}"
 #--${H[$i]}
 for (( i=0; i<2; i++ ));
 do
@@ -2329,6 +2331,15 @@ do
 	then
 		continue;
 	else
+	cmd "${H[$i]} Relabel Hypointensities" \
+	"mri_relabel_hypointensities $ASEG_PRESURF $O/surf $ASEG_PRESURF_HYPOS -${H[$i]}"
+	
+	cmd "${H[$i]} APas-to-ASeg" \
+	"mri_surf2volseg --o $ASEG --i $ASEG_PRESURF_HYPOS --${H[$i]} --fix-presurf-with-ribbon $RIBBON --threads 4 --${H[$i]}-cortex-mask ${CORTEX_LABEL[$i]} --${H[$i]}-white ${ORIG[$i]} --${H[$i]}-pial ${RIBBON_EDIT_PIAL[$i]}"
+	
+	cmd "${H[$i]} AParc-to-ASeg aparc+aseg" \
+	"mri_surf2volseg --o $APARC_PLUS_ASEG --label-cortex --i $ASEG --${H[$i]} --threads 4 --${H[$i]}-annot ${APARC_ANNOT[$i]} 1000 --${H[$i]}-cortex-mask ${CORTEX_LABEL[$i]} --${H[$i]}-white ${ORIG[$i]} --${H[$i]}-pial ${RIBBON_EDIT_PIAL[$i]}"
+
  	cmd "${H[$i]} AParc-to-ASeg aparc.a2009s" \
  	"mri_surf2volseg --o $APARC_A2009S_ASEG --label-cortex --i $ASEG --threads 4 --${H[$i]}-annot ${APARC_A2009S_ANNOT[$i]} 11100 --${H[$i]}-cortex-mask ${CORTEX_LABEL[$i]} --${H[$i]}-white ${ORIG[$i]} --${H[$i]}-pial ${RIBBON_EDIT_PIAL[$i]} --${H[$((1 - i))]}-annot ${APARC_A2009S_ANNOT[$((1 - i))]} 12100 --${H[$((1 - i))]}-cortex-mask ${CORTEX_LABEL[$((1 - i))]} --${H[$((1 - i))]}-white ${ORIG[$((1 - i))]} --${H[$((1 - i))]}-pial ${RIBBON_EDIT_PIAL[$((1 - i))]}"
  	cmd "${H[$i]} AParc-to-ASeg aparc.DKTatlas" \
