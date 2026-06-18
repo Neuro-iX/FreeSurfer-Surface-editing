@@ -52,7 +52,8 @@ HELP
 INPUT FILES
 -i: Relative or absolute path to T1w image file
 -s: Relative or absolute path to subjid folder (NECESSARY)
-#Ribbon is taken automatically from <subjid>_freesurfer/mri/ribbon.mgz (FreeSurfer output)
+#Ribbon source (default: <subjid>_freesurfer/mri/ribbon.mgz from FreeSurfer output)
+-S: Use mri_synthseg on the FreeSurfer T1.mgz to compute the ribbon instead
 
 -c: Relative or absolute path to subcortical file
 -n: List of labels (LABELS_SUBCORTICAL) to be used in subcortical file (-c)
@@ -115,6 +116,7 @@ HEMI=-1 # Both hemispheres (option -r or -l not used)
 FS=0 # Default: No recon-all (option -i not used)
 MULTICASE=0 # Default: Only one case (option -f not used)
 DO_DELETE=0 # Default: Don't delete output folder (option -k not used)
+USE_SYNTHSEG=0 # Default: Use FreeSurfer ribbon.mgz (option -S not used)
 OUTPUT_FOLDER="outputs"
 N_DILATION=3
 N_EROSION=2
@@ -153,7 +155,7 @@ unset -v LABELS_HA_LEFT
 unset -v LABELS_HA_RIGHT
 
 #If a character is followed by :, then it needs an argument just after
-VALID_ARGS="i:s:b:c:n:o:x:y:t:p:f:d:e:hlrk"
+VALID_ARGS="i:s:b:c:n:o:x:y:t:p:f:d:e:hlrkS"
 
 while getopts ${VALID_ARGS} opt; do
   case ${opt} in
@@ -226,6 +228,10 @@ while getopts ${VALID_ARGS} opt; do
     k) #Kill last OUTPUT_FODLER
 	DO_DELETE=1 #Kill report.sh and $OUTPUT_FOLDER (deferred to main() after O is defined)
 	string_arguments+="-k "
+	;;
+    S) #Use mri_synthseg to compute ribbon instead of FreeSurfer ribbon.mgz
+	USE_SYNTHSEG=1
+	string_arguments+="-S "
 	;;
     :)
       	echo "Option -${OPTARG} requires an argument."
@@ -1645,6 +1651,7 @@ IMAGE_PADDED="$SUBJECTS_DIR/$SUBJID/RS_image-padded.mgz"
 IMAGE_ORIG="$O/mri/orig/001.mgz"
 
 RIBBON_PADDED="$O/mri/RS_ribbon-padded.mgz"
+SYNTHSEG_OUT="$O/mri/RS_synthseg.mgz"
 SUBCORTICAL_PADDED="$O/mri/RS_subcortical-padded.mgz"
 RIBBON_EDIT="$O/mri/ribbon-edit.mgz"
 RIBBON_WO_EDIT="$O/mri/ribbon-wo-edit.mgz"
@@ -1869,9 +1876,16 @@ then
 : ${SUBCORTICAL:?Missing argument -c} ${LABELS_SUBCORTICAL:?Missing argument -n}
 Echo "# Given subcortical: $SUBCORTICAL"
 
+if ((USE_SYNTHSEG==1)); then
+cmd "Run mri_synthseg on $T1_FS to get $SYNTHSEG_OUT" \
+"mri_synthseg --i $T1_FS --o $SYNTHSEG_OUT --threads 4"
+cmd "Extract 4-label ribbon (2 3 41 42) from $SYNTHSEG_OUT to $RIBBON_PADDED" \
+"python $O/remap_labels.py $SYNTHSEG_OUT $RIBBON_PADDED --src '2 3 41 42' --dst '2 3 41 42' --remove-unlisted"
+else
 # FreeSurfer ribbon is already in FS label space (2/3/41/42) and voxel space — no padding needed
 cmd "Copy FreeSurfer ribbon $RIBBON_FS to $RIBBON_PADDED" \
 "mri_convert $RIBBON_FS $RIBBON_PADDED -rt nearest"
+fi
 
 cmd "Use script $O/nifti_padding.py on $SUBCORTICAL to get $SUBCORTICAL_PADDED" \
 "python $O/nifti_padding.py $SUBCORTICAL $SUBCORTICAL_PADDED"
