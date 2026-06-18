@@ -64,11 +64,11 @@ INPUT FILES
 -y: List of labels for HA right #'44 53 54' in aparc+aseg / '19 21 23' in HOA_Subcortical_Labels
 
 TAG
--t 0: (ribbons) Start with resizing SUBCORTICAL
--t 1: (bmask) Start with BRAIN_MASK
--t 2: (maskT1) Start with T1_MASKED
--t 3: (brain.finalsurfs) Start with skull-stripping up to BRAIN_FINALSURFS
--t 4: (wm-bmask) Start the creation of WM_BMASK based on RIBBON_EDIT
+-t 0: (ribbons) Pad SUBCORTICAL to RAS cubic and mri_convert
+-t 1: (remap) Remap subcortical labels (HOA->FS); copy/pad HA reference
+-t 2: (ha-merge) Merge HA complex into RIBBON_EDIT with dilate/erode
+-t 3: (bmask) Build BRAIN_MASK from RIBBON_EDIT + subcortical; mask T1
+-t 4: (aseg) Rebuild aseg.presurf from ribbon; merge non-HA subcorticals
 -t 5: (wm) Start from computing WM based on WM_BMASK
 -t 6: (orig) Start from computing orig surface based on wm from RIBBON_EDIT
 -t 7: (brain.finalsurfs-edit) edit brain.finalsurfs with GM from RIBBON_EDIT
@@ -91,7 +91,7 @@ HEMI
 -l: Compute only left hemisphere surface
 
 RESET
--d: Reset outputs folder and report.sh script
+-k: Reset outputs folder and report.sh script
 
 WHOLE FOLDER
 -f: Execute the script for each subfolder in given folder. 
