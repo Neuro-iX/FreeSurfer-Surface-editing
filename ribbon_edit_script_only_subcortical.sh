@@ -52,7 +52,7 @@ HELP
 INPUT FILES
 -i: Relative or absolute path to T1w image file
 -s: Relative or absolute path to subjid folder (NECESSARY)
-###-b: Relative or absolute path to ribbon file (you may use labels 21 and 22 for HA in ribbon)
+#Ribbon is taken automatically from <subjid>_freesurfer/mri/ribbon.mgz (FreeSurfer output)
 
 -c: Relative or absolute path to subcortical file
 -n: List of labels (LABELS_SUBCORTICAL) to be used in subcortical file (-c)
@@ -129,9 +129,6 @@ LABELS_SUBCORTICAL_OLD="1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22
 LABELS_SUBCORTICAL_NEW="4 43 24 14 15 0 26 58 11 50 12 51 13 52 16 10 49 5 44 17 53 18 54 85 28 60 28 60 8 47 7 46"
 LABELS_SUBCORTICAL_WM="4 10 11 12 13 26 28 43 49 50 51 52 58 60"
 
-declare -a LABELS_RIBBON_OLD=("34 33 1 7 9 11 13 16 25 27" "36 35 2 8 10 12 14 17 26 28") #3,4=csf, 3rd ventricle
-declare -a LABELS_RIBBON_NEW=("3 2 2 2 2 2 2 2 2 2" "42 41 41 41 41 41 41 41 41 41") #24,14=csf, 3rd ventricle
-
 #declare -a LABELS_HA=("5 17 18" "44 53 54") #HA in aparc+aseg / ('18 20 22' '19 21 23') in HOA_Subcortical_Labels
 #declare -a LABELS_HA_RIB=("21" "22") #HA in ribbon (-n flag)
 declare -a H=("lh" "rh") #Left then Right hemispheres
@@ -149,7 +146,6 @@ string_arguments="" #String of the different arguments in the command line
 
 unset -v IMAGE
 unset -v SUBJID
-#unset -v RIBBON
 unset -v SUBCORTICAL
 unset -v LABELS_SUBCORTICAL
 unset -v HA
@@ -1606,6 +1602,7 @@ RAWAVG_FS="$SUBJECTS_DIR/$SUBJID/${SUBJID}_freesurfer/mri/rawavg.mgz"
 T1_FS="$SUBJECTS_DIR/$SUBJID/${SUBJID}_freesurfer/mri/T1.mgz"
 
 NORM_FS="$SUBJECTS_DIR/$SUBJID/${SUBJID}_freesurfer/mri/norm.mgz"
+RIBBON_FS="$SUBJECTS_DIR/$SUBJID/${SUBJID}_freesurfer/mri/ribbon.mgz"
 ASEG_PRESURF_NOFIX_FS="$SUBJECTS_DIR/$SUBJID/${SUBJID}_freesurfer/mri/aseg.presurf.mgz"
 
 BRAIN_FS="$SUBJECTS_DIR/$SUBJID/${SUBJID}_freesurfer/mri/brain.mgz"
@@ -1648,7 +1645,6 @@ IMAGE_PADDED="$SUBJECTS_DIR/$SUBJID/RS_image-padded.mgz"
 IMAGE_ORIG="$O/mri/orig/001.mgz"
 
 RIBBON_PADDED="$O/mri/RS_ribbon-padded.mgz"
-RIBBON_PADDED_OLD="$O/mri/RS_ribbon-padded-old.mgz"
 SUBCORTICAL_PADDED="$O/mri/RS_subcortical-padded.mgz"
 RIBBON_EDIT="$O/mri/ribbon-edit.mgz"
 RIBBON_WO_EDIT="$O/mri/ribbon-wo-edit.mgz"
@@ -1865,21 +1861,17 @@ cmd "Change back SUBJECTS_DIR/SUBJID to SUBJECTS_DIR" \
 fi
 
 #################
-## Convert ribbon and subcortical
+## Copy FreeSurfer ribbon; convert subcortical
 #################
 if ((TAG<=0))
 then
-# Test if user provided RIBBON and SUBCORTICAL
-: ${RIBBON:?Missing argument -b} ${SUBCORTICAL:?Missing argument -c} ${LABELS_SUBCORTICAL:?Missing argument -n}
-Echo "# Given ribbon: $RIBBON"
+# Test if user provided SUBCORTICAL
+: ${SUBCORTICAL:?Missing argument -c} ${LABELS_SUBCORTICAL:?Missing argument -n}
 Echo "# Given subcortical: $SUBCORTICAL"
 
-#If needed, correcting the dimensions of the image with padding
-cmd "Use script $O/nifti_padding.py on $RIBBON to get $RIBBON_PADDED" \
-"python $O/nifti_padding.py $RIBBON $RIBBON_PADDED"
-
-cmd "Convert $RIBBON_PADDED" \
-"mri_convert $RIBBON_PADDED $RIBBON_PADDED -rt nearest -ns 1 --conform_min"
+# FreeSurfer ribbon is already in FS label space (2/3/41/42) and voxel space — no padding needed
+cmd "Copy FreeSurfer ribbon $RIBBON_FS to $RIBBON_PADDED" \
+"mri_convert $RIBBON_FS $RIBBON_PADDED -rt nearest"
 
 cmd "Use script $O/nifti_padding.py on $SUBCORTICAL to get $SUBCORTICAL_PADDED" \
 "python $O/nifti_padding.py $SUBCORTICAL $SUBCORTICAL_PADDED"
@@ -1889,16 +1881,10 @@ cmd "Convert $SUBCORTICAL_PADDED" \
 fi
 
 #################
-## Correct label values in Subcortical, convert HA reference, and fuse it with RIBBON_PADDED
+## Remap subcortical labels; copy/pad HA reference
 #################
 if ((TAG<=1))
 then
-cmd "Copy $RIBBON_PADDED in $RIBBON_PADDED_OLD" \
-"cp $RIBBON_PADDED $RIBBON_PADDED_OLD" 
-
-cmd "Use script $O/remap_labels.py for RIBBON_RJR" \
-"python $O/remap_labels.py $RIBBON_PADDED $RIBBON_PADDED --src '${LABELS_RIBBON_OLD[0]} ${LABELS_RIBBON_OLD[1]}' --dst '${LABELS_RIBBON_NEW[0]} ${LABELS_RIBBON_NEW[1]}' --remove-unlisted"
-
 cmd "Use script $O/remap_labels.py" \
 "python $O/remap_labels.py $SUBCORTICAL_PADDED $SUBCORTICAL_REMAPPED --src '${LABELS_SUBCORTICAL_OLD}' --dst '${LABELS_SUBCORTICAL_NEW}' --remove-unlisted"
 
@@ -2511,7 +2497,6 @@ do
 	then
 		IMAGE="$(find $SUB -maxdepth 1 -name "*T1*")"
 	fi
-        RIBBON="$(find $SUB -maxdepth 1 -name "*ribbon*")"
         SUBCORTICAL="$(find $SUB -maxdepth 1 -name "*subcortical*")"
         
         HA=$SUBCORTICAL #TO BE CHANGED IF NECESSARY
