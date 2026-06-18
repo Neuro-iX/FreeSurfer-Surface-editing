@@ -2525,7 +2525,7 @@ do
 	
 	#Get string after last /
         SUBJID="$(echo ${SUB##*/})"
-        if ((SUBJID=="fsaverage")); then #fsaverage is a symlink of freesurfer own data, should be skipped by this script
+        if [[ "$SUBJID" == "fsaverage" ]]; then #fsaverage is a symlink of freesurfer own data, should be skipped by this script
         	continue
         fi
         
