@@ -1680,7 +1680,6 @@ WM_BMASK_250="$O/mri/RS_wm-bmask-250.mgz"
 WM_ASEGEDIT="$O/mri/RS_wm-asegedit.mgz"
 WM="$O/mri/wm.mgz" # Use this name for mri_fix_topology
 
-BRAIN="$O/mri/brain.mgz" # for mris_fix_topology
 BRAINMASK="$O/mri/brainmask.mgz" # for mris_fix_topology
 
 declare -a FILLED_PRETRESS=("$O/mri/RS_filled_pretress_lh.mgz" "$O/mri/RS_filled_pretress_rh.mgz")
@@ -1717,7 +1716,6 @@ declare -a RIBBON_EDIT_PIAL=("$O/surf/RS_lh.ribbon_edit.pial" "$O/surf/RS_rh.rib
 #declare -a RIBBON_EDIT_PIAL_THIRD_PASS=("$O/surf/RS_lh.ribbon_edit.smooth-third-pass.pial" "$O/surf/RS_rh.ribbon_edit.smooth-third-pass.pial")
 
 # Curv + Thickness + Stats + APARC + APEG ...
-declare -a CURV=("$O/surf/lh.curv" "$O/surf/rh.curv")
 declare -a AREA=("$O/surf/lh.area" "$O/surf/rh.area")
 declare -a PIAL_CURV=("$O/surf/lh.curv.pial" "$O/surf/rh.curv.pial")
 declare -a PIAL_AREA=("$O/surf/lh.area.pial" "$O/surf/rh.area.pial")
