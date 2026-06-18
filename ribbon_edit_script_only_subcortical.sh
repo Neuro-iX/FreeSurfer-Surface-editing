@@ -1,0 +1,2541 @@
+#!/bin/bash
+
+#################
+## Help
+#################
+Help ()
+{
+builtin echo "
+AUTHOR: Benoît Verreman
+
+LAST UPDATE: 2026-06-10
+DESCRIPTION: 
+Use ribbon and subcortical NIFTI files to recompute pial surface,
+based on previously created <subjid> folder using Freesurfer 7.4.1
+Reuse Freesurfer 7.4.1 functions, but not always in the same order as scripts/recon-all.cmd (when output of the function is not immediately used after)
+Create a log 'report.sh'.
+Create a folder 'outputs' with all the output files.
+
+PREREQUISITES:
+*Freesurfer variables:
+Export SUBJECTS_DIR and FREESURFER_HOME correctly
+
+*Python script:
+Test if you have access to python: 'which python'
+Install two python libraries: 'pip install nibabel scipy'
+OR use conda environment:
+conda create --name env_ribbon_edit_script python=3.10 nibabel scipy -c conda-forge
+conda activate env_ribbon_edit_script
+conda list | grep -E 'nibabel|scipy'
+
+*Freesurfer output folder:
+If you want to launch Freesurfer 7.4.1 recon-all pipeline using the script:
+	Add argument -i
+Else:
+	Launch Freesurfer 7.4.1 command before using script: 
+$ recon-all -s <subjid> -i <subject_image> -autorecon1 -autorecon2 -hires -parallel -openmp 4 -expert expert_file.txt
+Prepare ribbon and subcortical NIFTI files (for step 0)
+Put the script inside <subjid> folder
+
+*Specific labels and statical values:
+Modify the value of some constants in the script if needed: LABEL_RIBBON_WM, LABEL_RIBBON_GM, PIAL_BORDER_LOW
+
+EXAMPLES:
+$ bash ribbon_edit_script.sh -i 133019_T1w_acpc_dc_restore.nii.gz -s 133019 -c 133019_subcortical.nii.gz -n '5 15 29 30 32 31' -o 133019_ribbon.nii.gz -x 21 -y 22
+#No more ribbon: -b 133019_ribbon.nii.gz
+
+PARAMETERS:
+
+HELP
+-h: Print this string, and exit
+
+INPUT FILES
+-i: Relative or absolute path to T1w image file
+-s: Relative or absolute path to subjid folder (NECESSARY)
+###-b: Relative or absolute path to ribbon file (you may use labels 21 and 22 for HA in ribbon)
+
+-c: Relative or absolute path to subcortical file
+-n: List of labels (LABELS_SUBCORTICAL) to be used in subcortical file (-c)
+#for aparc+aseg.nii.gz : LABELS_SUBCORTICAL='7 8 15 16 46 47' (default, no need to use -n option)
+#for previous subcortical files : LABELS_SUBCORTICAL='5 15 29 30 32 31'
+
+-o: Origin image of HA labels
+-x: List of labels for HA left #'5 17 18' in aparc+aseg / '18 20 22' in HOA_Subcortical_Labels
+-y: List of labels for HA right #'44 53 54' in aparc+aseg / '19 21 23' in HOA_Subcortical_Labels
+
+TAG
+-t 0: (ribbons) Start with resizing SUBCORTICAL
+-t 1: (bmask) Start with BRAIN_MASK
+-t 2: (maskT1) Start with T1_MASKED
+-t 3: (brain.finalsurfs) Start with skull-stripping up to BRAIN_FINALSURFS
+-t 4: (wm-bmask) Start the creation of WM_BMASK based on RIBBON_EDIT
+-t 5: (wm) Start from computing WM based on WM_BMASK
+-t 6: (orig) Start from computing orig surface based on wm from RIBBON_EDIT
+-t 7: (brain.finalsurfs-edit) edit brain.finalsurfs with GM from RIBBON_EDIT
+-t 8: (stats) Start from computing stats
+-t 9: (pial) Start from computing pial surface
+-t 10: Non hemisphere specific files to create
+-t 11: autorecon3: Compute stats and other files
+-t 12: autorecon3: aseg+aparc
+-t 13: BONUS: test some command lines
+
+HA IMPROVEMENT
+-d: Number of dilation in ha_ribbon_edit.py
+-e: Number of erosion in ha_ribbon_edit.py
+
+VALUES
+-p: Give value of PIAL_BORDER_LOW
+
+HEMI
+-r: Compute only right hemisphere surface
+-l: Compute only left hemisphere surface
+
+RESET
+-d: Reset outputs folder and report.sh script
+
+WHOLE FOLDER
+-f: Execute the script for each subfolder in given folder. 
+Each subfolder name will be used as SUBJID and the given folder will be SUBJECTS_DIR.
+Each subfolder should contain:
+	- a ribbon file with a name containing 'ribbon' (the only one)
+	- a subcortical file with a name containing 'subcortical' (the only one)
+	- a T1 image (containing 'T1') if '-i *' is used as an option (execute recon-all)
+	IF NOT: each subfolder should contain recon-all output (mri folder at least)
+
+TROUBLESHOOTS:
+-Missing argument: check if you put the necessary option flags, and for each flag, if it needs an argument or not.
+"
+}
+
+#################
+## Default global variables
+#################
+TAG=-1 # Start from beginning (option -t not used)
+HEMI=-1 # Both hemispheres (option -r or -l not used)
+FS=0 # Default: No recon-all (option -i not used)
+MULTICASE=0 # Default: Only one case (option -f not used)
+OUTPUT_FOLDER="outputs"
+N_DILATION=3
+N_EROSION=2
+##LABELS_SUBCORTICAL="7 8 15 16 46 47" #for previous subcortical files (given to -c) : "5 15 29 30 32 31"
+#LABELS_SUBCORTICAL_OLD="1 18 31 29 16 9 11 13 4 5 15 20 22 3 7 25 27 2 19 32 30 17 10 12 14 21 23 8 26 28 24" #From HOA dseg
+#LABELS_SUBCORTICAL_NEW="4 5 7 8 10 11 12 13 14 15 16 17 18 24 26 28 28 43 44 46 47 49 50 51 52 53 54 58 60 60 85" #Freesurfer's true label values
+
+
+# POSITIONALLY STABLE MAPPING (1-32)
+# Maps your raw HOA labels to standard FreeSurfer indices
+LABELS_SUBCORTICAL_OLD="1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 31 32"
+LABELS_SUBCORTICAL_NEW="4 43 24 14 15 0 26 58 11 50 12 51 13 52 16 10 49 5 44 17 53 18 54 85 28 60 28 60 8 47 7 46"
+
+declare -a LABELS_RIBBON_OLD=("34 33 1 7 9 11 13 16 25 27" "36 35 2 8 10 12 14 17 26 28") #3,4=csf, 3rd ventricle
+declare -a LABELS_RIBBON_NEW=("3 2 2 2 2 2 2 2 2 2" "42 41 41 41 41 41 41 41 41 41") #24,14=csf, 3rd ventricle
+
+#declare -a LABELS_HA=("5 17 18" "44 53 54") #HA in aparc+aseg / ('18 20 22' '19 21 23') in HOA_Subcortical_Labels
+#declare -a LABELS_HA_RIB=("21" "22") #HA in ribbon (-n flag)
+declare -a H=("lh" "rh") #Left then Right hemispheres
+declare -a LABEL_RIBBON_WM=("2" "41") #("33 1 7 10 12 14 17 26 28" "35 2 8 9 11 13 16 25 27") #("33" "35")
+declare -a LABEL_RIBBON_GM=("3" "42") #("34" "36")
+declare -i N_PARALLEL_COMPUTING=3 #Number of images computed in parallel at the same time
+
+CHANGE_AUTODET=1 # Default: Change autodet with parameters bellow or given as option
+PIAL_BORDER_LOW=5
+
+#################
+## Manage flags
+#################
+string_arguments="" #String of the different arguments in the command line
+
+unset -v IMAGE
+unset -v SUBJID
+#unset -v RIBBON
+unset -v SUBCORTICAL
+unset -v LABELS_SUBCORTICAL
+unset -v HA
+unset -v LABELS_HA_LEFT
+unset -v LABELS_HA_RIGHT
+
+#If a character is followed by :, then it needs an argument just after
+VALID_ARGS="i:s:b:c:n:o:x:y:t:p:f:d:e:hlrk"
+
+while getopts ${VALID_ARGS} opt; do
+  case ${opt} in
+    i) #T1 image path
+        IMAGE=${OPTARG}
+        FS=1
+        string_arguments+="-i ${OPTARG} "
+        ;;
+    s) #Output folder name
+        SUBJID=${OPTARG}
+        string_arguments+="-s ${OPTARG} "
+        ;;
+    #b) #ribbon image path
+        #RIBBON=${OPTARG}
+        #string_arguments+="-b ${OPTARG} "
+        #;;
+    c) #subcortical image path
+        SUBCORTICAL=${OPTARG}
+        string_arguments+="-c ${OPTARG} "
+        ;;
+    n) #subcortical labels
+        LABELS_SUBCORTICAL=${OPTARG} #for previous subcortical files : "5 15 29 30 32 31"
+        string_arguments+="-n '${OPTARG}' "
+        ;;
+    o) #HA image path
+        HA=${OPTARG}
+        string_arguments+="-o ${OPTARG} "
+        ;;
+    x) #HA labels left
+        LABELS_HA_LEFT=${OPTARG}
+        string_arguments+="-x '${OPTARG}' "
+        ;;
+    y) #HA labels right
+        LABELS_HA_RIGHT=${OPTARG}
+        string_arguments+="-y '${OPTARG}' "
+        ;;
+    t) #Tag to (re)start script from
+	TAG=${OPTARG}
+	string_arguments+="-t ${OPTARG} "
+	;;
+    p) #Value to give to stat PIAL_BORDER_LOW
+	PIAL_BORDER_LOW=${OPTARG}
+	string_arguments+="-p ${OPTARG} "
+	;;
+    f) #Do script on all folder
+	SUBJECTS_DIR=${OPTARG}
+	MULTICASE=1
+	string_arguments+="-f ${OPTARG} "
+	;;
+    d) #Number of dilation in ha_ribbon_edit.py
+	N_DILATION=${OPTARG}
+	string_arguments+="-d ${OPTARG} "
+	;;
+    e) #Number of erosion in ha_ribbon_edit.py
+	N_EROSION=${OPTARG}
+	string_arguments+="-e ${OPTARG} "
+	;;
+    h) #Help
+	Help
+	exit 1
+	;;
+    l) #Left hemisphere only
+	HEMI=0 #left hemisphere only
+	string_arguments+="-l "
+	;;
+    r) #Right hemisphere only
+	HEMI=1 #right hemisphere only
+	string_arguments+="-r "
+	;;
+    k) #Kill last OUTPUT_FODLER
+	Delete #Kill report.sh and $OUTPUT_FOLDER
+	string_arguments+="-d "
+	;;
+    :)
+      	echo "Option -${OPTARG} requires an argument."
+      	exit 1
+      	;;
+    ?)
+      	echo "Invalid option: -${OPTARG}."
+      	exit 1
+      	;;
+  esac
+done
+
+#################
+## Remove last character of $SUBJECTS_DIR if /
+#################
+export var="${SUBJECTS_DIR: -1}"
+if [[ "$var" == "/" ]]; then
+export SUBJECTS_DIR="${SUBJECTS_DIR:0:-1}"
+fi
+
+
+#################
+## Main function
+#################
+main()
+{
+
+#################
+## Remove slaches from $SUBJID
+#################
+
+# Test if user provided SUBJID (with -s, or used -f)
+: ${SUBJID:?Missing argument -s}
+
+#remove last / if any
+export var="${SUBJID: -1}"
+if [[ "$var" == "/" ]]; then
+export SUBJID="${SUBJID:0:-1}"
+fi
+
+#remove first character if /
+export var="${SUBJID:0:1}"
+if [[ "$var" == "/" ]]; then
+export SUBJID="${SUBJID:1}"
+fi
+	
+O="$SUBJECTS_DIR/$SUBJID/$OUTPUT_FOLDER"
+
+#################
+## Set default permission of working directory to a+rwx
+#################
+#cd $SUBJECTS_DIR
+#umask 0000
+
+#################
+## Function to print both on terminal and on script report.sh
+#################
+Echo ()
+{
+    builtin echo "$@" | tee -a $O/report.sh
+}
+
+#################
+## Function to reset report.sh, $OUTPUT_FOLDER and mri_convert_correction_by_translation.py
+#################
+CreateFolders()
+{
+echo "Create or confirm existence of $SUBJECTS_DIR/$SUBJID"
+mkdir -p $SUBJECTS_DIR/$SUBJID;
+	
+echo "Create or confirm existence of $O and subfolders"
+mkdir -p $O $O/scripts $O/surf $O/mri $O/mri/orig $O/mri/transforms $O/label $O/stats $O/tmp $O/touch $O/trash;
+}
+
+CreateScripts()
+{
+if [ ! -f "$O/report.sh" ]
+then
+touch $O/report.sh
+Echo "#!/bin/bash"
+fi
+
+script_ha_ribbon_edit
+script_nifti_padding
+script_brain-finalsurfs-edit
+script_edit_aseg_presurf_based_on_ribbon
+script_expert_file
+script_merge_ribbon_subcortical
+script_remap_labels
+}
+
+Delete()
+{
+cmd "Reset $O" \
+"rm -r $O;"
+}
+
+#################
+## Create a python script "ha_ribbon_edit.py"
+#################
+script_ha_ribbon_edit()
+{
+if [ ! -f "$O/ha_ribbon_edit.py" ]
+then
+
+cat > $O/ha_ribbon_edit.py <<EOF
+import os
+import nibabel as nib
+import nibabel.processing #Used in nib.processing.conform
+import scipy.ndimage #Used in nib.processing.conform
+import sys #To add arguments
+import copy #For deepcopy
+import numpy #For motion1
+
+#Arguments
+path_ribbon = sys.argv[1]
+path_aparc = sys.argv[2]
+path_out = sys.argv[3]
+labels_ha_lh = sys.argv[4]
+labels_ha_rh = sys.argv[5]
+labels_ha_rib_lh = sys.argv[6]
+labels_ha_rib_rh = sys.argv[7]
+n_dilation = sys.argv[8]
+n_erosion = sys.argv[9]
+
+
+#Load ribbon
+if not os.path.isfile(path_ribbon):
+    raise FileNotFoundError("The following path doesn't exist: " + path_ribbon)
+else:
+    img_ribbon = nib.load(path_ribbon)
+data_ribbon = img_ribbon.get_fdata()
+(a,b,c)=img_ribbon.header.get_data_shape()
+
+#Load -o file (ie aparc+aseg)
+if not os.path.isfile(path_aparc):
+    raise FileNotFoundError("The following path doesn't exist: " + path_aparc)
+else:
+    img_aparc = nib.load(path_aparc)
+data_aparc = img_aparc.get_fdata()
+
+#Deepcopy of data_ribbon
+data_out= copy.deepcopy(data_ribbon)
+
+#labels into list
+labels_ha_lh = list(map(int,labels_ha_lh.split()))
+labels_ha_rh = list(map(int,labels_ha_rh.split()))
+labels_ha_rib_lh = int(labels_ha_rib_lh)
+labels_ha_rib_rh = int(labels_ha_rib_rh)
+
+#Create labels class
+class L:    
+    l_wm = 33 # lh white matter
+    r_wm = 35 # rh white matter
+    
+    l_gm = 34 # lh gray matter
+    r_gm = 36 # rh gray matter
+
+#Edit ribbon with HA from -o file
+list_HA=[]
+for x in range(a):
+    for y in range(b):
+        for z in range(c):
+            aparc=data_aparc[x,y,z]
+            rib=data_ribbon[x,y,z]
+            if aparc in labels_ha_lh and rib != L.l_wm:
+                list_HA.append((labels_ha_rib_lh,[x,y,z]))
+                data_out[x,y,z]=labels_ha_rib_lh #21 #lh HA
+            elif aparc in labels_ha_rh and rib != L.r_wm:
+                list_HA.append((labels_ha_rib_rh,[x,y,z]))
+                data_out[x,y,z]=labels_ha_rib_rh #22 #rh HA
+
+###Add three diffusion and three erosion steps of HA in GM of ribbon
+#Motions
+d = numpy.eye(3, dtype=int).reshape(-1, 3)
+motion1 = numpy.concatenate((d, -d), axis=0)
+
+def dilation(data, list):
+    data_out = copy.deepcopy(data)
+    list_out = list[:]
+    for (label,[x,y,z]) in list:
+        n_coordinates = motion1 + [[x, y, z]]
+        for (k,n,m) in n_coordinates:
+            out_voxel = int(data[k,n,m])
+            if out_voxel in [L.l_gm,L.r_gm]:
+                data_out[k,n,m]=label
+                list_out.append((label,[k,n,m]))
+    return data_out,list_out
+
+def erosion(data, list):
+    data_out = copy.deepcopy(data)
+    list_out = list[:]
+    for (label,[x,y,z]) in list:
+        n_coordinates = motion1 + [[x, y, z]]
+        next_to_gm = False
+        for (k,n,m) in n_coordinates:
+            out_voxel = int(data[k,n,m])
+            if out_voxel in [L.l_gm,L.r_gm]:
+                next_to_gm = True
+                data_out[x,y,z] = out_voxel
+                break
+        if not(next_to_gm):
+            list_out.append((label,[x,y,z]))
+    return data_out,list_out
+
+data = copy.deepcopy(data_out)
+list = list_HA[:]
+for i in range(int(n_dilation)):
+    data, list = dilation(data, list)
+for i in range(int(n_erosion)):
+    data, list = erosion(data, list)
+
+###Create and save new image
+img_out_rib = nib.Nifti1Image(data, img_ribbon.affine.copy())
+nib.save(img_out_rib, path_out)
+EOF
+fi
+}
+
+#################
+## Create a python script "nifti_padding.py"
+#################
+script_nifti_padding()
+{
+if [ ! -f "$O/nifti_padding.py" ]
+then
+
+cat > $O/nifti_padding.py <<EOF
+#!/usr/bin/env python3
+# ==============================================================================
+# Change MGZ Image Orientation to RAS and Pad to Cubic
+# ==============================================================================
+# This script reorients a MGZ/NIfTI image to RAS (Right-Anterior-Superior)
+# orientation and pads it with zeros to make it cubic (same size in all 3D).
+# The final size will be max_dim x max_dim x max_dim.
+#
+# Usage:
+#   python nifti_padding.py input.mgz output.mgz 0
+#
+# Requirements:
+#   pip install nibabel numpy
+# ==============================================================================
+
+import os
+import numpy as np
+import nibabel as nib
+import nibabel.processing #Used in nib.processing.conform
+import scipy.ndimage #Used in nib.processing.conform
+import sys #To add arguments
+import subprocess
+
+#Padding function: reshape the image to (max_dim, max_dim, max_dim) with same resolution and an orientation of 'RAS' used by recon-all
+def padding(img, new_name):
+    d = max(img.header.get_data_shape())
+    new_img = nib.processing.conform(img, out_shape=(d, d, d), voxel_size = img.header.get_zooms(), order=0, cval=0, orientation='RAS', out_class=None) #d
+    nib.save(new_img, new_name)
+
+# SUBJID directory
+img_in = sys.argv[1]
+img_padded = sys.argv[2]
+
+#Load image to be treated
+if not os.path.isfile(img_in):
+    raise FileNotFoundError("The following path doesn't exist: " + img_in)
+else:
+    img = nib.load(img_in)
+
+padding(img, img_padded)
+EOF
+fi
+}
+
+#################
+## Create a python script "brain-finalsurfs-edit.py"
+#################
+script_brain-finalsurfs-edit()
+{
+if [ ! -f "$O/brain-finalsurfs-edit.py" ]
+then
+
+cat > $O/brain-finalsurfs-edit.py <<EOF
+import os
+import numpy as np #To compute motion
+import nibabel as nib #To edit MRI images
+import sys #To add arguments
+import copy #For deepcopy
+
+#Outside parameters
+path_bf = sys.argv[1] #Brain.finalsurfs without the cerebellum
+path_gmbm = sys.argv[2] #Gray Matter binary mask at 128 (by default) (based on ribbon-edit.mgz)
+path_out = sys.argv[3] #Absolute path of the output brain.finalsurfs
+path_out2 = sys.argv[4] #Absolute path of the output brain.finalsurfs
+path_ha = sys.argv[5] #Put HA as background in brain.finalsurfs (in ribbon-edit)
+
+#Load brain.finalsurfs without the cerebellum
+if not os.path.isfile(path_bf):
+    raise FileNotFoundError("The following path doesn't exist: " + path_bf)
+else:
+    img_bf = nib.load(path_bf)
+data_bf = img_bf.get_fdata()
+(a,b,c)=img_bf.header.get_data_shape()
+
+#Load Gray Matter binary mask at 128
+if not os.path.isfile(path_gmbm):
+    raise FileNotFoundError("The following path doesn't exist: " + path_gmbm)
+else:
+    img_gmbm = nib.load(path_gmbm)
+data_gmbm = img_gmbm.get_fdata()
+(e,f,g)=img_gmbm.header.get_data_shape()
+
+#Test if both images have same size
+if (a!=e or b!=f or c!=g):
+    sys.exit(0)
+
+#Load ribbon
+if not os.path.isfile(path_ha):
+    raise FileNotFoundError("Make sure the following path is correct: " + path_ha)
+else:
+    img_ha = nib.load(path_ha)
+data_ha = img_ha.get_fdata()
+
+#List of coordinates of the 26-nearest-neighbors around (0,0,0) plus itself
+motion = np.transpose(np.indices((3,3,3)) - 1).reshape(-1, 3)
+
+#Deepcopy of data_bf
+data_bf_new = copy.deepcopy(data_bf)
+data_bf_new2 = copy.deepcopy(data_bf)
+
+#Change Gray Matter in data_bf_new to: 80.0/mean_neigbours*val
+for x in range(a):
+    for y in range(b):
+        for z in range(c):
+            if int(data_gmbm[x,y,z]) == 128:
+                val=data_bf[x,y,z]
+                n_coordinates = motion + [[x, y, z]]
+                mean=0
+                nn=0
+                for (k,n,m) in n_coordinates:
+                    if int(data_gmbm[k,n,m]) == 128:
+                        mean+=data_bf[k,n,m]
+                        nn+=1
+                res = 80.0/(mean/nn)*val
+                data_bf_new[x,y,z] = res
+                data_bf_new2[x,y,z]= res
+            if int(data_ha[x,y,z]) in [21,22]: #l_edit and r_edit
+                data_bf_new2[x,y,z]=0
+
+#Create and save new images
+img_bf_new = nib.Nifti1Image(data_bf_new, img_bf.affine.copy())
+nib.save(img_bf_new, path_out)
+
+img_bf_new2 = nib.Nifti1Image(data_bf_new2, img_bf.affine.copy())
+nib.save(img_bf_new2, path_out2)
+EOF
+fi
+}
+
+#################
+## Create a python script "edit_aseg_presurf_based_on_ribbon.py"
+#################
+script_edit_aseg_presurf_based_on_ribbon()
+{
+if [ ! -f "$O/edit_aseg_presurf_based_on_ribbon.py" ]
+then
+
+cat > $O/edit_aseg_presurf_based_on_ribbon.py <<EOF
+####
+#Create aseg.presurf.mgz and aseg.presurf_wo_subc.mgz based on ribbon-edit.mgz
+####
+
+import os
+import nibabel as nib
+import nibabel.processing #Used in nib.processing.conform
+import scipy.ndimage #Used in nib.processing.conform
+import sys #To add arguments
+import copy
+import numpy
+
+from itertools import product  #for motion2
+
+#Outside parameters
+labels_ha_left = sys.argv[1] #Labels for HA left
+labels_ha_right = sys.argv[2] #Labels for HA right
+path_aseg = sys.argv[3] #Path to aseg.presurf.old.mgz
+path_ribbon = sys.argv[4] #Path to ribbon-edit.mgz
+path_out = sys.argv[5] #Path to output aseg.presurf.mgz
+path_out2 = sys.argv[6] #Path to output aseg.presurf_wo_subc.mgz
+path_out3 = sys.argv[7] #Path to output ribbon-wo-edit.mgz
+
+#Convert list of labels
+labels_ha_left = [int(v) for v in labels_ha_left.split()]
+labels_ha_right = [int(v) for v in labels_ha_right.split()]
+
+### Get images
+if not os.path.isfile(path_aseg):
+    raise FileNotFoundError("Make sure the following path is correct: " + path_aseg)
+else:
+    img_aseg = nib.load(path_aseg)
+
+if not os.path.isfile(path_ribbon):
+    raise FileNotFoundError("Make sure the following path is correct: " + path_ribbon)
+else:
+    img_ribbon = nib.load(path_ribbon)
+
+### Get data
+data_aseg = img_aseg.get_fdata() #Not to be edited
+data_ribbon = img_ribbon.get_fdata() #Not to be edited
+
+### Copy aseg
+data_new_aseg = copy.deepcopy(data_aseg) #Copy to be edited
+data_new_mask = copy.deepcopy(data_ribbon) #Copy to be edited
+
+### Get dimensions
+(a,b,c)=img_aseg.header.get_data_shape()
+
+### Create labels class
+class L:
+    r_ce = 45 # right cerebellum exterior (in ribbon)
+    cc_ant = 255 # CC_Anterior
+    wmh = 77 # WM Hypointensities
+    oc = 85 # optic chasm
+    csf = 24 # Cerebrospinal fluid
+    tv = 14 # 3rd ventricle
+    fv = 15 # 4th ventricle
+    bs = 16 # brain stem
+    
+    l_wm = 33 # lh white matter
+    r_wm = 35 # rh white matter
+    
+    l_gm = 34 # lh gray matter
+    r_gm = 36 # rh gray matter
+    
+    l_p = 12 # lh putamen
+    r_p = 51 # rh putamen
+    
+    l_pd = 13 # lh pallidum
+    r_pd = 52 # rh pallidum
+
+    l_t = 10 # lh thalamus
+    r_t = 49 # rh thalamus
+
+    l_c = 11 # lh caudate
+    r_c = 50 # rh caudate
+    
+    l_v = 28 # lh ventralDC
+    r_v = 60 # rh ventralDC
+    
+    l_vs = 30 # lh left vessel
+    r_vs = 62 # rh right vessel
+    
+    l_lv = 4 # lh lateral ventricle
+    r_lv = 43 # rh lateral ventricle
+    
+    l_h = 17 # lh hippocampus
+    r_h = 53 # rh hippocampus
+    
+    l_a = 18 # lh amygdala
+    r_a = 54 # rh amygdala
+    
+    l_aa = 26 # lh Accumbens area
+    r_aa = 58 # rh Accumbens area
+    
+    l_cp = 31 # lh choroid plexus
+    r_cp = 63 # rh choroid plexus
+    
+    l_ilv = 5 # rh Inf lat vent
+    r_ilv = 44 # rh Inf lat vent
+    
+    #CEREBELUM
+    
+    l_cw = 7 # lh cerebellum white matter
+    r_cw = 46 # rh cerebellum white matter
+    
+    l_cc = 8 # lh cerebellum cortex
+    r_cc = 47 # rh cerebellum cortex
+    
+    #EDIT RIBBON
+    
+    #l_edit = [5, 17, 18] #'18 20 22' #21 #lh manuel edit in ribbon #labels_ha_left
+    #r_edit = [44, 53, 54] #'19 21 23' #22 #rh manuel edit in ribbon #labels_ha_right
+
+### Instantiate lists
+list_LH=[] #Subcortical structures in lh
+list_RH=[] #Subcortical structures in rh
+list_edit=[] #edit in ribbon
+
+### Modify BG, WM, GM, CC_anterior and subcortical structures based on ribbon
+for x in range(a):
+    for y in range(b):
+        for z in range(c):
+            ribbon_voxel = int(data_ribbon[x,y,z]) #ribbon-edit.mgz
+            aseg_voxel = int(data_aseg[x,y,z])
+            
+            if ribbon_voxel in (labels_ha_left + labels_ha_right): #List the voxels of HA complex in ribbon, to remove them in ribbon_wo_edit
+                list_edit.append((ribbon_voxel,[x,y,z]))
+                data_new_aseg[x,y,z] = ribbon_voxel
+            
+            if aseg_voxel != ribbon_voxel: #Voxel for which label may have to be changed
+                match ribbon_voxel:
+            	    case 0 if aseg_voxel not in [L.l_cc,L.r_cc,L.l_cw,L.r_cw,L.bs,L.fv]: #correction of CEREBELLUM
+            	        data_new_aseg[x,y,z] = ribbon_voxel
+            	    case L.l_gm | L.r_gm: 
+            	        data_new_aseg[x,y,z] = ribbon_voxel
+            	    case L.l_wm:
+            	        if aseg_voxel in [0, L.l_gm, L.bs, L.l_h, L.l_ilv, L.l_a]:
+            	            data_new_aseg[x,y,z] = L.l_wm
+            	        elif aseg_voxel in [L.l_p,L.l_pd,L.l_v,L.l_lv,L.l_aa,L.l_t,L.l_c,L.l_cp,L.l_h,L.l_vs,L.wmh,L.oc,L.csf,L.tv]: #SUBCORTICAL structure lh that should not be in wo_subc only
+            	            list_LH.append((aseg_voxel,[x,y,z]))
+            	    case L.r_wm:
+            	        if aseg_voxel in [0, L.r_gm, L.bs, L.r_h, L.r_ilv, L.r_a]:
+            	            data_new_aseg[x,y,z] = L.r_wm
+            	        elif aseg_voxel in [L.r_p,L.r_pd,L.r_v,L.r_lv,L.r_aa,L.r_t,L.r_c,L.r_cp,L.r_vs,L.wmh,L.oc,L.csf,L.tv]: #SUBCORTICAL structure rh only that should not be in wo_subc only
+            	            list_RH.append((aseg_voxel,[x,y,z]))
+
+### Copy data_new_aseg
+data_new_aseg_wo_subc = copy.deepcopy(data_new_aseg) #Copy to be edited
+data_ribbon_wo_edit = copy.deepcopy(data_ribbon) #Copy to be edited
+
+### Replace different subcortical structures by WM (Putamen, VentralDC, CC_Anterior)
+for (label,[x,y,z]) in list_LH:
+    data_new_aseg_wo_subc[x,y,z] = L.l_wm
+for (label,[x,y,z]) in list_RH:
+    data_new_aseg_wo_subc[x,y,z] = L.r_wm
+
+### Replace Edit in ribbon by GM
+for (label,[x,y,z]) in list_edit:
+    data_ribbon_wo_edit[x, y, z] = L.l_gm if label in labels_ha_left else L.r_gm
+
+### Save both new aseg
+img_new_aseg = nib.Nifti1Image(data_new_aseg, img_ribbon.affine.copy())
+nib.save(img_new_aseg, path_out)
+
+img_new_aseg_wo_subc = nib.Nifti1Image(data_new_aseg_wo_subc, img_ribbon.affine.copy())
+nib.save(img_new_aseg_wo_subc, path_out2)
+
+img_ribbon_wo_edit = nib.Nifti1Image(data_ribbon_wo_edit, img_ribbon.affine.copy())
+nib.save(img_ribbon_wo_edit, path_out3)
+EOF
+fi
+}
+
+#################erode_into_mask
+## Create a python script "merge_ribbon_subcortical.py"
+#################
+script_merge_ribbon_subcortical()
+{
+if [ ! -f "$O/merge_ribbon_subcortical.py" ]
+then
+
+cat > $O/merge_ribbon_subcortical.py <<EOF
+#!/usr/bin/env python3
+# ==============================================================================
+# Merge Subcortical Labels into Ribbon with Morphological Operations
+# ==============================================================================
+# This script merges selected subcortical labels into a ribbon file, with
+# optional morphological operations (dilation followed by erosion) applied
+# to specific labels, while preserving designated ribbon labels.
+#
+# Usage:
+#   python merge_ribbon_subcortical.py <RIBBON.nii.gz> <SUBCORTICAL.nii.gz> <OUTPUT.nii.gz>
+#                                      --subcortical-labels '18 20 22 19 21 23'
+#                                      --transform-labels '18 20 22 19 21 23'
+#                                      --n-dilate 3 --n-erode 2
+#                                      --preserve-ribbon '3 42'
+#                                      --dilate-into '2 41'
+#                                      --erode-into '2 41'
+#
+# Example:
+#   python merge_ribbon_subcortical.py ribbon.nii.gz subcortical.nii.gz output.nii.gz \
+#          --subcortical-labels '18 20 22 19 21 23' \
+#          --transform-labels '18 20 22 19 21 23' \
+#          --n-dilate 3 --n-erode 2 \
+#          --preserve-ribbon '3 42' \
+#          --dilate-into '2 41' \
+#          --erode-into '2 41'
+# ==============================================================================
+
+import argparse
+import sys
+import numpy as np
+import nibabel as nib
+from scipy import ndimage
+
+
+def parse_arguments():
+    """
+    Parse command-line arguments.
+
+    Returns:
+        argparse.Namespace: Parsed arguments containing file paths and parameters.
+    """
+    parser = argparse.ArgumentParser(
+        description="Merge subcortical labels into ribbon with morphological operations.",
+        formatter_class=argparse.RawTextHelpFormatter
+    )
+
+    # Positional arguments: input and output files
+    parser.add_argument(
+        "ribbon",
+        type=str,
+        help="Path to the RIBBON NIfTI file (.nii.gz)"
+    )
+    parser.add_argument(
+        "subcortical",
+        type=str,
+        help="Path to the SUBCORTICAL NIfTI file (.nii.gz)"
+    )
+    parser.add_argument(
+        "output",
+        type=str,
+        help="Path to the OUTPUT NIfTI file (.nii.gz)"
+    )
+
+    # Label specifications
+    parser.add_argument(
+        "--subcortical-labels",
+        type=str,
+        required=True,
+        metavar="LABELS",
+        help="Space-separated list of subcortical labels to merge into ribbon\n"
+             "Example: --subcortical-labels '18 20 22 19 21 23'"
+    )
+    parser.add_argument(
+        "--transform-labels",
+        type=str,
+        required=True,
+        metavar="LABELS",
+        help="Space-separated list of labels to apply morphological operations to\n"
+             "Must be a subset of --subcortical-labels\n"
+             "Example: --transform-labels '18 20 22'"
+    )
+
+    # Morphological operation parameters
+    parser.add_argument(
+        "--n-dilate",
+        type=int,
+        required=True,
+        metavar="N",
+        help="Number of dilation iterations to apply to transform-labels"
+    )
+    parser.add_argument(
+        "--n-erode",
+        type=int,
+        required=True,
+        metavar="N",
+        help="Number of erosion iterations to apply after dilation"
+    )
+    parser.add_argument(
+        "--erode-into",
+        type=str,
+        required=True,
+        metavar="LABEL",
+        help="Label values that eroded voxels will take\n"
+             "Erosion only occurs at borders with this label\n"
+             "Example: --erode-into '3 42'"
+    )
+    # Ribbon label specifications
+    parser.add_argument(
+        "--preserve-ribbon",
+        type=str,
+        required=True,
+        metavar="LABELS",
+        help="Space-separated list of ribbon labels to preserve (not overwritten)\n"
+             "Example: --preserve-ribbon '2 41'"
+    )
+    parser.add_argument(
+        "--dilate-into",
+        type=str,
+        required=True,
+        metavar="LABELS",
+        help="Space-separated list of ribbon labels that dilation can expand into\n"
+             "Example: --dilate-into '3 42'"
+    )
+    return parser.parse_args()
+
+
+def parse_label_string(label_str):
+    """
+    Parse a space-separated string of numbers into a list of integer values.
+
+    Args:
+        label_str (str): Space-separated string of numbers.
+
+    Returns:
+        list: List of integer label values.
+    """
+    try:
+        values = [int(float(v)) for v in label_str.split()]
+        return values
+    except ValueError:
+        print(f"Error: Could not parse label string '{label_str}'. "
+              f"Expected space-separated numbers.")
+        sys.exit(1)
+
+
+def validate_inputs(subcortical_labels, transform_labels, preserve_ribbon, dilate_into):
+    """
+    Validate input label lists for consistency.
+
+    Args:
+        subcortical_labels (list): Labels to merge from subcortical.
+        transform_labels (list): Labels to apply morphology to.
+        preserve_ribbon (list): Ribbon labels to preserve.
+        dilate_into (list): Ribbon labels to allow dilation into.
+
+    Raises:
+        SystemExit: If validation fails.
+    """
+    # Check that transform_labels is a subset of subcortical_labels
+    if not set(transform_labels).issubset(set(subcortical_labels)):
+        extra_labels = set(transform_labels) - set(subcortical_labels)
+        print(f"Error: --transform-labels contains labels not in --subcortical-labels: {extra_labels}")
+        sys.exit(1)
+
+    # Check that preserve and dilate-into don't overlap
+    overlap = set(preserve_ribbon) & set(dilate_into)
+    if overlap:
+        print(f"Warning: Labels appear in both --preserve-ribbon and --dilate-into: {overlap}")
+        print(f"         These labels will be preserved (dilate-into will be ignored for them)")
+
+
+def apply_single_dilation(label_value, current_output, dilate_into_mask, preserve_mask):
+    """
+    Apply a single dilation iteration to one label in the output volume.
+    
+    Args:
+        label_value (int): The label value to dilate.
+        current_output (np.ndarray): Current state of the output volume (modified in-place).
+        dilate_into_mask (np.ndarray): Binary mask of regions where dilation is allowed (bool).
+        preserve_mask (np.ndarray): Binary mask of voxels that should never be overwritten.
+
+    Returns:
+        int: Number of voxels after dilation.
+    """
+    # Define 3D structuring element (6-connectivity: faces only)
+    structure = ndimage.generate_binary_structure(3, 1)
+    
+    # Extract current mask for this label
+    label_mask = (current_output == label_value)
+    
+    # Dilate the current mask
+    dilated = ndimage.binary_dilation(label_mask, structure=structure)
+    
+    # Constrain dilation:
+    # - Can expand into dilate_into_mask regions
+    ## - Can expand into background (where current_output == 0)
+    # - Cannot overwrite preserved labels
+    # - Cannot overwrite other labels (check current_output)
+    allowed_expansion = dilate_into_mask #| (current_output == 0)
+    allowed_expansion = allowed_expansion & ~preserve_mask
+    
+    # Keep only expanded voxels that are allowed
+    result = dilated & (allowed_expansion | label_mask)
+    
+    # Update the current output volume with this label
+    # Remove this label from current output first, then add the expanded version
+    current_output[current_output == label_value] = 0
+    merge_mask = result & ~preserve_mask
+    current_output[merge_mask] = label_value
+    
+    return np.sum(result)
+
+
+def apply_single_erosion(label_value, erode_neighbor_labels, current_output, preserve_mask, ribbon_data):
+    """
+    Apply a single erosion iteration to one label in the output volume.
+    
+    Erosion only occurs where the label has a neighbor voxel with erode_neighbor_labels.
+    The eroded voxels take the value of erode_neighbor_labels.
+    
+    Args:
+        label_value (int): The label value to erode.
+        erode_neighbor_labels (list of int): Neighbor values to look for to erode.
+        current_output (np.ndarray): Current state of the output volume (modified in-place).
+        preserve_mask (np.ndarray): Binary mask of voxels that should never be overwritten.
+        ribbon_data (np.ndarray): Reference ribbon volume.
+
+    Returns:
+        tuple: (number of voxels after erosion, number of voxels eroded)
+    """
+    # Define 3D structuring element (6-connectivity: faces only)
+    structure = ndimage.generate_binary_structure(3, 1)
+    
+    # Extract current mask for this label
+    label_mask = (current_output == label_value)
+    
+    # Find voxels with erode_neighbor_labels
+    erode_into_mask = np.isin(current_output,erode_neighbor_labels)
+    
+    # Dilate the erode_into_mask to find border voxels
+    # These are positions where erode_neighbor_labels neighbors exist
+    erode_into_dilated = ndimage.binary_dilation(erode_into_mask, structure=structure)
+    
+    # Border voxels are those in label_mask that neighbor erode_neighbor_labels
+    border_voxels = label_mask & erode_into_dilated
+    
+    # Standard erosion of the label
+    eroded_mask = ndimage.binary_erosion(label_mask, structure=structure)
+    
+    # Voxels that would be removed by standard erosion
+    removed_by_erosion = label_mask & ~eroded_mask
+    
+    # Only actually erode voxels that are at the border with erode_neighbor_labels
+    actually_eroded = removed_by_erosion & border_voxels
+    
+    # The remaining label voxels
+    remaining_label = label_mask & ~actually_eroded
+    
+    # Update the current output volume
+    # First remove the label
+    current_output[current_output == label_value] = 0
+    # Add back the remaining label voxels
+    current_output[remaining_label & ~preserve_mask] = label_value
+    # Set eroded voxels to erode_neighbor_labels
+    current_output[actually_eroded & ~preserve_mask] = ribbon_data[actually_eroded & ~preserve_mask]
+    
+    n_remaining = np.sum(remaining_label)
+    n_eroded = np.sum(actually_eroded)
+    
+    return n_remaining, n_eroded
+
+
+def main():
+    """
+    Main function: loads files, merges labels with morphology, and saves result.
+    """
+    # --------------------------------------------------------------------------
+    # 1. Parse and validate arguments
+    # --------------------------------------------------------------------------
+    args = parse_arguments()
+
+    # Parse label strings into lists of integers
+    subcortical_labels = parse_label_string(args.subcortical_labels)
+    transform_labels = parse_label_string(args.transform_labels)
+    preserve_ribbon = parse_label_string(args.preserve_ribbon)
+    dilate_into = parse_label_string(args.dilate_into)
+    erode_into = parse_label_string(args.erode_into)
+
+    print("=" * 70)
+    print("Merge Subcortical into Ribbon with Morphological Operations")
+    print("=" * 70)
+    print(f"RIBBON file           : {args.ribbon}")
+    print(f"SUBCORTICAL file      : {args.subcortical}")
+    print(f"OUTPUT file           : {args.output}")
+    print(f"Subcortical labels    : {subcortical_labels}")
+    print(f"Transform labels      : {transform_labels}")
+    print(f"Dilations             : {args.n_dilate}")
+    print(f"Erosions              : {args.n_erode}")
+    print(f"Erode into label      : {erode_into}")
+    print(f"Preserve ribbon       : {preserve_ribbon}")
+    print(f"Dilate into           : {dilate_into}")
+    print("=" * 70)
+
+    # Validate label lists
+    validate_inputs(subcortical_labels, transform_labels, preserve_ribbon, dilate_into)
+
+    # --------------------------------------------------------------------------
+    # 2. Load the NIfTI files
+    # --------------------------------------------------------------------------
+    print(f"\nLoading RIBBON: {args.ribbon}")
+    try:
+        ribbon_img = nib.load(args.ribbon)
+        #ribbon_img = nib.as_closest_canonical(ribbon_img) #RAS orientation
+        ribbon_data = ribbon_img.get_fdata().astype(np.int32)
+    except Exception as e:
+        print(f"Error loading ribbon file: {e}")
+        sys.exit(1)
+
+    print(f"Loading SUBCORTICAL: {args.subcortical}")
+    try:
+        subcortical_img = nib.load(args.subcortical)
+        #subcortical_img = nib.as_closest_canonical(subcortical_img) #RAS orientation
+        subcortical_data = subcortical_img.get_fdata().astype(np.int32)
+    except Exception as e:
+        print(f"Error loading subcortical file: {e}")
+        sys.exit(1)
+
+    # Verify that both images have the same shape
+    if ribbon_data.shape != subcortical_data.shape:
+        print(f"Error: RIBBON shape {ribbon_data.shape} != SUBCORTICAL shape {subcortical_data.shape}")
+        sys.exit(1)
+
+    print(f"Image shape: {ribbon_data.shape}")
+
+    # --------------------------------------------------------------------------
+    # 3. Create output array starting from ribbon
+    # --------------------------------------------------------------------------
+    # Start with a copy of the ribbon data
+    output_data = ribbon_data.copy()
+
+    # Create a mask of ribbon labels to preserve (these will never be overwritten)
+    preserve_mask = np.isin(ribbon_data, preserve_ribbon)
+    print(f"\nPreserving {np.sum(preserve_mask)} voxels with ribbon labels {preserve_ribbon}")
+
+    # Create a mask of ribbon labels that dilation can expand into
+    dilate_into_mask = np.isin(ribbon_data, dilate_into)
+    print(f"Allowing dilation into {np.sum(dilate_into_mask)} voxels with labels {dilate_into}")
+
+    # --------------------------------------------------------------------------
+    # 4. Process subcortical labels
+    # --------------------------------------------------------------------------
+    print(f"\n{'='*70}")
+    print("Processing subcortical labels...")
+    print(f"{'='*70}")
+
+    # Separate labels into transform and non-transform groups
+    non_transform_labels = [l for l in subcortical_labels if l not in transform_labels]
+
+    # Process non-transform labels first (simple merge)
+    if non_transform_labels:
+        print(f"\nMerging non-transformed labels: {non_transform_labels}")
+        for label in non_transform_labels:
+            # Extract this label from subcortical
+            label_mask = (subcortical_data == label)
+            n_voxels = np.sum(label_mask)
+
+            if n_voxels == 0:
+                print(f"  Label {label}: not found in subcortical, skipping")
+                continue
+
+            # Merge into output, but don't overwrite preserved ribbon labels
+            merge_mask = label_mask & ~preserve_mask
+            n_merged = np.sum(merge_mask)
+
+            output_data[merge_mask] = label
+            print(f"  Label {label}: merged {n_merged}/{n_voxels} voxels "
+                  f"({n_voxels - n_merged} blocked by preserved labels)")
+
+    # Process transform labels with morphological operations
+    if transform_labels:
+        print(f"\nProcessing transformed labels with morphology: {transform_labels}")
+        print(f"  Dilation iterations: {args.n_dilate}")
+        print(f"  Erosion iterations : {args.n_erode}")
+        print(f"  Note: All labels receive each dilation iteration together,")
+        print(f"        then all labels receive each erosion iteration together")
+        print()
+        
+        # First, add all transform labels to the output (starting state)
+        print("  Initializing transform labels in output:")
+        for label in transform_labels:
+            label_mask = (subcortical_data == label)
+            n_voxels = np.sum(label_mask)
+            
+            if n_voxels == 0:
+                print(f"    Label {label}: not found in subcortical, skipping")
+                transform_labels.remove(label)
+                continue
+            
+            # Add to output (respecting preserve mask)
+            merge_mask = label_mask & ~preserve_mask
+            output_data[merge_mask] = label
+            print(f"    Label {label}: {n_voxels} voxels initialized")
+        
+        # Track voxel counts for each label
+        voxel_counts = {label: np.sum(output_data == label) for label in transform_labels}
+        
+        # Create a mask of ribbon labels that dilation can expand into AFTER adding other labels
+        dilate_into_mask = np.isin(output_data, dilate_into)  #dilate_into is a list of values, to make a mask of
+        print(f"Allowing dilation into {np.sum(dilate_into_mask)} voxels with labels {dilate_into}")
+        
+        # Apply dilation iterations - ALL labels get each iteration together
+        if args.n_dilate > 0:
+            print(f"\n  Applying {args.n_dilate} dilation iteration(s) to all labels:")
+            allowed_expansion = dilate_into_mask #| (output_data == 0) #Consider background in ribbon correct
+            
+            for iteration in range(args.n_dilate):
+                print(f"\n    Dilation iteration {iteration + 1}/{args.n_dilate}:")
+                
+                # Apply this dilation iteration to each label
+                for label in transform_labels:
+                    complete_preserve_mask=preserve_mask & np.isin(output_data, transform_labels) #add labels to be transformed to the preserve_mask
+                    n_voxels = apply_single_dilation(label, output_data, 
+                                                     allowed_expansion, complete_preserve_mask)
+                    delta = n_voxels - voxel_counts[label]
+                    print(f"      Label {label}: {n_voxels} voxels (Δ{delta:+d})")
+                    voxel_counts[label] = n_voxels
+        
+        # Apply erosion iterations - ALL labels get each iteration together
+        if args.n_erode > 0:
+            print(f"\n  Applying {args.n_erode} erosion iteration(s) to all labels:")
+            print(f"  (Erosion only at borders with label {erode_into}, eroded voxels become {erode_into})")
+            
+            for iteration in range(args.n_erode):
+                print(f"\n    Erosion iteration {iteration + 1}/{args.n_erode}:")
+                
+                # Apply this erosion iteration to each label
+                for label in transform_labels:
+                    complete_preserve_mask=preserve_mask & np.isin(output_data, transform_labels) #add labels to be transformed to the preserve_mask
+                    n_voxels, n_eroded_voxels = apply_single_erosion(label, erode_into, output_data, complete_preserve_mask, ribbon_data)
+                    delta = n_voxels - voxel_counts[label]
+                    print(f"      Label {label}: {n_voxels} voxels (Δ{delta:+d}, {n_eroded_voxels} eroded into {erode_into})")
+                    voxel_counts[label] = n_voxels
+        
+        # Print final summary for transformed labels
+        print(f"\n  Final voxel counts after morphology:")
+        for label in transform_labels:
+            n_original = np.sum(subcortical_data == label)
+            n_final = voxel_counts[label]
+            print(f"    Label {label}: {n_final} voxels (original: {n_original}, Δ{n_final - n_original:+d})")
+
+    # --------------------------------------------------------------------------
+    # 5. Summary statistics
+    # --------------------------------------------------------------------------
+    print(f"\n{'='*70}")
+    print("Summary")
+    print(f"{'='*70}")
+
+    # Count voxels by source
+    ribbon_labels_final = np.isin(output_data, list(set(ribbon_data.flatten())))
+    subcortical_labels_final = np.isin(output_data, subcortical_labels)
+
+    n_from_ribbon = np.sum(ribbon_labels_final & ~subcortical_labels_final)
+    n_from_subcortical = np.sum(subcortical_labels_final)
+    n_background = np.sum(output_data == 0)
+
+    print(f"Voxels from original ribbon    : {n_from_ribbon}")
+    print(f"Voxels from subcortical        : {n_from_subcortical}")
+    print(f"Background voxels (0)          : {n_background}")
+    print(f"Total voxels                   : {output_data.size}")
+
+    # List final labels
+    final_labels = np.unique(output_data)
+    final_labels = final_labels[final_labels != 0]
+    print(f"\nFinal labels in output: {sorted(final_labels.tolist())}")
+
+    # --------------------------------------------------------------------------
+    # 6. Save the output NIfTI file
+    # --------------------------------------------------------------------------
+    # Use the ribbon's affine and header to preserve spatial information
+    output_img = nib.Nifti1Image(output_data.astype(np.int32),
+                                  ribbon_img.affine,
+                                  ribbon_img.header)
+    print(f"\nSaving output: {args.output}")
+    try:
+        nib.save(output_img, args.output)
+    except Exception as e:
+        print(f"Error saving output file: {e}")
+        sys.exit(1)
+
+    print("\n" + "=" * 70)
+    print("Done!")
+    print("=" * 70)
+
+
+if __name__ == "__main__":
+    main()
+
+EOF
+fi
+}
+
+#################
+## Create a python script "remap_labels.py"
+#################
+script_remap_labels()
+{
+if [ ! -f "$O/remap_labels.py" ]
+then
+
+cat > $O/remap_labels.py <<EOF
+#!/usr/bin/env python3
+# ==============================================================================
+# NIfTI Label Remapping Script
+# ==============================================================================
+# This script takes a NIfTI label file (.nii.gz) and remaps label values
+# from a source list to a target list (one-to-one correspondence).
+# Optionally, labels not present in the source list can be set to 0.
+#
+# Usage:
+#   python remap_labels.py <input.nii.gz> <output.nii.gz>
+#                          --src '1 2 3' --dst '10 20 30'
+#                          [--remove-unlisted]
+#
+# Examples:
+#   # Remap labels 1,2,3 to 10,20,30, keep unlisted labels
+#   python remap_labels.py input.nii.gz output.nii.gz --src '1 2 3' --dst '10 20 30'
+#
+#   # Remap labels 1,2,3 to 10,20,30, set all other labels to 0
+#   python remap_labels.py input.nii.gz output.nii.gz --src '1 2 3' --dst '10 20 30' --remove-unlisted
+# ==============================================================================
+
+import argparse
+import sys
+import numpy as np
+import nibabel as nib
+
+
+def parse_arguments():
+    """
+    Parse command-line arguments.
+
+    Returns:
+        argparse.Namespace: Parsed arguments containing input file, output file,
+                            source labels, destination labels, and options.
+    """
+    parser = argparse.ArgumentParser(
+        description="Remap labels in a NIfTI (.nii.gz) file from a source list "
+                    "to a destination list, with optional removal of unlisted labels.",
+        formatter_class=argparse.RawTextHelpFormatter
+    )
+
+    # Positional arguments
+    parser.add_argument(
+        "input",
+        type=str,
+        help="Path to the input NIfTI file (.nii.gz)"
+    )
+    parser.add_argument(
+        "output",
+        type=str,
+        help="Path to the output NIfTI file (.nii.gz)"
+    )
+
+    # Source and destination label lists
+    parser.add_argument(
+        "--src",
+        type=str,          # Changed from float to str
+        nargs=1,           # Changed from "+" to 1 (single quoted string)
+        required=True,
+        metavar="LABELS",
+        help="Quoted space-separated list of source labels (e.g. --src '1 2 3')"
+    )
+    parser.add_argument(
+        "--dst",
+        type=str,          # Changed from float to str
+        nargs=1,           # Changed from "+" to 1 (single quoted string)
+        required=True,
+        metavar="LABELS",
+        help="Quoted space-separated list of destination labels (e.g. --dst '10 20 30')"
+    )
+
+    # Optional flag to remove unlisted labels
+    parser.add_argument(
+        "--remove-unlisted",
+        action="store_true",
+        default=False,
+        help="If set, labels not present in --src will be set to 0 (background).\n"
+             "By default, unlisted labels are kept unchanged."
+    )
+
+    return parser.parse_args()
+
+
+def validate_inputs(src_labels, dst_labels):
+    """
+    Validate that source and destination label lists are compatible.
+
+    Args:
+        src_labels (list): Source label values.
+        dst_labels (list): Destination label values.
+
+    Raises:
+        SystemExit: If validation fails.
+    """
+    # Check that both lists have the same length
+    if len(src_labels) != len(dst_labels):
+        print(f"Error: --src ({len(src_labels)} values) and --dst ({len(dst_labels)} values) "
+              f"must have the same number of elements.")
+        sys.exit(1)
+
+    # Check for duplicate source labels
+    if len(src_labels) != len(set(src_labels)):
+        print("Error: --src contains duplicate values. Each source label must be unique.")
+        sys.exit(1)
+
+    # Warn if two source labels map to the same destination
+    if len(dst_labels) != len(set(dst_labels)):
+        print("Warning: --dst contains duplicate values. Multiple source labels "
+              "will map to the same destination label.")
+
+def parse_label_string(label_str):
+    """
+    Parse a quoted space-separated string of numbers into a list of values.
+
+    Args:
+        label_str (list): Single-element list containing the quoted string.
+
+    Returns:
+        list: List of numeric label values (int or float).
+    """
+    try:
+        values = [float(v) for v in label_str[0].split()]
+        return [int(v) if v == int(v) else v for v in values]
+    except ValueError:
+        print(f"Error: Could not parse label string '{label_str[0]}'. "
+              f"Expected space-separated numbers.")
+        sys.exit(1)
+
+def remap_labels(data, src_labels, dst_labels, remove_unlisted=False):
+    """
+    Remap label values in a numpy array.
+
+    For each voxel, if its value is in src_labels, it is replaced by the
+    corresponding value in dst_labels. If remove_unlisted is True, voxels
+    with labels not in src_labels are set to 0.
+
+    Args:
+        data        (np.ndarray): Input label array (any integer dtype).
+        src_labels  (list)      : Source label values to remap.
+        dst_labels  (list)      : Destination label values (same order as src).
+        remove_unlisted (bool)  : If True, set unlisted labels to 0.
+
+    Returns:
+        np.ndarray: Remapped label array (same shape as input).
+    """
+    # Build the output array:
+    # - Start with zeros if removing unlisted labels
+    # - Start with a copy of input to preserve unlisted labels otherwise
+    if remove_unlisted:
+        output = np.zeros_like(data)
+    else:
+        output = data.copy()
+
+    # Apply each source -> destination mapping
+    for src, dst in zip(src_labels, dst_labels):
+        # Create a boolean mask for voxels matching this source label
+        mask = (data == src)
+        n_voxels = np.sum(mask)
+
+        if n_voxels == 0:
+            # Warn if a requested label is not found in the data
+            print(f"  Warning: Source label {src} not found in the image.")
+        else:
+            # Apply remapping
+            output[mask] = dst
+            print(f"  {src:>10.0f}  -->  {dst:<10.0f}  ({n_voxels} voxels)")
+
+    return output
+
+
+def main():
+    """
+    Main function: loads NIfTI, remaps labels, and saves the result.
+    """
+    # --------------------------------------------------------------------------
+    # 1. Parse and validate arguments
+    # --------------------------------------------------------------------------
+    args = parse_arguments()
+
+    # Convert label lists to integers if they are whole numbers,
+    # keeping floats otherwise (to support float-valued label files)
+    ##src_labels = [int(v) if v == int(v) else v for v in args.src]
+    ##dst_labels = [int(v) if v == int(v) else v for v in args.dst]
+    # Parse quoted space-separated label strings
+    src_labels = parse_label_string(args.src)
+    dst_labels = parse_label_string(args.dst)
+
+    print("=" * 60)
+    print("NIfTI Label Remapping")
+    print("=" * 60)
+    print(f"Input file      : {args.input}")
+    print(f"Output file     : {args.output}")
+    print(f"Source labels   : {src_labels}")
+    print(f"Dest labels     : {dst_labels}")
+    print(f"Remove unlisted : {args.remove_unlisted}")
+    print("=" * 60)
+
+    # Validate source and destination lists
+    validate_inputs(src_labels, dst_labels)
+
+    # --------------------------------------------------------------------------
+    # 2. Load the NIfTI file
+    # --------------------------------------------------------------------------
+    print(f"\nLoading: {args.input}")
+    try:
+        img = nib.load(args.input)
+    except FileNotFoundError:
+        print(f"Error: Input file '{args.input}' not found.")
+        sys.exit(1)
+    except Exception as e:
+        print(f"Error loading NIfTI file: {e}")
+        sys.exit(1)
+
+    # Get the voxel data as a numpy array
+    data = img.get_fdata()
+
+    # Report existing labels in the file (excluding 0/background)
+    existing_labels = np.unique(data)
+    existing_labels = existing_labels[existing_labels != 0]
+    print(f"Labels found in image: {[int(l) for l in existing_labels]}")
+    print(f"Image shape          : {data.shape}")
+    print(f"Image dtype          : {data.dtype}")
+
+    # --------------------------------------------------------------------------
+    # 3. Remap labels
+    # --------------------------------------------------------------------------
+    print("\nRemapping labels:")
+    print(f"  {'Source':>10}  -->  {'Dest':<10}  (voxels)")
+    print(f"  {'-'*45}")
+
+    remapped_data = remap_labels(data, src_labels, dst_labels, args.remove_unlisted)
+
+    # Report summary
+    if args.remove_unlisted:
+        # Count voxels that were set to 0 because they were unlisted
+        unlisted_mask = ~np.isin(data, src_labels + [0])
+        n_removed = int(np.sum(unlisted_mask))
+        print(f"\n  {n_removed} voxels from unlisted labels set to 0")
+
+    # --------------------------------------------------------------------------
+    # 4. Save the output NIfTI file
+    # --------------------------------------------------------------------------
+    # Preserve the original header and affine matrix to keep spatial info intact
+    out_img = nib.Nifti1Image(remapped_data, img.affine, img.header)
+
+    print(f"\nSaving: {args.output}")
+    try:
+        nib.save(out_img, args.output)
+    except Exception as e:
+        print(f"Error saving output file: {e}")
+        sys.exit(1)
+
+    # Final report
+    new_labels = np.unique(remapped_data)
+    new_labels = new_labels[new_labels != 0]
+    print(f"Labels in output: {[int(l) for l in new_labels]}")
+
+    print("\n" + "=" * 60)
+    print("Done!")
+    print("=" * 60)
+
+
+if __name__ == "__main__":
+    main()
+EOF
+fi
+}
+
+
+#################
+## Create an expert_file.txt for FreeSurfer
+#################
+script_expert_file()
+{
+if [ ! -f "$SUBJECTS_DIR/expert_file.txt" ]
+then
+cat > $SUBJECTS_DIR/expert_file.txt <<EOF
+mris_inflate -n 30
+EOF
+fi
+}
+
+#################
+## Function to both print and launch commands ($2) with a description ($1)
+#################
+cmd () {
+if [ -z "$1" ] #First variable is empty
+then
+	Echo "
+$2"
+else
+	Echo "
+#---------------------------------
+#@# $1: $(date)
+
+$2"
+fi
+eval $2
+if [ $? -ne 0 ]; then
+  Echo "#---------------------------------
+ERROR DETECTED 
+#---------------------------------
+"
+  exit 1
+fi
+}
+
+#################
+## Input files
+#################
+IMAGE_ORIG_FS="$SUBJECTS_DIR/$SUBJID/${SUBJID}_freesurfer/mri/orig/001.mgz"
+RAWAVG_FS="$SUBJECTS_DIR/$SUBJID/${SUBJID}_freesurfer/mri/rawavg.mgz"
+
+T1_FS="$SUBJECTS_DIR/$SUBJID/${SUBJID}_freesurfer/mri/T1.mgz"
+
+NORM_FS="$SUBJECTS_DIR/$SUBJID/${SUBJID}_freesurfer/mri/norm.mgz"
+ASEG_PRESURF_NOFIX_FS="$SUBJECTS_DIR/$SUBJID/${SUBJID}_freesurfer/mri/aseg.presurf.mgz"
+
+BRAIN_FS="$SUBJECTS_DIR/$SUBJID/${SUBJID}_freesurfer/mri/brain.mgz"
+BRAIN_FINALSURFS_FS="$SUBJECTS_DIR/$SUBJID/${SUBJID}_freesurfer/mri/brain.finalsurfs.mgz"
+BRAIN_FINALSURFS_MANEDIT_FS="$SUBJECTS_DIR/$SUBJID/${SUBJID}_freesurfer/mri/brain.finalsurfs.manedit.mgz"
+
+WM_FS="$SUBJECTS_DIR/$SUBJID/${SUBJID}_freesurfer/mri/wm.mgz"
+
+ORIG_FS="$SUBJECTS_DIR/$SUBJID/${SUBJID}_freesurfer/mri/orig.mgz"
+
+#ADDED for mri_segstats
+TALAIRACH_XFM_FS="$SUBJECTS_DIR/$SUBJID/${SUBJID}_freesurfer/mri/transforms/talairach.xfm"
+
+BRAINMASK_FS="$SUBJECTS_DIR/$SUBJID/${SUBJID}_freesurfer/mri/brainmask.mgz"
+#RB_ALL_WITHSKULL="$FREESURFER_HOME/average/RB_all_withskull_2016-05-10.vc700.gca"
+#TALAIRACH_WITH_SKULL="$SUBJECTS_DIR/$SUBJID/${SUBJID}_freesurfer/mri/transforms/talairach_with_skull.lta"
+
+#RB_ALL="$FREESURFER_HOME/average/RB_all_2020-01-02.gca"
+#CTRL_PTS="$SUBJECTS_DIR/$SUBJID/${SUBJID}_freesurfer/mri/ctrl_pts.mgz"
+#CC_UP="$SUBJECTS_DIR/$SUBJID/${SUBJID}_freesurfer/mri/transforms/cc_up.lta"
+
+#SUBCORTICALMASSLUT="$FREESURFER_HOME/SubCorticalMassLUT.txt"
+
+# Curv + Thickness + Stats + APARC + APEG ...
+declare -a CD_APARC_ATLAS=("$FREESURFER_HOME/average/lh.CDaparc.atlas.acfb40.noaparc.i12.2016-08-02.gcs" "$FREESURFER_HOME/average/rh.CDaparc.atlas.acfb40.noaparc.i12.2016-08-02.gcs")
+declare -a DKT_APARC_ATLAS=("$FREESURFER_HOME/average/lh.DKTaparc.atlas.acfb40.noaparc.i12.2016-08-02.gcs" "$FREESURFER_HOME/average/rh.DKTaparc.atlas.acfb40.noaparc.i12.2016-08-02.gcs")
+WMPARC_STATS_LUT="$FREESURFER_HOME/WMParcStatsLUT.txt"
+ASEG_STATS_LUT="$FREESURFER_HOME/ASegStatsLUT.txt"
+FSAVERAGE="$FREESURFER_HOME/subjects/fsaverage"
+COLORTABLE_VPNL_TXT="$FREESURFER_HOME/average/colortable_vpnl.txt"
+COLORTABLE_BA_TXT="$FREESURFER_HOME/average/colortable_BA.txt"
+
+declare -a FOLDING_ATLAS_ACFB40=("$FREESURFER_HOME/average/lh.folding.atlas.acfb40.noaparc.i12.2016-08-02.tif" "$FREESURFER_HOME/average/rh.folding.atlas.acfb40.noaparc.i12.2016-08-02.tif")
+declare -a DKAPARC_ATLAS_ACFB40=("$FREESURFER_HOME/average/lh.DKaparc.atlas.acfb40.noaparc.i12.2016-08-02.gcs" "$FREESURFER_HOME/average/rh.DKaparc.atlas.acfb40.noaparc.i12.2016-08-02.gcs")
+
+#################
+## Output files
+#################
+IMAGE_PADDED="$SUBJECTS_DIR/$SUBJID/RS_image-padded.mgz"
+IMAGE_ORIG="$O/mri/orig/001.mgz"
+
+RIBBON_PADDED="$O/mri/RS_ribbon-padded.mgz"
+RIBBON_PADDED_OLD="$O/mri/RS_ribbon-padded-old.mgz"
+SUBCORTICAL_PADDED="$O/mri/RS_subcortical-padded.mgz"
+RIBBON_EDIT="$O/mri/ribbon-edit.mgz"
+RIBBON_WO_EDIT="$O/mri/ribbon-wo-edit.mgz"
+SUBCORTICAL_REMAPPED="$O/mri/RS_subcortical-remapped.mgz"
+
+BRAIN="$O/mri/brain.mgz"
+BRAIN_FINALSURFS="$O/mri/brain.finalsurfs.mgz"
+BRAIN_FINALSURFS_MANEDIT="$O/mri/brain.finalsurfs.manedit.mgz"
+
+HA_PADDED="$O/mri/RS_ha-padded.mgz"
+
+SUBCORTICAL_MASK="$O/mri/RS_subcortical-mask.mgz"
+BRAIN_MASK="$O/mri/RS_brain-mask.mgz"
+
+T1="$O/mri/T1.mgz"
+T1_MASKED="$O/mri/RS_T1-masked.mgz"
+
+NORM="$O/mri/norm.mgz"
+
+ASEG_PRESURF_NOFIX="$O/mri/RS_aseg.presurf_nofix.mgz"
+ASEG_PRESURF_FIX="$O/mri/RS_aseg.presurf_fix.mgz"
+ASEG_PRESURF="$O/mri/aseg.presurf.mgz"
+ASEG_PRESURF_WO_SUBC="$O/mri/RS_aseg.presurf_wo_subc.mgz"
+
+WM_BMASK_ALL="$O/mri/RS_wm-bmask.mgz"
+WM_MASK="$O/mri/RS_wm-mask.mgz"
+WM_CONCAT="$O/mri/RS_wm-concat.mgz"
+WM_BMASK_250="$O/mri/RS_wm-bmask-250.mgz"
+WM_ASEGEDIT="$O/mri/RS_wm-asegedit.mgz"
+WM="$O/mri/wm.mgz" # Use this name for mri_fix_topology
+
+BRAIN="$O/mri/brain.mgz" # for mris_fix_topology
+BRAINMASK="$O/mri/brainmask.mgz" # for mris_fix_topology
+
+declare -a FILLED_PRETRESS=("$O/mri/RS_filled_pretress_lh.mgz" "$O/mri/RS_filled_pretress_rh.mgz")
+declare -a ORIG_NOFIX_PREDEC=("$O/surf/lh.orig.nofix.predec" "$O/surf/rh.orig.nofix.predec")
+declare -a ORIG_NOFIX=("$O/surf/lh.orig.nofix" "$O/surf/rh.orig.nofix")
+
+declare -a SMOOTHW_NOFIX=("$O/surf/lh.smoothwm.nofix" "$O/surf/rh.smoothwm.nofix")
+declare -a INFLATED_NOFIX=("$O/surf/lh.inflated.nofix" "$O/surf/rh.inflated.nofix")
+declare -a QSPHERE_NOFIX=("$O/surf/lh.qsphere.nofix" "$O/surf/rh.qsphere.nofix")
+declare -a ORIG_PREMESH=("$O/surf/lh.orig.premesh" "$O/surf/rh.orig.premesh")
+declare -a ORIG=("$O/surf/lh.orig" "$O/surf/rh.orig")
+
+declare -a INFLATED=("$O/surf/lh.inflated" "$O/surf/rh.inflated")
+declare -a SMOOTHW=("$O/surf/lh.smoothwm" "$O/surf/rh.smoothwm")
+declare -a CURV=("$O/surf/lh.curv" "$O/surf/rh.curv")
+
+declare -a CORTEX_LABEL=("$O/label/lh.cortex.label" "$O/label/rh.cortex.label")
+declare -a CORTEX_HIPAMYG_LABEL=("$O/label/lh.cortex+hipamyg.label" "$O/label/rh.cortex+hipamyg.label")
+
+declare -a GM_BMASK=("$O/mri/RS_gm-bmask_lh.mgz" "$O/mri/RS_gm-bmask_rh.mgz")
+declare -a WM_BMASK=("$O/mri/RS_wm-bmask_lh.mgz" "$O/mri/RS_wm-bmask_rh.mgz")
+declare -a BMASK=("$O/mri/RS_bmask_lh.mgz" "$O/mri/RS_bmask_rh.mgz")
+declare -a BRAIN_FINALSURFS_NO_CEREB=("$O/mri/RS_brain.finalsurfs_no_cereb_lh.mgz" "$O/mri/RS_brain.finalsurfs_no_cereb_rh.mgz")
+declare -a BRAIN_FINALSURFS_NO_CEREB_UNIFORM_WM_110=("$O/mri/RS_brain.finalsurfs_no_cereb_uniform_wm_110_lh.mgz" "$O/mri/RS_brain.finalsurfs_no_cereb_uniform_wm_110_rh.mgz")
+declare -a BRAIN_FINALSURFS_NO_CEREB_UNIFORM_GM_80=("$O/mri/RS_brain.finalsurfs_no_cereb_uniform_gm_80_lh.mgz" "$O/mri/RS_brain.finalsurfs_no_cereb_uniform_gm_80_rh.mgz")
+declare -a BRAIN_FINALSURFS_NO_CEREB_EDITED=("$O/mri/RS_brain.finalsurfs_no_cereb_edited_lh.mgz" "$O/mri/RS_brain.finalsurfs_no_cereb_edited_rh.mgz")
+declare -a BRAIN_FINALSURFS_NO_CEREB_EDITED2=("$O/mri/RS_brain.finalsurfs_no_cereb_edited2_lh.mgz" "$O/mri/RS_brain.finalsurfs_no_cereb_edited2_rh.mgz")
+
+declare -a AUTODET_NEW_GW_STATS=("$O/surf/autodet-new.gw.stats.lh.dat" "$O/surf/autodet-new.gw.stats.rh.dat")
+
+declare -a RIBBON_EDIT_PIAL=("$O/surf/RS_lh.ribbon_edit.pial" "$O/surf/RS_rh.ribbon_edit.pial")
+#declare -a RIBBON_EDIT_PIAL_SECOND_PASS=("$O/surf/RS_lh.ribbon_edit-second-pass.pial" "$O/surf/RS_rh.ribbon_edit-second-pass.pial")
+
+#declare -a RIBBON_EDIT_PIAL_THIRD_PASS=("$O/surf/RS_lh.ribbon_edit.smooth-third-pass.pial" "$O/surf/RS_rh.ribbon_edit.smooth-third-pass.pial")
+
+# Curv + Thickness + Stats + APARC + APEG ...
+declare -a CURV=("$O/surf/lh.curv" "$O/surf/rh.curv")
+declare -a AREA=("$O/surf/lh.area" "$O/surf/rh.area")
+declare -a PIAL_CURV=("$O/surf/lh.curv.pial" "$O/surf/rh.curv.pial")
+declare -a PIAL_AREA=("$O/surf/lh.area.pial" "$O/surf/rh.area.pial")
+declare -a THICKNESS=("$O/surf/lh.thickness" "$O/surf/rh.thickness")
+declare -a CURV_STATS=("$O/stats/lh.curv.stats" "$O/stats/rh.curv.stats")
+
+declare -a WHITE=("$O/surf/lh.white" "$O/surf/rh.white") #Copy of the rh.orig surface
+declare -a PIAL=("$O/surf/lh.pial" "$O/surf/rh.pial") #Copy of the pial surface
+
+
+declare -a SPHERE=("$O/surf/lh.sphere" "$O/surf/rh.sphere")
+declare -a SPHERE_REG=("$O/surf/lh.sphere.reg" "$O/surf/rh.sphere.reg")
+
+RAWAVG="$O/mri/rawavg.mgz"
+RAWAVG_MASKED="$O/mri/RS_rawavg-masked.mgz"
+ORIG_VOLUME="$O/mri/orig.mgz"
+ORIG_MASKED="$O/mri/RS_orig-masked.mgz"
+
+declare -a CD_APARC_ANNOT=("$O/label/lh.aparc.a2009s.annot" "$O/label/rh.aparc.a2009s.annot")
+declare -a DKT_APARC_ANNOT=("$O/label/lh.aparc.DKTatlas.annot" "$O/label/rh.aparc.DKTatlas.annot")
+
+RIBBON_NEW="$O/mri/ribbon.mgz"
+ASEG_PRESURF_HYPOS="$O/mri/aseg.presurf.hypos.mgz"
+ASEG="$O/mri/aseg.mgz"
+APARC_PLUS_ASEG="$O/mri/aparc+aseg.mgz"
+declare -a ASEG2=("$O/mri/aseg_lh.mgz" "$O/mri/aseg_rh.mgz")
+declare -a APARC_PLUS_ASEG2=("$O/mri/aparc+aseg_lh.mgz" "$O/mri/aparc+aseg_rh.mgz")
+
+declare -a APARC_ANNOT=("$O/label/lh.aparc.annot" "$O/label/rh.aparc.annot")
+APARC_A2009S_ASEG="$O/mri/aparc.a2009s+aseg.mgz"
+declare -a APARC_A2009S_ANNOT=("$O/label/lh.aparc.a2009s.annot" "$O/label/rh.aparc.a2009s.annot")
+APARC_DKT_ATLAS_ASEG="$O/mri/aparc.DKTatlas+aseg.mgz"
+
+WMPARC="$O/mri/wmparc.mgz"
+WMPARC_STATS="$O/stats/wmparc.stats"
+
+APARC_ANNOT_CTAB="$O/label/aparc.annot.ctab"
+declare -a APARC_STATS=("$O/stats/lh.aparc.stats" "$O/stats/rh.aparc.stats")
+
+declare -a APARC_PIAL_STATS=("$O/stats/lh.aparc.pial.stats" "$O/stats/rh.aparc.pial.stats")
+
+declare -a APARC_A2009S_STATS=("$O/stats/lh.aparc.a2009s.stats" "$O/stats/rh.aparc.a2009s.stats")
+APARC_A2009S_CTAB="$O/label/aparc.annot.a2009s.ctab"
+declare -a DKT_APARC_STATS=("$O/stats/lh.aparc.DKTatlas.stats" "$O/stats/rh.aparc.DKTatlas.stats")
+
+DKT_APARC_CTAB="$O/label/aparc.annot.DKTatlas.ctab"
+
+ASEG_STATS="$O/stats/aseg.stats"
+
+declare -a BA1_EXVIVO_LABEL=("$O/label/lh.BA1_exvivo.label" "$O/label/rh.BA1_exvivo.label")
+declare -a BA2_EXVIVO_LABEL=("$O/label/lh.BA2_exvivo.label" "$O/label/rh.BA2_exvivo.label")
+declare -a BA3A_EXVIVO_LABEL=("$O/label/lh.BA3a_exvivo.label" "$O/label/rh.BA3a_exvivo.label")
+declare -a BA3B_EXVIVO_LABEL=("$O/label/lh.BA3b_exvivo.label" "$O/label/rh.BA3b_exvivo.label")
+declare -a BA4A_EXVIVO_LABEL=("$O/label/lh.BA4a_exvivo.label" "$O/label/rh.BA4a_exvivo.label")
+declare -a BA4P_EXVIVO_LABEL=("$O/label/lh.BA4p_exvivo.label" "$O/label/rh.BA4p_exvivo.label")
+declare -a BA6_EXVIVO_LABEL=("$O/label/lh.BA6_exvivo.label" "$O/label/rh.BA6_exvivo.label")
+declare -a BA44_EXVIVO_LABEL=("$O/label/lh.BA44_exvivo.label" "$O/label/rh.BA44_exvivo.label")
+declare -a BA45_EXVIVO_LABEL=("$O/label/lh.BA45_exvivo.label" "$O/label/rh.BA45_exvivo.label")
+declare -a V1_EXVIVO_LABEL=("$O/label/lh.V1_exvivo.label" "$O/label/rh.V1_exvivo.label")
+declare -a V2_EXVIVO_LABEL=("$O/label/lh.V2_exvivo.label" "$O/label/rh.V2_exvivo.label")
+declare -a MT_EXVIVO_LABEL=("$O/label/lh.MT_exvivo.label" "$O/label/rh.MT_exvivo.label")
+declare -a ENTORHINAL_EXVIVO_LABEL=("$O/label/lh.enthorinal_exvivo.label" "$O/label/rh.enthorinal_exvivo.label")
+declare -a PERIRHINAL_EXVIVO_LABEL=("$O/label/lh.perirhinal_exvivo.label" "$O/label/rh.perirhinal_exvivo.label")
+
+declare -a FG1_MPM_VPNL_LABEL=("$O/label/lh.FG1.mpm.vpnl.label" "$O/label/rh.FG1.mpm.vpnl.label")
+declare -a FG2_MPM_VPNL_LABEL=("$O/label/lh.FG2.mpm.vpnl.label" "$O/label/rh.FG2.mpm.vpnl.label")
+declare -a FG3_MPM_VPNL_LABEL=("$O/label/lh.FG3.mpm.vpnl.label" "$O/label/rh.FG3.mpm.vpnl.label")
+declare -a FG4_MPM_VPNL_LABEL=("$O/label/lh.FG4.mpm.vpnl.label" "$O/label/rh.FG4.mpm.vpnl.label")
+declare -a HOC1_MPM_VPNL_LABEL=("$O/label/lh.h0c1.mpm.vpnl.label" "$O/label/rh.h0c1.mpm.vpnl.label")
+declare -a HOC2_MPM_VPNL_LABEL=("$O/label/lh.h0c2.mpm.vpnl.label" "$O/label/rh.h0c2.mpm.vpnl.label")
+declare -a HOC3V_MPM_VPNL_LABEL=("$O/label/lh.h0c3v.mpm.vpnl.label" "$O/label/rh.h0c3v.mpm.vpnl.label")
+declare -a HOC4V_MPM_VPNL_LABEL=("$O/label/lh.h0c4v.mpm.vpnl.label" "$O/label/rh.h0c4v.mpm.vpnl.label")
+
+declare -a BA1_EXVIVO_THRESH_LABEL=("$O/label/lh.BA1_exvivo.thresh.label" "$O/label/rh.BA1_exvivo.thresh.label")
+declare -a BA2_EXVIVO_THRESH_LABEL=("$O/label/lh.BA2_exvivo.thresh.label" "$O/label/rh.BA2_exvivo.thresh.label")
+declare -a BA3A_EXVIVO_THRESH_LABEL=("$O/label/lh.BA3a_exvivo.thresh.label" "$O/label/rh.BA3a_exvivo.thresh.label")
+declare -a BA3B_EXVIVO_THRESH_LABEL=("$O/label/lh.BA3b_exvivo.thresh.label" "$O/label/rh.BA3b_exvivo.thresh.label")
+declare -a BA4A_EXVIVO_THRESH_LABEL=("$O/label/lh.BA4a_exvivo.thresh.label" "$O/label/rh.BA4a_exvivo.thresh.label")
+declare -a BA4P_EXVIVO_THRESH_LABEL=("$O/label/lh.BA4p_exvivo.thresh.label" "$O/label/rh.BA4p_exvivo.thresh.label")
+declare -a BA6_EXVIVO_THRESH_LABEL=("$O/label/lh.BA6_exvivo.thresh.label" "$O/label/rh.BA6_exvivo.thresh.label")
+declare -a BA44_EXVIVO_THRESH_LABEL=("$O/label/lh.BA44_exvivo.thresh.label" "$O/label/rh.BA44_exvivo.thresh.label")
+declare -a BA45_EXVIVO_THRESH_LABEL=("$O/label/lh.BA45_exvivo.thresh.label" "$O/label/rh.BA45_exvivo.thresh.label")
+declare -a V1_EXVIVO_THRESH_LABEL=("$O/label/lh.V1_exvivo.thresh.label" "$O/label/rh.V1_exvivo.thresh.label")
+declare -a V2_EXVIVO_THRESH_LABEL=("$O/label/lh.V2_exvivo.thresh.label" "$O/label/rh.V2_exvivo.thresh.label")
+declare -a MT_EXVIVO_THRESH_LABEL=("$O/label/lh.MT_exvivo.thresh.label" "$O/label/rh.MT_exvivo.thresh.label")
+declare -a ENTORHINAL_EXVIVO_THRESH_LABEL=("$O/label/lh.enthorinal_exvivo.thresh.label" "$O/label/rh.enthorinal_exvivo.thresh.label")
+declare -a PERIRHINAL_EXVIVO_THRESH_LABEL=("$O/label/lh.perirhinal_exvivo.thresh.label" "$O/label/rh.perirhinal_exvivo.thresh.label")
+
+declare -a BA_EXVIVO_STATS=("$O/stats/lh.BA_exvivo.stats" "$O/stats/rh.BA_exvivo.stats")
+declare -a BA_EXVIVO_ANNOT=("$O/label/lh.BA_exvivo.annot" "$O/label/rh.BA_exvivo.annot")
+BA_EXVIVO_CTAB="$O/label/BA_exvivo.ctab"
+
+declare -a BA_EXVIVO_THRESH_STATS=("$O/stats/lh.BA_exvivo.thresh.stats" "$O/stats/rh.BA_exvivo.thresh.stats")
+declare -a BA_EXVIVO_THRESH_ANNOT=("$O/label/lh.BA_exvivo.thresh.annot" "$O/label/rh.BA_exvivo.thresh.annot")
+BA_EXVIVO_THRESH_CTAB="$O/label/BA_exvivo.thresh.ctab"
+
+TALAIRACH_XFM="$O/mri/transforms/talairach.xfm"
+
+#Other files to complete collection
+ANTSDN_BRAIN="$O/mri/antsdn.brain.mgz"
+WM_SEG="$O/mri/wm.seg.mgz"
+
+#################
+## New invocation in report.sh and create
+#################
+#Test if $OUTPUT_FOLDER folder already exist, and if it does not, create one
+CreateFolders
+CreateScripts
+
+Echo "
+#*******************
+#*******************
+#*******************
+# New invocation: $(date)
+
+bash $(basename "$0") $string_arguments
+
+# Given subjid: $SUBJID"
+
+#################
+## FreeSurfer 7.4.1 on $IMAGE creating $SUBJECTS_DIR/$SUBJID folder
+#################
+if ((FS == 1 && TAG < 0))
+then
+# Test if user provided $IMAGE
+: ${IMAGE:?Missing argument -i}
+Echo "# Given image: $IMAGE"
+
+if [ -d "$SUBJECTS_DIR/$SUBJID/${SUBJID}_freesurfer" ]
+then
+	Echo "Do not re-run FreeSurfer on same SUBJID: $SUBJECTS_DIR/$SUBJID/${SUBJID}_freesurfer"
+	exit 1
+fi
+
+cmd "Compensate for future translation in recon-all" \
+"python $O/nifti_padding.py $IMAGE $IMAGE_PADDED"
+
+cmd "Add SUBJID to SUBJECTS_DIR" \
+"export SUBJECTS_DIR=$SUBJECTS_DIR/$SUBJID"
+
+#-xopts-overwrite is used when expert file already used before
+cmd "Apply recon-all -autorecon 1 and 2 on $IMAGE_PADDED" \
+"recon-all -autorecon1 -autorecon2 -autorecon3 -s ${SUBJID}_freesurfer -i $IMAGE_PADDED -hires -parallel -openmp 4 -expert expert_file.txt -xopts-overwrite -cw256" 
+
+cmd "Change back SUBJECTS_DIR/SUBJID to SUBJECTS_DIR" \
+"export SUBJECTS_DIR=$(dirname $SUBJECTS_DIR)"
+fi
+
+#################
+## Convert ribbon and subcortical
+#################
+if ((TAG<=0))
+then
+# Test if user provided RIBBON and SUBCORTICAL
+: ${RIBBON:?Missing argument -b} ${SUBCORTICAL:?Missing argument -c} ${LABELS_SUBCORTICAL:?Missing argument -n}
+Echo "# Given ribbon: $RIBBON"
+Echo "# Given subcortical: $SUBCORTICAL"
+
+#If needed, correcting the dimensions of the image with padding
+cmd "Use script $O/nifti_padding.py on $RIBBON to get $RIBBON_PADDED" \
+"python $O/nifti_padding.py $RIBBON $RIBBON_PADDED"
+
+cmd "Convert $RIBBON_PADDED" \
+"mri_convert $RIBBON_PADDED $RIBBON_PADDED -rt nearest -ns 1 --conform_min"
+
+cmd "Use script $O/nifti_padding.py on $SUBCORTICAL to get $SUBCORTICAL_PADDED" \
+"python $O/nifti_padding.py $SUBCORTICAL $SUBCORTICAL_PADDED"
+
+cmd "Convert $SUBCORTICAL_PADDED" \
+"mri_convert $SUBCORTICAL_PADDED $SUBCORTICAL_PADDED -rt nearest -ns 1 --conform_min"
+fi
+
+#################
+## Correct label values in Subcortical, convert HA reference, and fuse it with RIBBON_PADDED
+#################
+if ((TAG<=1))
+then
+cmd "Copy $RIBBON_PADDED in $RIBBON_PADDED_OLD" \
+"cp $RIBBON_PADDED $RIBBON_PADDED_OLD" 
+
+cmd "Use script $O/remap_labels.py for RIBBON_RJR" \
+"python $O/remap_labels.py $RIBBON_PADDED $RIBBON_PADDED --src '${LABELS_RIBBON_OLD[0]} ${LABELS_RIBBON_OLD[1]}' --dst '${LABELS_RIBBON_NEW[0]} ${LABELS_RIBBON_NEW[1]}' --remove-unlisted"
+
+cmd "Use script $O/remap_labels.py" \
+"python $O/remap_labels.py $SUBCORTICAL_PADDED $SUBCORTICAL_REMAPPED --src '${LABELS_SUBCORTICAL_OLD}' --dst '${LABELS_SUBCORTICAL_NEW}' --remove-unlisted"
+
+# Test if source of HA (hippocampus-amygdala-inf_horn complex) was given
+: ${HA:?Missing argument -o} ${LABELS_HA_LEFT:?Missing argument -x} ${LABELS_HA_RIGHT:?Missing argument -y}
+
+if [[ "$HA" == "$SUBCORTICAL" ]]; then #Usually the case
+cmd "Copy $SUBCORTICAL_REMAPPED in $HA_PADDED" \
+"cp $SUBCORTICAL_REMAPPED $HA_PADDED" 
+else
+# Convert HA
+cmd "Use script $O/nifti_padding.py on $HA" \
+"python $O/nifti_padding.py $HA $HA_PADDED"
+fi
+fi
+
+#################
+## Dilate-erode HA complex to merge in ribbon
+#################
+if ((TAG<=2))
+then
+#cmd "Use script $O/ha_ribbon_edit.py on $RIBBON_PADDED to add HA from $SUBCORTICAL_PADDED" \
+#"python $O/ha_ribbon_edit.py $RIBBON_PADDED $HA_PADDED $RIBBON_PADDED '${LABELS_HA_LEFT}' '${LABELS_HA_RIGHT}' ${LABELS_HA_RIB[0]} ${LABELS_HA_RIB[1]} $N_DILATION $N_EROSION"
+
+cmd "Merge HA complex in Ribbon with $O/merge_ribbon_subcortical.py" \
+"python $O/merge_ribbon_subcortical.py $RIBBON_PADDED $HA_PADDED $RIBBON_EDIT  \
+--subcortical-labels '${LABELS_HA_LEFT} ${LABELS_HA_RIGHT}'  \
+--transform-labels '${LABELS_HA_LEFT} ${LABELS_HA_RIGHT}' \
+--n-dilate $N_DILATION --n-erode $N_EROSION \
+--preserve-ribbon '${LABEL_RIBBON_WM[0]} ${LABEL_RIBBON_WM[1]}'  \
+--dilate-into '${LABEL_RIBBON_GM[0]} ${LABEL_RIBBON_GM[1]}'  \
+--erode-into '${LABEL_RIBBON_GM[0]} ${LABEL_RIBBON_GM[1]}'"
+#0 not in preserve-ribbon to fill holes in HA complex area
+fi
+
+#################
+## Apply BRAIN_MASK on T1_FS to get T1_MASKED
+#################
+if ((TAG<=3))
+then
+cmd "Extract labels from $SUBCORTICAL_REMAPPED (Cerebellum, Medulla oblongata, Pons and Midbrain) into $SUBCORTICAL_MASK" \
+"mri_extract_label $SUBCORTICAL_REMAPPED $LABELS_SUBCORTICAL $SUBCORTICAL_MASK" #$SUBCORTICAL_PADDED
+
+cmd "Concatenate $RIBBON_EDIT with $SUBCORTICAL_MASK into $BRAIN_MASK" \
+"mri_concat --i $RIBBON_EDIT --i $SUBCORTICAL_MASK --o $BRAIN_MASK --combine"
+
+cmd "Copy $T1_FS into $T1" \
+"cp $T1_FS $T1"
+
+cmd "Mask $T1 with $BRAIN_MASK into $T1_MASKED" \
+"mri_mask $T1 $BRAIN_MASK $T1_MASKED"
+fi
+
+#################
+## Edit original aseg.presurf based on ribbon-edit
+#################
+if ((TAG<=4))
+then
+## Create aseg.presurf.mgz and aseg.presurf_wo_subc.mgz based on ribbon-edit.mgz
+cmd "Copy $ASEG_PRESURF_NOFIX_FS into $ASEG_PRESURF_NOFIX" \
+"cp $ASEG_PRESURF_NOFIX_FS $ASEG_PRESURF_NOFIX"
+cmd "Use script $O/edit_aseg_presurf_based_on_ribbon.py on $ASEG_PRESURF_NOFIX" \
+"python $O/edit_aseg_presurf_based_on_ribbon.py '${LABELS_HA_LEFT}' '${LABELS_HA_RIGHT}' $ASEG_PRESURF_NOFIX $RIBBON_EDIT $ASEG_PRESURF_FIX $ASEG_PRESURF_WO_SUBC $RIBBON_WO_EDIT"
+
+cmd "Merge subcorticals except HA in $ASEG_PRESURF_WO_SUBC with $O/merge_ribbon_subcortical.py" \
+"python $O/merge_ribbon_subcortical.py $ASEG_PRESURF_WO_SUBC $SUBCORTICAL_REMAPPED $ASEG_PRESURF  \
+--subcortical-labels '${LABELS_SUBCORTICAL_WM}'  \
+--transform-labels '' \
+--n-dilate 0 --n-erode 0 \
+--preserve-ribbon '${LABEL_RIBBON_GM[0]} ${LABEL_RIBBON_GM[1]} 251 252 253 254 255 0 15 16 46 47 7 8 ${LABELS_HA_LEFT} ${LABELS_HA_RIGHT}'  \
+--dilate-into ''  \
+--erode-into ''"
+fi
+
+#################
+## Compute WM_EDIT based on BRAIN_FINALSURFS_FS masked by WM_BMASK_ALL
+#################
+if ((TAG<=5))
+then
+# Extract white matter from ribbon-edit to create wm-bmask.mgz
+cmd "Extract WM from $RIBBON_EDIT" \
+"mri_extract_label $RIBBON_WO_EDIT ${LABEL_RIBBON_WM[0]} ${LABEL_RIBBON_WM[1]} $WM_BMASK_ALL" #0/128 binary mask
+
+cmd "Copy $WM_FS into $WM" \
+"cp $WM_FS $WM"
+cmd "Concatenate $WM_BMASK_ALL with $WM into $WM_CONCAT" \
+"mri_concat --i $WM_BMASK_ALL --i $WM --o $WM_CONCAT --sum" #ROI at 378 (128+250)
+
+cmd "Binarize $WM_CONCAT at 251 into $WM_BMASK_250" \
+"mri_binarize --i $WM_CONCAT --o $WM_BMASK_250 --match 378"
+
+cmd "Replace 1 by 250 into $WM_BMASK_250" \
+"mri_binarize --i $WM_BMASK_250 --o $WM_BMASK_250 --replace 1 250"
+
+# May also use $BRAIN_FINALSURFS_FS
+cmd "Copy $BRAIN_FS into $BRAIN" \
+"cp $BRAIN_FS $BRAIN"
+cmd "Mask $BRAIN with $WM_BMASK_ALL into $WM_MASK" \
+"mri_mask -T 5 $BRAIN $WM_BMASK_ALL $WM_MASK"
+
+cmd "Concatenate $WM_MASK with $WM_BMASK_250 into $WM_ASEGEDIT" \
+"mri_concat --i $WM_MASK --i $WM_BMASK_250 --o $WM_ASEGEDIT --max"
+
+cmd "Copy $NORM_FS into $NORM" \
+"cp $NORM_FS $NORM"
+
+cmd "Pretess $WM_ASEGEDIT: Solve connectivity issue" \
+"mri_pretess $WM_ASEGEDIT wm $NORM $WM"
+fi
+
+#################
+## Compute ORIG: Don't need mri_fill, use ribbon-edit wm
+#################
+if ((TAG<=6))
+then
+for (( i=0; i<2; i++ ));
+do
+	if ((HEMI>=0 && HEMI!=i)); #Cases when the current hemi ($i) is not to be processed
+	then
+		continue;
+	else
+	# Compute directly ORIG_NOFIX
+	cmd "${H[$i]} Pretress WM from $RIBBON_EDIT" \
+	"mri_pretess $RIBBON_WO_EDIT ${LABEL_RIBBON_WM[$i]} $NORM_FS ${FILLED_PRETRESS[$i]}"
+
+	cmd "${H[$i]} Tessellate WM surf" \
+	"mri_tessellate ${FILLED_PRETRESS[$i]} ${LABEL_RIBBON_WM[$i]} ${ORIG_NOFIX_PREDEC[$i]}"
+
+	cmd "${H[$i]} Extract main component WM surf" \
+	"mris_extract_main_component ${ORIG_NOFIX_PREDEC[$i]} ${ORIG_NOFIX_PREDEC[$i]}"
+
+	cmd "${H[$i]} Remesh WM surf" \
+	"mris_remesh --desired-face-area 0.5 --input ${ORIG_NOFIX_PREDEC[$i]} --output ${ORIG_NOFIX[$i]}"
+
+	# Smooth 1
+	cmd "${H[$i]} Smooth WM surf" \
+	"mris_smooth -n 1 -nw -seed 1234 ${ORIG_NOFIX[$i]} ${SMOOTHW_NOFIX[$i]}"
+
+	# Inflate 1
+	cmd "${H[$i]} Inflate WM surf" \
+	"mris_inflate -no-save-sulc -n 30 ${SMOOTHW_NOFIX[$i]} ${INFLATED_NOFIX[$i]}"
+
+	# Sphere 1
+	cmd "${H[$i]} Make spherical WM surf" \
+	"mris_sphere -q -p 6 -a 128 -seed 1234 ${INFLATED_NOFIX[$i]} ${QSPHERE_NOFIX[$i]}"
+        
+        # Copy BRAIN for mris_fix_topology
+	cmd "${H[$i]} Copy $BRAIN_FS for mris_fix_topology" \
+	"if [ ! -f $BRAIN ]; then cp $BRAIN_FS $BRAIN; fi" 
+	
+	# Fix topology
+	cmd "${H[$i]} Fix tolpology WM surf" \
+	"mris_fix_topology -mgz -sphere qsphere.nofix -inflated inflated.nofix -orig orig.nofix -out orig.premesh -ga -seed 1234 $SUBJID/$OUTPUT_FOLDER ${H[$i]}"
+	#-threads 1 #7.4.1: no difference seen; 7.4.0: small differences with different threads ? (https://surfer.nmr.mgh.harvard.edu/fswiki/ReleaseNotes)
+	#Takes $O/mri/wm.mgz and brain.mgz
+    #CAN LEAD TO TRANSLATION OF ONE VOXEL UP: orig.nofix to orig.premesh
+    # mris_info lh.orig.nofix | grep vox2ras #(should be c_(ras) : (-0.6500, -17.1500, 17.9500))
+    # mris_info lh.orig.premesh | grep vox2ras #(should not be c_(ras) : (-0.6500, -17.1500, 18.6500))
+
+	cmd "${H[$i]} Fix ${ORIG_PREMESH[$i]}" \
+	"mris_copy_header ${ORIG_PREMESH[$i]} ${ORIG_NOFIX[$i]} ${ORIG_PREMESH[$i]}"
+    
+	# Remesh
+	cmd "${H[$i]} Remesh WM surf" \
+	"mris_remesh --remesh --iters 3 --input ${ORIG_PREMESH[$i]} --output ${ORIG[$i]}"
+
+	# Remove intersection
+	cmd "${H[$i]} Remove intersection" \
+	"mris_remove_intersection ${ORIG[$i]} ${ORIG[$i]}"
+	
+	# Smooth 2 : Used for mris_curvature_stats later
+	cmd "${H[$i]} Smooth WM surf" \
+	"mris_smooth -n 1 -nw -seed 1234 ${ORIG[$i]} ${SMOOTHW[$i]}"
+	
+	# INFLATE 2 
+	cmd "${H[$i]} Inflate to produce sulc file" \
+	"mris_inflate ${ORIG[$i]} ${INFLATED[$i]}"
+
+	# Compute WM CURV
+	cmd "${H[$i]} Generate curv file from orig" \
+	"mris_place_surface --curv-map ${ORIG[$i]} 2 10 ${CURV[$i]}"
+	
+	# Compute WM AREA
+	cmd "${H[$i]} White area" \
+ 	"mris_place_surface --area-map ${ORIG[$i]} ${AREA[$i]}"
+	fi
+done
+fi
+
+#################
+## Edit brain.finalsurfs with GM ribbon
+#################
+if ((TAG<=7))
+then
+for (( i=0; i<2; i++ ));
+do
+	if ((HEMI>=0 && HEMI!=i)); #Cases when the current hemi ($i) is not to be processed
+	then
+		continue;
+	else
+	# Extract brain from ribbon-edit to create bmask.mgz (no cerebellum), and use the latter on brain.finalsurfs
+	cmd "${H[$i]} Extract forebrain from $RIBBON_EDIT" \
+	"mri_extract_label $RIBBON_WO_EDIT ${LABEL_RIBBON_GM[$i]} ${LABEL_RIBBON_WM[$i]} ${BMASK[$i]}" #0/128 binary mask
+
+	cmd "${H[$i]} Replace 128 by 1 into ${BMASK[$i]}" \
+	"mri_binarize --i ${BMASK[$i]} --o ${BMASK[$i]} --replace 128 1"
+
+	cmd "${H[$i]} Mask $BRAIN_FINALSURFS_FS with ${BMASK[$i]} into ${BRAIN_FINALSURFS_NO_CEREB[$i]}" \
+	"mri_mask $BRAIN_FINALSURFS_FS ${BMASK[$i]} ${BRAIN_FINALSURFS_NO_CEREB[$i]}"
+
+	# Extract white matter from ribbon-edit to create wm-bmask.mgz
+	cmd "${H[$i]} Extract GM from $RIBBON_EDIT" \
+	"mri_extract_label $RIBBON_WO_EDIT ${LABEL_RIBBON_WM[$i]} ${WM_BMASK[$i]}" #0/128 binary mask
+
+	cmd "${H[$i]} Concatenate ${WM_BMASK[$i]} with ${BRAIN_FINALSURFS_NO_CEREB[$i]} into ${BRAIN_FINALSURFS_NO_CEREB_UNIFORM_WM_110[$i]}" \
+	"mri_concat --i ${WM_BMASK[$i]} --i ${BRAIN_FINALSURFS_NO_CEREB[$i]} --o ${BRAIN_FINALSURFS_NO_CEREB_UNIFORM_WM_110[$i]} --max"
+
+	cmd "${H[$i]} Replace 128 by 110 in ${BRAIN_FINALSURFS_NO_CEREB_UNIFORM_WM_110[$i]}" \
+	"mri_binarize --i ${BRAIN_FINALSURFS_NO_CEREB_UNIFORM_WM_110[$i]} --o ${BRAIN_FINALSURFS_NO_CEREB_UNIFORM_WM_110[$i]} --replace 128 110"
+	
+	# Extract gray matter from ribbon-edit to create gm-bmask.mgz, and create with it bf_80
+	cmd "${H[$i]} Extract GM from $RIBBON_EDIT" \
+	"mri_extract_label $RIBBON_WO_EDIT ${LABEL_RIBBON_GM[$i]} ${GM_BMASK[$i]}" #0/128 binary mask
+
+	cmd "${H[$i]} Concatenate ${GM_BMASK[$i]} with ${BRAIN_FINALSURFS_NO_CEREB[$i]} into ${BRAIN_FINALSURFS_NO_CEREB_UNIFORM_GM_80[$i]}" \
+	"mri_concat --i ${GM_BMASK[$i]} --i ${BRAIN_FINALSURFS_NO_CEREB_UNIFORM_WM_110[$i]} --o ${BRAIN_FINALSURFS_NO_CEREB_UNIFORM_GM_80[$i]} --max"
+
+	cmd "${H[$i]} Replace 128 by 80 in ${BRAIN_FINALSURFS_NO_CEREB_UNIFORM_GM_80[$i]}" \
+	"mri_binarize --i ${BRAIN_FINALSURFS_NO_CEREB_UNIFORM_GM_80[$i]} --o ${BRAIN_FINALSURFS_NO_CEREB_UNIFORM_GM_80[$i]} --replace 128 80"
+	fi
+done
+fi
+
+#################
+## Compute stats, labels and aparc, to prepare for surface computation 
+#################
+if ((TAG<=8))
+then
+for (( i=0; i<2; i++ ));
+do
+	if ((HEMI>=0 && HEMI!=i)); #Cases when the current hemi ($i) is not to be processed
+	then
+		continue;
+	else	
+	
+	# Use script brain-finalsurfs-edit.py to edit brain.finalsurfs.mgz
+	cmd "${H[$i]} Use script $O/brain-finalsurfs-edit.py on ${BRAIN_FINALSURFS_NO_CEREB[$i]} with ${GM_BMASK[$i]}" \
+	"python $O/brain-finalsurfs-edit.py ${BRAIN_FINALSURFS_NO_CEREB_UNIFORM_WM_110[$i]} ${GM_BMASK[$i]} ${BRAIN_FINALSURFS_NO_CEREB_EDITED[$i]} ${BRAIN_FINALSURFS_NO_CEREB_EDITED2[$i]} $RIBBON_EDIT"
+	
+	# Compute stats
+	cmd "${H[$i]} Computes stats for pial surface" \
+	"mris_autodet_gwstats --o ${AUTODET_NEW_GW_STATS[$i]} --i ${BRAIN_FINALSURFS_NO_CEREB_EDITED[$i]} --wm $WM --surf ${ORIG[$i]}"
+	
+	if ((CHANGE_AUTODET==1))
+	then
+		# In order to improve pial surface, you can lower 'pial_border_low' to 20 
+		# Change stats
+		cmd "${H[$i]} Change stats" \
+		"sed -i'' -e 's/^pial_border_low[^/n]*/pial_border_low $PIAL_BORDER_LOW/' ${AUTODET_NEW_GW_STATS[$i]}"
+		#ex -s -c '%s/^pial_border_low.*/pial_border_low   $PIAL_BORDER_LOW/g|x' $AUTODET_NEW_GW_STATS_LH
+	fi
+	
+	# Compute labels for pin-medial-wall
+	cmd "${H[$i]} Label2label for cortex" \
+	"mri_label2label --label-cortex ${ORIG[$i]} $ASEG_PRESURF_WO_SUBC 0 ${CORTEX_LABEL[$i]}"
+	
+	# Compute labels to remove HIPOCAMPUS AND AMYGDALA from pial surface in mris_place_surface
+	cmd "${H[$i]} Label2label for cortex" \
+	"mri_label2label --label-cortex ${ORIG[$i]} $ASEG_PRESURF_WO_SUBC 1 ${CORTEX_HIPAMYG_LABEL[$i]}"
+	
+	# Compute APARC cortical parcellation for --aparc option in mris_place_surface
+	cmd "${H[$i]} Sphere" \
+ 	"mris_sphere -seed 1234 ${INFLATED[$i]} ${SPHERE[$i]}"
+ 	cmd "${H[$i]} Surf Reg" \
+ 	"mris_register -curv ${SPHERE[$i]} ${FOLDING_ATLAS_ACFB40[$i]} ${SPHERE_REG[$i]}"
+ 	cmd "${H[$i]} Cortical Parc" \
+ 	"mris_ca_label -l ${CORTEX_LABEL[$i]} -aseg $ASEG_PRESURF -seed 1234 $SUBJID/$OUTPUT_FOLDER ${H[$i]} ${SPHERE_REG[$i]} ${DKAPARC_ATLAS_ACFB40[$i]} ${APARC_ANNOT[$i]}"
+ 	
+	fi
+done
+fi
+
+#################
+## Compute pial surface: mris_place_surface
+#################
+if ((TAG<=9))
+then
+for (( i=0; i<2; i++ ));
+do
+	if ((HEMI>=0 && HEMI!=i)); #Cases when the current hemi ($i) is not to be processed
+	then
+		continue;
+	else
+	# PIAL first pass: BRAIN_FINALSURFS_NO_CEREB_EDITED2
+	cmd "${H[$i]} Computes pial surface - first pass" \
+	"mris_place_surface --i ${ORIG[$i]} --o ${RIBBON_EDIT_PIAL[$i]} --nsmooth 2 --adgws-in ${AUTODET_NEW_GW_STATS[$i]} --pial --${H[$i]} --repulse-surf ${ORIG[$i]} --invol ${BRAIN_FINALSURFS_NO_CEREB_EDITED2[$i]} --threads 6 --white-surf ${ORIG[$i]} --pin-medial-wall ${CORTEX_LABEL[$i]} --seg $ASEG_PRESURF_WO_SUBC --no-rip" #--nsmooth 1 originally
+	
+	# PIAL second pass: BRAIN_FINALSURFS_NO_CEREB_UNIFORM_GM_80
+	#cmd "${H[$i]} Computes pial surface - second pass: i+w" \
+	#"mris_place_surface --i ${RIBBON_EDIT_PIAL[$i]} --o ${RIBBON_EDIT_PIAL_SECOND_PASS[$i]} --nsmooth 0 --adgws-in ${AUTODET_NEW_GW_STATS[$i]} --pial --${H[$i]} --repulse-surf ${ORIG[$i]} --invol ${BRAIN_FINALSURFS_NO_CEREB_UNIFORM_GM_80[$i]} --threads 6 --white-surf ${RIBBON_EDIT_PIAL[$i]} --pin-medial-wall ${CORTEX_LABEL[$i]} --seg $ASEG_PRESURF_WO_SUBC --no-rip"
+	
+	# PIAL third pass: nsmooth 1
+	#cmd "${H[$i]} Computes pial surface - third pass: smooth" \
+	#"mris_place_surface --i ${RIBBON_EDIT_PIAL_SECOND_PASS[$i]} --o ${RIBBON_EDIT_PIAL_THIRD_PASS[$i]} --nsmooth 1 --adgws-in ${AUTODET_NEW_GW_STATS[$i]} --pial --${H[$i]} --repulse-surf ${RIBBON_EDIT_PIAL_SECOND_PASS[$i]} --invol ${BRAIN_FINALSURFS_NO_CEREB_EDITED2[$i]} --threads 6 --white-surf ${ORIG[$i]} --pin-medial-wall ${CORTEX_LABEL[$i]} --seg $ASEG_PRESURF_WO_SUBC --no-rip"
+	fi
+done
+fi
+
+#################
+## Non hemisphere specific files to create
+# #################
+if ((TAG<=10))
+then
+#Copies from $SUBJID_freesurfer $SUBJID/output to complete collection
+#if [ ! -f "$RAWAVG_MASKED" ]; then 
+cmd "Copy $RAWAVG_FS into $RAWAVG" \
+"cp $RAWAVG_FS $RAWAVG"
+cmd "Copy $RAWAVG to $RAWAVG_MASKED" \
+"cp $RAWAVG $RAWAVG_MASKED"
+cmd "Mask $RAWAVG_MASKED with $BRAIN_MASK into $RAWAVG_MASKED" \
+"mri_mask $RAWAVG_MASKED $BRAIN_MASK $RAWAVG_MASKED"
+
+cmd "Copy $ORIG_FS into $ORIG_VOLUME" \
+"cp $ORIG_FS $ORIG_VOLUME"
+cmd "Copy $ORIG_FS into $ORIG_MASKED" \
+"cp $ORIG_FS $ORIG_MASKED"
+cmd "Mask $ORIG_MASKED with $BRAIN_MASK into $ORIG_MASKED" \
+"mri_mask $ORIG_MASKED $BRAIN_MASK $ORIG_MASKED"
+
+cmd "Copy $IMAGE_ORIG_FS into $IMAGE_ORIG" \
+"cp $IMAGE_ORIG_FS $IMAGE_ORIG"
+
+cmd "Copy $BRAIN_FINALSURFS_FS into $BRAIN_FINALSURFS" \
+"cp $BRAIN_FINALSURFS_FS $BRAIN_FINALSURFS"
+cmd "Copy $BRAIN_FINALSURFS_MANEDIT_FS into $BRAIN_FINALSURFS_MANEDIT" \
+"cp $BRAIN_FINALSURFS_MANEDIT_FS $BRAIN_FINALSURFS_MANEDIT"
+
+#ANTSDN_BRAIN and WM_SEG
+cmd "AntsDenoise $BRAIN to $ANTSDN_BRAIN" \
+"AntsDenoiseImageFs -i $BRAIN -o $ANTSDN_BRAIN"
+cmd "mri_segment -wsizemm 13 -mprage $ANTSDN_BRAIN $WM_SEG" \
+"mri_segment -wsizemm 13 -mprage $ANTSDN_BRAIN $WM_SEG"
+
+cmd "Copy $BRAINMASK_FS into $BRAINMASK" \
+"cp $BRAINMASK_FS $BRAINMASK" #for WMParc stats
+fi
+
+#################
+## prepare autorecon3: stats, aseg, labels
+# #################
+if ((TAG<=11))
+then
+for (( i=0; i<2; i++ ));
+do
+	if ((HEMI>=0 && HEMI!=i)); #Cases when the current hemi ($i) is not to be processed
+	then
+		continue;
+	else
+	# Copie with new name for later functions
+	cmd "${H[$i]} Copy white surface to ${WHITE[$i]}" \
+	"cp ${ORIG[$i]} ${WHITE[$i]}" 
+	cmd "${H[$i]} Copy pial surface to ${PIAL[$i]}" \
+	"cp ${RIBBON_EDIT_PIAL[$i]} ${PIAL[$i]}"
+	
+	# Compute the stats
+	cmd "${H[$i]} pial curv" \
+	"mris_place_surface --curv-map ${PIAL[$i]} 2 10 ${PIAL_CURV[$i]}"
+	cmd "${H[$i]} pial area" \
+	"mris_place_surface --area-map ${PIAL[$i]} ${PIAL_AREA[$i]}"
+	cmd "${H[$i]} thickness" \
+	"mris_place_surface --thickness ${ORIG[$i]} ${PIAL[$i]} 20 5 ${THICKNESS[$i]}"
+	
+	cmd "${H[$i]} Curvature Stats" \
+	"mris_curvature_stats -m --writeCurvatureFiles -G -o ${CURV_STATS[$i]} -F smoothwm $SUBJID/$OUTPUT_FOLDER ${H[$i]} curv sulc"
+	fi
+done
+fi
+
+#################
+## Add last steps of autorecon3: stats, aseg, labels
+# #################
+if ((TAG<=12))
+then
+cmd "Cortical ribbon mask" \
+"mris_volmask --aseg_name aseg.presurf --label_left_white ${LABEL_RIBBON_WM[0]} --label_left_ribbon ${LABEL_RIBBON_GM[0]} --label_right_white ${LABEL_RIBBON_WM[1]} --label_right_ribbon ${LABEL_RIBBON_GM[1]} --save_ribbon --out_root ribbon $SUBJID/$OUTPUT_FOLDER" 
+#${H[$i]}
+#--out_root ribbon_script_${H[$i]}
+#--${H[$i]}-only $SUBJID/$OUTPUT_FOLDER
+#Searching for surf/rh.white and surf/rh.pial, and --surf_white and --surf_pial don't help, can use arg  
+
+#cmd "Copy $RH_SMOOTHW_NOFIX to $RH_SMOOTHW" \
+#"cp $RH_SMOOTHW_NOFIX $RH_SMOOTHW"
+#cmd "Inflation2 rh" \
+#"mris_inflate -n 30 $RH_SMOOTHW $RH_INFLATED"
+for (( i=0; i<2; i++ ));
+do
+    if ((HEMI>=0 && HEMI!=i)); #Cases when the current hemi ($i) is not to be processed
+    then
+        continue;
+    else	
+	cmd "${H[$i]} Cortical Parc 2" \
+	"mris_ca_label -l ${CORTEX_LABEL[$i]} -aseg $ASEG_PRESURF -seed 1234 $SUBJID/$OUTPUT_FOLDER ${H[$i]} ${SPHERE_REG[$i]} ${CD_APARC_ATLAS[$i]} ${CD_APARC_ANNOT[$i]}"
+	#Use surf/rh.smoothwm and surf/rh.sphere.reg
+	cmd "${H[$i]} Cortical Parc 3" \
+	"mris_ca_label -l ${CORTEX_LABEL[$i]} -aseg $ASEG_PRESURF -seed 1234 $SUBJID/$OUTPUT_FOLDER ${H[$i]} ${SPHERE_REG[$i]} ${DKT_APARC_ATLAS[$i]} ${DKT_APARC_ANNOT[$i]}"
+	
+    cmd "${H[$i]} Change SUBJECTS_DIR to SUBJECTS_DIR/SUBJID" \
+    "export SUBJECTS_DIR=$SUBJECTS_DIR/$SUBJID"
+    cmd "${H[$i]} WM/GM Contrast" \
+    "pctsurfcon --s $OUTPUT_FOLDER --${H[$i]}-only" 
+    #Need to change $SUBJECTS_DIR because doesn't accept $SUBJID/$OUTPUT_FOLDER 
+    #Need $RAWAVG_COPY, $ORIG_COPY and $RH_APARC_ANNOT
+    #PROBLEM in $RH_APARC_ANNOT: # elements (127231) in rh.aparc.annot does not match # vertices (138041)
+    cmd "${H[$i]} Change back SUBJECTS_DIR/SUBJID to SUBJECTS_DIR" \
+    "export SUBJECTS_DIR=$(dirname $SUBJECTS_DIR)"
+    fi
+done
+cmd "${H[$i]} Relabel Hypointensities" \
+"mri_relabel_hypointensities $ASEG_PRESURF $O/surf $ASEG_PRESURF_HYPOS"
+
+cmd "${H[$i]} APas-to-ASeg" \
+"mri_surf2volseg --o $ASEG --i $ASEG_PRESURF_HYPOS --fix-presurf-with-ribbon $RIBBON_NEW --threads 1 --${H[0]}-cortex-mask ${CORTEX_LABEL[0]} --${H[0]}-white ${ORIG[0]} --${H[0]}-pial ${RIBBON_EDIT_PIAL[0]} --${H[1]}-cortex-mask ${CORTEX_LABEL[1]} --${H[1]}-white ${ORIG[1]} --${H[1]}-pial ${RIBBON_EDIT_PIAL[1]}"
+
+cmd "AParc-to-ASeg aparc" \
+"mri_surf2volseg --o $APARC_PLUS_ASEG --label-cortex --i $ASEG --threads 1 --${H[0]}-annot ${APARC_ANNOT[0]} 1000 --${H[0]}-cortex-mask ${CORTEX_LABEL[0]} --${H[0]}-white ${ORIG[0]} --${H[0]}-pial ${RIBBON_EDIT_PIAL[0]} --${H[1]}-annot ${APARC_ANNOT[1]} 2000 --${H[1]}-cortex-mask ${CORTEX_LABEL[1]} --${H[1]}-white ${ORIG[1]} --${H[1]}-pial ${RIBBON_EDIT_PIAL[1]}"
+
+fi
+
+#################
+## autorecon3: aparc+aseg and the rest (needs rh.aparc.a2009s.annot)
+# #################
+if ((TAG<=13))
+then
+for (( i=0; i<2; i++ ));
+do
+	if ((HEMI>=0 && HEMI!=i)); #Cases when the current hemi ($i) is not to be processed
+	then
+		continue;
+	else
+ 	cmd "${H[$i]} AParc-to-ASeg aparc.a2009s" \
+ 	"mri_surf2volseg --o $APARC_A2009S_ASEG --label-cortex --i $ASEG --threads 4 --${H[$i]}-annot ${APARC_A2009S_ANNOT[$i]} 11100 --${H[$i]}-cortex-mask ${CORTEX_LABEL[$i]} --${H[$i]}-white ${ORIG[$i]} --${H[$i]}-pial ${RIBBON_EDIT_PIAL[$i]} --${H[$((1 - i))]}-annot ${APARC_A2009S_ANNOT[$((1 - i))]} 12100 --${H[$((1 - i))]}-cortex-mask ${CORTEX_LABEL[$((1 - i))]} --${H[$((1 - i))]}-white ${ORIG[$((1 - i))]} --${H[$((1 - i))]}-pial ${RIBBON_EDIT_PIAL[$((1 - i))]}"
+ 	cmd "${H[$i]} AParc-to-ASeg aparc.DKTatlas" \
+ 	"mri_surf2volseg --o $APARC_DKT_ATLAS_ASEG --label-cortex --i $ASEG --threads 4 --${H[$i]}-annot ${DKT_APARC_ANNOT[$i]} 1000 --${H[$i]}-cortex-mask ${CORTEX_LABEL[$i]} --${H[$i]}-white ${ORIG[$i]} --${H[$i]}-pial ${RIBBON_EDIT_PIAL[$i]} --${H[$((1 - i))]}-annot ${APARC_A2009S_ANNOT[$((1 - i))]} 2000 --${H[$((1 - i))]}-cortex-mask ${CORTEX_LABEL[$((1 - i))]} --${H[$((1 - i))]}-white ${ORIG[$((1 - i))]} --${H[$((1 - i))]}-pial ${RIBBON_EDIT_PIAL[$((1 - i))]}"
+ 	
+	cmd "${H[$i]} WMParc" \
+ 	"mri_surf2volseg --o $WMPARC --label-wm --i $APARC_PLUS_ASEG --threads 4 --${H[$i]}-annot ${APARC_ANNOT[$i]} 3000 --${H[$i]}-cortex-mask ${CORTEX_LABEL[$i]} --${H[$i]}-white ${ORIG[$i]} --${H[$i]}-pial ${RIBBON_EDIT_PIAL[$i]} --${H[$((1 - i))]}-annot ${APARC_A2009S_ANNOT[$((1 - i))]} 4000 --${H[$((1 - i))]}-cortex-mask ${CORTEX_LABEL[$((1 - i))]} --${H[$((1 - i))]}-white ${ORIG[$((1 - i))]} --${H[$((1 - i))]}-pial ${RIBBON_EDIT_PIAL[$((1 - i))]}"	
+ 	
+	cmd "${H[$i]} Copy $TALAIRACH_XFM_FS to $TALAIRACH_XFM" \
+	"cp $TALAIRACH_XFM_FS $TALAIRACH_XFM"
+ 	cmd "${H[$i]} WMParc stats" \
+ 	"mri_segstats --seed 1234 --seg $WMPARC --sum $WMPARC_STATS --pv $NORM_FS --excludeid 0 --brainmask $BRAIN_FINALSURFS_FS --in $NORM_FS --in-intensity-name norm --in-intensity-units MR --subject $SUBJID/$OUTPUT_FOLDER --surf-wm-vol --ctab $WMPARC_STATS_LUT --etiv"
+ 	#Needs mri/transforms/talairach.xfm
+ 	
+ 	cmd "${H[$i]} Change SUBJID" \
+ 	"export SUBJID=$SUBJID/$OUTPUT_FOLDER"
+ 	cmd "${H[$i]} Parcellation Stats White" \
+ 	"mris_anatomical_stats -th3 -mgz -noglobal -cortex ${CORTEX_LABEL[$i]} -f ${APARC_STATS[$i]} -b -a ${APARC_ANNOT[$i]} -c $APARC_ANNOT_CTAB $SUBJID ${H[$i]} white"
+ 	cmd "${H[$i]} Parcellation Stats Pial" \
+ 	"mris_anatomical_stats -th3 -mgz -noglobal -cortex ${CORTEX_LABEL[$i]} -f ${APARC_PIAL_STATS[$i]} -b -a ${APARC_ANNOT[$i]} -c $APARC_ANNOT_CTAB $SUBJID ${H[$i]} pial"
+ 	cmd "${H[$i]} Parcellation Stats 2 " \
+ 	"mris_anatomical_stats -th3 -mgz -noglobal -cortex ${CORTEX_LABEL[$i]} -f ${APARC_A2009S_STATS[$i]} -b -a ${APARC_A2009S_ANNOT[$i]} -c $APARC_A2009S_CTAB $SUBJID ${H[$i]} white"
+ 	cmd "${H[$i]} Parcellation Stats 3" \
+ 	"mris_anatomical_stats -th3 -mgz -noglobal -cortex ${CORTEX_LABEL[$i]} -f ${DKT_APARC_STATS[$i]} -b -a ${DKT_APARC_ANNOT[$i]} -c $DKT_APARC_CTAB $SUBJID ${H[$i]} white"
+ 	cmd "${H[$i]} Change back SUBJID" \
+ 	"export SUBJID=`echo "$SUBJID" | cut -d/ -f1-1`"
+ 	
+ 	cmd "ASeg Stats" \
+ 	"mri_segstats --seed 1234 --seg $ASEG --sum $ASEG_STATS --pv $NORM_FS --empty --brainmask $BRAIN_FINALSURFS_FS --brain-vol-from-seg --excludeid 0 --excl-ctxgmwm --supratent --subcortgray --in $NORM_FS --in-intensity-name norm --in-intensity-units MR --etiv --euler --ctab $ASEG_STATS_LUT --subject $SUBJID/$OUTPUT_FOLDER --no-global-stats"
+ 	
+ 	cmd "Create Symlink of $FSAVERAGE folder in SUBJECTS_DIR" \
+ 	"if [ ! -d "$SUBJECTS_DIR/fsaverage" ]; then ln -s $FSAVERAGE $SUBJECTS_DIR; fi"
+ 	
+ 	cmd "${H[$i]} BA_exvivo Labels" \
+ 	"mri_label2label --srcsubject fsaverage --srclabel $SUBJECTS_DIR/fsaverage/label/${H[$i]}.BA1_exvivo.label --trgsubject $SUBJID/$OUTPUT_FOLDER --trglabel ${BA1_EXVIVO_LABEL[$i]} --hemi ${H[$i]} --regmethod surface"
+ 	cmd "${H[$i]} mri_label2label BA2_exvivo" \
+ 	"mri_label2label --srcsubject fsaverage --srclabel $SUBJECTS_DIR/fsaverage/label/${H[$i]}.BA2_exvivo.label --trgsubject $SUBJID/$OUTPUT_FOLDER --trglabel ${BA2_EXVIVO_LABEL[$i]} --hemi ${H[$i]} --regmethod surface"
+ 	
+ 	cmd "${H[$i]} mri_label2label BA3a_exvivo" \
+ 	"mri_label2label --srcsubject fsaverage --srclabel $SUBJECTS_DIR/fsaverage/label/${H[$i]}.BA3a_exvivo.label --trgsubject $SUBJID/$OUTPUT_FOLDER --trglabel ${BA3A_EXVIVO_LABEL[$i]} --hemi ${H[$i]} --regmethod surface"
+ 	cmd "${H[$i]} mri_label2label BA3b_exvivo" \
+ 	"mri_label2label --srcsubject fsaverage --srclabel $SUBJECTS_DIR/fsaverage/label/${H[$i]}.BA3b_exvivo.label --trgsubject $SUBJID/$OUTPUT_FOLDER --trglabel ${BA3B_EXVIVO_LABEL[$i]} --hemi ${H[$i]} --regmethod surface"
+ 	cmd "${H[$i]} mri_label2label BA4a_exvivo" \
+ 	"mri_label2label --srcsubject fsaverage --srclabel $SUBJECTS_DIR/fsaverage/label/${H[$i]}.BA4a_exvivo.label --trgsubject $SUBJID/$OUTPUT_FOLDER --trglabel ${BA4A_EXVIVO_LABEL[$i]} --hemi ${H[$i]} --regmethod surface"
+ 	cmd "${H[$i]} mri_label2label BA4p_exvivo" \
+ 	"mri_label2label --srcsubject fsaverage --srclabel $SUBJECTS_DIR/fsaverage/label/${H[$i]}.BA4p_exvivo.label --trgsubject $SUBJID/$OUTPUT_FOLDER --trglabel ${BA4P_EXVIVO_LABEL[$i]} --hemi ${H[$i]} --regmethod surface"
+ 	cmd "${H[$i]} mri_label2label BA6_exvivo" \
+ 	"mri_label2label --srcsubject fsaverage --srclabel $SUBJECTS_DIR/fsaverage/label/${H[$i]}.BA6_exvivo.label --trgsubject $SUBJID/$OUTPUT_FOLDER --trglabel ${BA6_EXVIVO_LABEL[$i]} --hemi ${H[$i]} --regmethod surface"
+ 	cmd "${H[$i]} mri_label2label BA44_exvivo" \
+ 	"mri_label2label --srcsubject fsaverage --srclabel $SUBJECTS_DIR/fsaverage/label/${H[$i]}.BA44_exvivo.label --trgsubject $SUBJID/$OUTPUT_FOLDER --trglabel ${BA44_EXVIVO_LABEL[$i]} --hemi ${H[$i]} --regmethod surface"
+ 	cmd "${H[$i]}  mri_label2label BA45_exvivo" \
+ 	"mri_label2label --srcsubject fsaverage --srclabel $SUBJECTS_DIR/fsaverage/label/${H[$i]}.BA45_exvivo.label --trgsubject $SUBJID/$OUTPUT_FOLDER --trglabel ${BA45_EXVIVO_LABEL[$i]} --hemi ${H[$i]} --regmethod surface"
+ 	cmd "${H[$i]} mri_label2label V1_exvivo" \
+ 	"mri_label2label --srcsubject fsaverage --srclabel $SUBJECTS_DIR/fsaverage/label/${H[$i]}.V1_exvivo.label --trgsubject $SUBJID/$OUTPUT_FOLDER --trglabel ${V1_EXVIVO_LABEL[$i]} --hemi ${H[$i]} --regmethod surface"
+ 	cmd "${H[$i]} mri_label2label V2_exvivo" \
+ 	"mri_label2label --srcsubject fsaverage --srclabel $SUBJECTS_DIR/fsaverage/label/${H[$i]}.V2_exvivo.label --trgsubject $SUBJID/$OUTPUT_FOLDER --trglabel ${V2_EXVIVO_LABEL[$i]} --hemi ${H[$i]} --regmethod surface"
+ 	cmd "${H[$i]} mri_label2label MT_exvivo" \
+ 	"mri_label2label --srcsubject fsaverage --srclabel $SUBJECTS_DIR/fsaverage/label/${H[$i]}.MT_exvivo.label --trgsubject $SUBJID/$OUTPUT_FOLDER --trglabel ${MT_EXVIVO_LABEL[$i]} --hemi ${H[$i]} --regmethod surface"
+ 	cmd "${H[$i]} mri_label2label entorhinal_exvivo" \
+ 	"mri_label2label --srcsubject fsaverage --srclabel $SUBJECTS_DIR/fsaverage/label/${H[$i]}.entorhinal_exvivo.label --trgsubject $SUBJID/$OUTPUT_FOLDER --trglabel ${ENTORHINAL_EXVIVO_LABEL[$i]} --hemi ${H[$i]} --regmethod surface"
+ 	cmd "${H[$i]} mri_label2label perirhinal_exvivo" \
+ 	"mri_label2label --srcsubject fsaverage --srclabel $SUBJECTS_DIR/fsaverage/label/${H[$i]}.perirhinal_exvivo.label --trgsubject $SUBJID/$OUTPUT_FOLDER --trglabel ${PERIRHINAL_EXVIVO_LABEL[$i]} --hemi ${H[$i]} --regmethod surface"
+ 	cmd "${H[$i]} mri_label2label fg1_mpm_vpnl" \
+ 	"mri_label2label --srcsubject fsaverage --srclabel $SUBJECTS_DIR/fsaverage/label/${H[$i]}.FG1.mpm.vpnl.label --trgsubject $SUBJID/$OUTPUT_FOLDER --trglabel ${FG1_MPM_VPNL_LABEL[$i]} --hemi ${H[$i]} --regmethod surface"
+ 	cmd "${H[$i]} mri_label2label fg2_mpm_vpnl" \
+ 	"mri_label2label --srcsubject fsaverage --srclabel $SUBJECTS_DIR/fsaverage/label/${H[$i]}.FG2.mpm.vpnl.label --trgsubject $SUBJID/$OUTPUT_FOLDER --trglabel ${FG2_MPM_VPNL_LABEL[$i]} --hemi ${H[$i]} --regmethod surface"
+ 	cmd "${H[$i]} mri_label2label fg3_mpm_vpnl" \
+ 	"mri_label2label --srcsubject fsaverage --srclabel $SUBJECTS_DIR/fsaverage/label/${H[$i]}.FG3.mpm.vpnl.label --trgsubject $SUBJID/$OUTPUT_FOLDER --trglabel ${FG3_MPM_VPNL_LABEL[$i]} --hemi ${H[$i]} --regmethod surface"
+ 	cmd "${H[$i]} mri_label2label fg4_mpm_vpnl" \
+ 	"mri_label2label --srcsubject fsaverage --srclabel $SUBJECTS_DIR/fsaverage/label/${H[$i]}.FG4.mpm.vpnl.label --trgsubject $SUBJID/$OUTPUT_FOLDER --trglabel ${FG4_MPM_VPNL_LABEL[$i]} --hemi ${H[$i]} --regmethod surface"
+ 	cmd "${H[$i]} mri_label2label h0c1_mpm_vpnl" \
+ 	"mri_label2label --srcsubject fsaverage --srclabel $SUBJECTS_DIR/fsaverage/label/${H[$i]}.hOc1.mpm.vpnl.label --trgsubject $SUBJID/$OUTPUT_FOLDER --trglabel ${HOC1_MPM_VPNL_LABEL[$i]} --hemi ${H[$i]} --regmethod surface"
+ 	cmd "${H[$i]} mri_label2label h0c2_mpm_vpnl" \
+ 	"mri_label2label --srcsubject fsaverage --srclabel $SUBJECTS_DIR/fsaverage/label/${H[$i]}.hOc2.mpm.vpnl.label --trgsubject $SUBJID/$OUTPUT_FOLDER --trglabel ${HOC2_MPM_VPNL_LABEL[$i]} --hemi ${H[$i]} --regmethod surface"
+ 	cmd "${H[$i]} mri_label2label h0c3v_mpm_vpnl" \
+ 	"mri_label2label --srcsubject fsaverage --srclabel $SUBJECTS_DIR/fsaverage/label/${H[$i]}.hOc3v.mpm.vpnl.label --trgsubject $SUBJID/$OUTPUT_FOLDER --trglabel ${HOC3V_MPM_VPNL_LABEL[$i]} --hemi ${H[$i]} --regmethod surface"
+ 	cmd "${H[$i]} mri_label2label h0c4v_mpm_vpnl" \
+ 	"mri_label2label --srcsubject fsaverage --srclabel $SUBJECTS_DIR/fsaverage/label/${H[$i]}.hOc4v.mpm.vpnl.label --trgsubject $SUBJID/$OUTPUT_FOLDER --trglabel ${HOC4V_MPM_VPNL_LABEL[$i]} --hemi ${H[$i]} --regmethod surface"
+ 	
+ 	if [ -f "$O/label/${H[$i]}.mpm.vpnl.annot" ]
+	then
+	var=$(date +%F_%H-%M-%S)
+	cmd "Change name of $O/label/${H[$i]}.mpm.vpnl.annot to recompute it: ${H[$i]}.mpm.vpnl.annot_$var" \
+	"mv $O/label/${H[$i]}.mpm.vpnl.annot $O/label/${H[$i]}.mpm.vpnl.annot_$var"
+	fi
+ 	cmd "${H[$i]} mri_label2label ctab" \
+ 	"mris_label2annot --s $SUBJID/$OUTPUT_FOLDER --ctab $COLORTABLE_VPNL_TXT --hemi ${H[$i]} --a mpm.vpnl --maxstatwinner --noverbose --l ${FG1_MPM_VPNL_LABEL[$i]} --l ${FG2_MPM_VPNL_LABEL[$i]} --l ${FG3_MPM_VPNL_LABEL[$i]} --l ${FG4_MPM_VPNL_LABEL[$i]} --l ${HOC1_MPM_VPNL_LABEL[$i]} --l ${HOC2_MPM_VPNL_LABEL[$i]} --l ${HOC3V_MPM_VPNL_LABEL[$i]} --l ${HOC4V_MPM_VPNL_LABEL[$i]}"
+ 	
+ 	cmd "${H[$i]} mri_label2label ba1_exvivo_thresh" \
+ 	"mri_label2label --srcsubject fsaverage --srclabel $SUBJECTS_DIR/fsaverage/label/${H[$i]}.BA1_exvivo.thresh.label --trgsubject $SUBJID/$OUTPUT_FOLDER --trglabel ${BA1_EXVIVO_THRESH_LABEL[$i]} --hemi ${H[$i]} --regmethod surface"
+ 	cmd "${H[$i]} mri_label2label ba2_exvivo_thresh" \
+ 	"mri_label2label --srcsubject fsaverage --srclabel $SUBJECTS_DIR/fsaverage/label/${H[$i]}.BA2_exvivo.thresh.label --trgsubject $SUBJID/$OUTPUT_FOLDER --trglabel ${BA2_EXVIVO_THRESH_LABEL[$i]} --hemi ${H[$i]} --regmethod surface"
+ 	
+ 	cmd "${H[$i]} mri_label2label ba3a_exvivo_thresh" \
+ 	"mri_label2label --srcsubject fsaverage --srclabel $SUBJECTS_DIR/fsaverage/label/${H[$i]}.BA3a_exvivo.thresh.label --trgsubject $SUBJID/$OUTPUT_FOLDER --trglabel ${BA3A_EXVIVO_THRESH_LABEL[$i]} --hemi ${H[$i]} --regmethod surface"
+ 	cmd "${H[$i]} mri_label2label ba3b_exvivo_thresh" \
+ 	"mri_label2label --srcsubject fsaverage --srclabel $SUBJECTS_DIR/fsaverage/label/${H[$i]}.BA3b_exvivo.thresh.label --trgsubject $SUBJID/$OUTPUT_FOLDER --trglabel ${BA3B_EXVIVO_THRESH_LABEL[$i]} --hemi ${H[$i]} --regmethod surface"
+ 	cmd "${H[$i]} mri_label2label ba4a_exvivo_thresh" \
+ 	"mri_label2label --srcsubject fsaverage --srclabel $SUBJECTS_DIR/fsaverage/label/${H[$i]}.BA4a_exvivo.thresh.label --trgsubject $SUBJID/$OUTPUT_FOLDER --trglabel ${BA4A_EXVIVO_THRESH_LABEL[$i]} --hemi ${H[$i]} --regmethod surface"
+ 	cmd "${H[$i]} mri_label2label ba4p_exvivo_thresh" \
+ 	"mri_label2label --srcsubject fsaverage --srclabel $SUBJECTS_DIR/fsaverage/label/${H[$i]}.BA4p_exvivo.thresh.label --trgsubject $SUBJID/$OUTPUT_FOLDER --trglabel ${BA4P_EXVIVO_THRESH_LABEL[$i]} --hemi ${H[$i]} --regmethod surface"
+ 	cmd "${H[$i]} mri_label2label ba6_exvivo_thresh" \
+ 	"mri_label2label --srcsubject fsaverage --srclabel $SUBJECTS_DIR/fsaverage/label/${H[$i]}.BA6_exvivo.thresh.label --trgsubject $SUBJID/$OUTPUT_FOLDER --trglabel ${BA6_EXVIVO_THRESH_LABEL[$i]} --hemi ${H[$i]} --regmethod surface"
+ 	cmd "${H[$i]} mri_label2label ba44_exvivo_thresh" \
+ 	"mri_label2label --srcsubject fsaverage --srclabel $SUBJECTS_DIR/fsaverage/label/${H[$i]}.BA44_exvivo.thresh.label --trgsubject $SUBJID/$OUTPUT_FOLDER --trglabel ${BA44_EXVIVO_THRESH_LABEL[$i]} --hemi ${H[$i]} --regmethod surface"
+ 	cmd "${H[$i]} mri_label2label ba45_exvivo_thresh" \
+ 	"mri_label2label --srcsubject fsaverage --srclabel $SUBJECTS_DIR/fsaverage/label/${H[$i]}.BA45_exvivo.thresh.label --trgsubject $SUBJID/$OUTPUT_FOLDER --trglabel ${BA45_EXVIVO_THRESH_LABEL[$i]} --hemi ${H[$i]} --regmethod surface"
+ 	cmd "${H[$i]} mri_label2label v1_exvivo_thresh" \
+ 	"mri_label2label --srcsubject fsaverage --srclabel $SUBJECTS_DIR/fsaverage/label/${H[$i]}.V1_exvivo.thresh.label --trgsubject $SUBJID/$OUTPUT_FOLDER --trglabel ${V1_EXVIVO_THRESH_LABEL[$i]} --hemi ${H[$i]} --regmethod surface "
+ 	cmd "${H[$i]} mri_label2label v2_exvivo_thresh" \
+ 	"mri_label2label --srcsubject fsaverage --srclabel $SUBJECTS_DIR/fsaverage/label/${H[$i]}.V2_exvivo.thresh.label --trgsubject $SUBJID/$OUTPUT_FOLDER --trglabel ${V2_EXVIVO_THRESH_LABEL[$i]} --hemi ${H[$i]} --regmethod surface"
+ 	cmd "${H[$i]} mri_label2label mt_exvivo_thresh" \
+ 	"mri_label2label --srcsubject fsaverage --srclabel $SUBJECTS_DIR/fsaverage/label/${H[$i]}.MT_exvivo.thresh.label --trgsubject $SUBJID/$OUTPUT_FOLDER --trglabel ${MT_EXVIVO_THRESH_LABEL[$i]} --hemi ${H[$i]} --regmethod surface"
+ 	cmd "${H[$i]} mri_label2label entorhinal_exvivo_thresh" \
+ 	"mri_label2label --srcsubject fsaverage --srclabel $SUBJECTS_DIR/fsaverage/label/${H[$i]}.entorhinal_exvivo.thresh.label --trgsubject $SUBJID/$OUTPUT_FOLDER --trglabel ${ENTORHINAL_EXVIVO_THRESH_LABEL[$i]} --hemi ${H[$i]} --regmethod surface"
+ 	cmd "${H[$i]} mri_label2label perirhinal_exvivo_thresh" \
+ 	"mri_label2label --srcsubject fsaverage --srclabel $SUBJECTS_DIR/fsaverage/label/${H[$i]}.perirhinal_exvivo.thresh.label --trgsubject $SUBJID/$OUTPUT_FOLDER --trglabel ${PERIRHINAL_EXVIVO_THRESH_LABEL[$i]} --hemi ${H[$i]} --regmethod surface"
+ 	
+	cmd "Change name of ${BA_EXVIVO_ANNOT[$i]} if already exists" \
+ 	"if [ -f ${BA_EXVIVO_ANNOT[$i]} ]; then mv ${BA_EXVIVO_ANNOT[$i]} ${BA_EXVIVO_ANNOT[$i]}_old_$(date +%F_%H-%M-%S); fi"
+ 	cmd "${H[$i]} mri_label2label ctab" \
+ 	"mris_label2annot --s $SUBJID/$OUTPUT_FOLDER --hemi ${H[$i]} --ctab $COLORTABLE_BA_TXT --l ${BA1_EXVIVO_LABEL[$i]} --l ${BA2_EXVIVO_LABEL[$i]} --l ${BA3A_EXVIVO_LABEL[$i]} --l ${BA3B_EXVIVO_LABEL[$i]} --l ${BA4A_EXVIVO_LABEL[$i]} --l ${BA4P_EXVIVO_LABEL[$i]} --l ${BA6_EXVIVO_LABEL[$i]} --l ${BA44_EXVIVO_LABEL[$i]} --l ${BA45_EXVIVO_LABEL[$i]} --l ${V1_EXVIVO_LABEL[$i]} --l ${V2_EXVIVO_LABEL[$i]} --l ${MT_EXVIVO_LABEL[$i]} --l ${PERIRHINAL_EXVIVO_LABEL[$i]} --l ${ENTORHINAL_EXVIVO_LABEL[$i]} --a BA_exvivo --maxstatwinner --noverbose"
+ 	
+ 	cmd "Change name of ${BA_EXVIVO_THRESH_ANNOT[$i]} if already exists" \
+ 	"if [ -f ${BA_EXVIVO_THRESH_ANNOT[$i]} ]; then mv ${BA_EXVIVO_THRESH_ANNOT[$i]} ${BA_EXVIVO_THRESH_ANNOT[$i]}_old_$(date +%F_%H-%M-%S); fi"
+ 	cmd "${H[$i]} mri_label2label ctab thresh" \
+ 	"mris_label2annot --s $SUBJID/$OUTPUT_FOLDER --hemi ${H[$i]} --ctab $COLORTABLE_BA_TXT --l ${BA1_EXVIVO_THRESH_LABEL[$i]} --l ${BA2_EXVIVO_THRESH_LABEL[$i]} --l ${BA3A_EXVIVO_THRESH_LABEL[$i]} --l ${BA3B_EXVIVO_THRESH_LABEL[$i]} --l ${BA4A_EXVIVO_THRESH_LABEL[$i]} --l ${BA4P_EXVIVO_THRESH_LABEL[$i]} --l ${BA6_EXVIVO_THRESH_LABEL[$i]} --l ${BA44_EXVIVO_THRESH_LABEL[$i]} --l ${BA45_EXVIVO_THRESH_LABEL[$i]} --l ${V1_EXVIVO_THRESH_LABEL[$i]} --l ${V2_EXVIVO_THRESH_LABEL[$i]} --l ${MT_EXVIVO_THRESH_LABEL[$i]} --l ${PERIRHINAL_EXVIVO_THRESH_LABEL[$i]} --l ${ENTORHINAL_EXVIVO_THRESH_LABEL[$i]} --a BA_exvivo.thresh --maxstatwinner --noverbose"
+
+ 	cmd "${H[$i]} mris_anatomical_stats ctab" \
+ 	"mris_anatomical_stats -th3 -mgz -noglobal -f ${BA_EXVIVO_STATS[$i]} -b -a ${BA_EXVIVO_ANNOT[$i]} -c $BA_EXVIVO_CTAB $SUBJID/$OUTPUT_FOLDER ${H[$i]} white"
+ 	
+ 	cmd "${H[$i]}mris_anatomical_stats ctab thresh" \
+ 	"mris_anatomical_stats -th3 -mgz -f ${BA_EXVIVO_THRESH_STATS[$i]} -noglobal -b -a ${BA_EXVIVO_THRESH_ANNOT[$i]} -c $BA_EXVIVO_THRESH_CTAB $SUBJID/$OUTPUT_FOLDER ${H[$i]} white"
+	fi
+done
+fi
+
+#################
+## BONUS FOR TESTING SOMETHING ALONE: use tag -t 12
+# #################
+if ((TAG<=14))
+then
+for (( i=0; i<2; i++ ));
+do
+	if ((HEMI>=0 && HEMI!=i)); #Cases when the current hemi ($i) is not to be processed
+	then
+		continue;
+	else
+	echo "..."
+	#echo "counter=${counter}" #Put your command lines below
+	#sleep 5
+	fi
+done
+fi
+
+} ### END OF MAIN FUNCTION
+
+
+
+
+if ((MULTICASE==0)); # ONLY ONE IMAGE; don't forget to export SUBJECTS_DIR
+then
+	main
+	
+elif ((MULTICASE==1)); # SEVERAL IMAGES IN SUBJECTS_DIR GIVEN WITH -f
+then
+declare -i counter=-1
+for SUB in $SUBJECTS_DIR/*/;
+do
+	if ((FS==1)); # -i was used, need T1 for each subfolder
+	then
+		IMAGE="$(find $SUB -maxdepth 1 -name "*T1*")"
+	fi
+        RIBBON="$(find $SUB -maxdepth 1 -name "*ribbon*")"
+        SUBCORTICAL="$(find $SUB -maxdepth 1 -name "*subcortical*")"
+        
+        HA=$SUBCORTICAL #TO BE CHANGED IF NECESSARY
+        
+        #remove last character if /
+	export var="${SUB: -1}"
+	if [[ "$var" == "/" ]]; then
+	export SUB="${SUB:0:-1}"
+	fi
+	
+	#Get string after last /
+        SUBJID="$(echo ${SUB##*/})"
+        if ((SUBJID=="fsaverage")); then #fsaverage is a symlink of freesurfer own data, should be skipped by this script
+        	continue
+        fi
+        
+        counter+=1
+	main & #Launch computation in parallel
+	#echo $! #Get job PID
+	#jobs -l #Get job ID
+	if ((counter%N_PARALLEL_COMPUTING==(N_PARALLEL_COMPUTING-1))); 
+	then
+		wait
+	fi
+done
+fi
+
