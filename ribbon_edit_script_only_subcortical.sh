@@ -114,6 +114,7 @@ TAG=-1 # Start from beginning (option -t not used)
 HEMI=-1 # Both hemispheres (option -r or -l not used)
 FS=0 # Default: No recon-all (option -i not used)
 MULTICASE=0 # Default: Only one case (option -f not used)
+DO_DELETE=0 # Default: Don't delete output folder (option -k not used)
 OUTPUT_FOLDER="outputs"
 N_DILATION=3
 N_EROSION=2
@@ -227,8 +228,8 @@ while getopts ${VALID_ARGS} opt; do
 	string_arguments+="-r "
 	;;
     k) #Kill last OUTPUT_FODLER
-	Delete #Kill report.sh and $OUTPUT_FOLDER
-	string_arguments+="-d "
+	DO_DELETE=1 #Kill report.sh and $OUTPUT_FOLDER (deferred to main() after O is defined)
+	string_arguments+="-k "
 	;;
     :)
       	echo "Option -${OPTARG} requires an argument."
@@ -277,6 +278,12 @@ fi
 	
 O="$SUBJECTS_DIR/$SUBJID/$OUTPUT_FOLDER"
 
+if ((DO_DELETE==1)); then
+	echo "Deleting $O"
+	rm -rf "$O"
+	exit 0
+fi
+
 #################
 ## Set default permission of working directory to a+rwx
 #################
@@ -318,12 +325,6 @@ script_edit_aseg_presurf_based_on_ribbon
 script_expert_file
 script_merge_ribbon_subcortical
 script_remap_labels
-}
-
-Delete()
-{
-cmd "Reset $O" \
-"rm -r $O;"
 }
 
 #################
