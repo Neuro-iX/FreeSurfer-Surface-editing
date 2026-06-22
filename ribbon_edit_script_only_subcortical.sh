@@ -1892,6 +1892,11 @@ cmd "Use script $O/nifti_padding.py on $SUBCORTICAL to get $SUBCORTICAL_PADDED" 
 
 cmd "Convert $SUBCORTICAL_PADDED" \
 "mri_convert $SUBCORTICAL_PADDED $SUBCORTICAL_PADDED -rt nearest -ns 1 --conform_min"
+
+if ((USE_SYNTHSEG==1)); then
+cmd "Resample $RIBBON_PADDED to $SUBCORTICAL_PADDED space" \
+"mri_vol2vol --mov $RIBBON_PADDED --targ $SUBCORTICAL_PADDED --regheader --o $RIBBON_PADDED --interp nearest"
+fi
 fi
 
 #################
