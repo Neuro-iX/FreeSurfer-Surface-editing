@@ -153,13 +153,13 @@ TROUBLESHOOTS:
 ## What each does that the other cannot
 
 * ribbon_edit_script.sh only:
-- Morphologically integrates HA (hippocampus, amygdala, inf-lat-vent) into the cortical ribbon via dilation/erosion — this matters for surface topology, not just volume labels
-- Recomputes white and pial surfaces driven by the edited anatomy
-- Produces aseg.presurf_wo_subc.mgz (subcortical replaced by WM) used as constraint during surface placement
+   - Morphologically integrates HA (hippocampus, amygdala, inf-lat-vent) into the cortical ribbon via dilation/erosion — this matters for surface topology, not just volume labels
+   - Recomputes white and pial surfaces driven by the edited anatomy
+   - Produces aseg.presurf_wo_subc.mgz (subcortical replaced by WM) used as constraint during surface placement
 
 * merge_hoa_into_aseg.py only:
-- Resolution-agnostic (handles HOA at different resolution than aseg)
-- TSV-driven mapping — portable, no hardcoded label tables
-- EDT-based surround refill gives a tighter HOA boundary than the WM-fill fallback in the shell scriptwant the surfaces themselves to follow the HOA boundaries — the HA dilation/erosion step exists specifically to push the pial surface around the hippocampus/amygdala complex correctly, which a pure aseg edit cannot do.
+   - Resolution-agnostic (handles HOA at different resolution than aseg)
+   - TSV-driven mapping — portable, no hardcoded label tables
+   - EDT-based surround refill gives a tighter HOA boundary than the WM-fill fallback in the shell scriptwant the surfaces themselves to follow the HOA boundaries — the HA dilation/erosion step exists specifically to push the pial surface around the hippocampus/amygdala complex correctly, which a pure aseg edit cannot do.
 
 The two could be used together: merge_hoa_into_aseg.py to prepare aseg.presurf.mgz as input, then ribbon_edit_script.sh (or aseg_surface_script.sh) to drive surface reconstruction from it.
