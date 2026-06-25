@@ -577,7 +577,7 @@ declare -a DKT_APARC_ANNOT=("$O/label/lh.aparc.DKTatlas.annot" "$O/label/rh.apar
 
 RIBBON_NEW="$O/mri/ribbon.mgz"
 ASEG_PRESURF_HYPOS="$O/mri/aseg.presurf.hypos.mgz"
-ASEG="$O/mri/aseg.mgz"
+ASEG_OUT="$O/mri/aseg.mgz"
 APARC_PLUS_ASEG="$O/mri/aparc+aseg.mgz"
 declare -a APARC_ANNOT=("$O/label/lh.aparc.annot" "$O/label/rh.aparc.annot")
 APARC_A2009S_ASEG="$O/mri/aparc.a2009s+aseg.mgz"
@@ -1016,10 +1016,10 @@ cmd "Relabel hypointensities" \
 "mri_relabel_hypointensities $ASEG_PRESURF $O/surf $ASEG_PRESURF_HYPOS"
 
 cmd "APas-to-ASeg" \
-"mri_surf2volseg --o $ASEG --i $ASEG_PRESURF_HYPOS --fix-presurf-with-ribbon $RIBBON_NEW --threads 1 --${H[0]}-cortex-mask ${CORTEX_LABEL[0]} --${H[0]}-white ${ORIG[0]} --${H[0]}-pial ${RIBBON_EDIT_PIAL[0]} --${H[1]}-cortex-mask ${CORTEX_LABEL[1]} --${H[1]}-white ${ORIG[1]} --${H[1]}-pial ${RIBBON_EDIT_PIAL[1]}"
+"mri_surf2volseg --o $ASEG_OUT --i $ASEG_PRESURF_HYPOS --fix-presurf-with-ribbon $RIBBON_NEW --threads 1 --${H[0]}-cortex-mask ${CORTEX_LABEL[0]} --${H[0]}-white ${ORIG[0]} --${H[0]}-pial ${RIBBON_EDIT_PIAL[0]} --${H[1]}-cortex-mask ${CORTEX_LABEL[1]} --${H[1]}-white ${ORIG[1]} --${H[1]}-pial ${RIBBON_EDIT_PIAL[1]}"
 
 cmd "AParc+ASeg" \
-"mri_surf2volseg --o $APARC_PLUS_ASEG --label-cortex --i $ASEG --threads 1 --${H[0]}-annot ${APARC_ANNOT[0]} 1000 --${H[0]}-cortex-mask ${CORTEX_LABEL[0]} --${H[0]}-white ${ORIG[0]} --${H[0]}-pial ${RIBBON_EDIT_PIAL[0]} --${H[1]}-annot ${APARC_ANNOT[1]} 2000 --${H[1]}-cortex-mask ${CORTEX_LABEL[1]} --${H[1]}-white ${ORIG[1]} --${H[1]}-pial ${RIBBON_EDIT_PIAL[1]}"
+"mri_surf2volseg --o $APARC_PLUS_ASEG --label-cortex --i $ASEG_OUT --threads 1 --${H[0]}-annot ${APARC_ANNOT[0]} 1000 --${H[0]}-cortex-mask ${CORTEX_LABEL[0]} --${H[0]}-white ${ORIG[0]} --${H[0]}-pial ${RIBBON_EDIT_PIAL[0]} --${H[1]}-annot ${APARC_ANNOT[1]} 2000 --${H[1]}-cortex-mask ${CORTEX_LABEL[1]} --${H[1]}-white ${ORIG[1]} --${H[1]}-pial ${RIBBON_EDIT_PIAL[1]}"
 fi
 
 #################
@@ -1032,10 +1032,10 @@ do
     if ((HEMI>=0 && HEMI!=i)); then continue; fi
 
     cmd "${H[$i]} aparc.a2009s" \
-    "mri_surf2volseg --o $APARC_A2009S_ASEG --label-cortex --i $ASEG --threads 4 --${H[$i]}-annot ${APARC_A2009S_ANNOT[$i]} 11100 --${H[$i]}-cortex-mask ${CORTEX_LABEL[$i]} --${H[$i]}-white ${ORIG[$i]} --${H[$i]}-pial ${RIBBON_EDIT_PIAL[$i]} --${H[$((1-i))]}-annot ${APARC_A2009S_ANNOT[$((1-i))]} 12100 --${H[$((1-i))]}-cortex-mask ${CORTEX_LABEL[$((1-i))]} --${H[$((1-i))]}-white ${ORIG[$((1-i))]} --${H[$((1-i))]}-pial ${RIBBON_EDIT_PIAL[$((1-i))]}"
+    "mri_surf2volseg --o $APARC_A2009S_ASEG --label-cortex --i $ASEG_OUT --threads 4 --${H[$i]}-annot ${APARC_A2009S_ANNOT[$i]} 11100 --${H[$i]}-cortex-mask ${CORTEX_LABEL[$i]} --${H[$i]}-white ${ORIG[$i]} --${H[$i]}-pial ${RIBBON_EDIT_PIAL[$i]} --${H[$((1-i))]}-annot ${APARC_A2009S_ANNOT[$((1-i))]} 12100 --${H[$((1-i))]}-cortex-mask ${CORTEX_LABEL[$((1-i))]} --${H[$((1-i))]}-white ${ORIG[$((1-i))]} --${H[$((1-i))]}-pial ${RIBBON_EDIT_PIAL[$((1-i))]}"
 
     cmd "${H[$i]} aparc.DKTatlas" \
-    "mri_surf2volseg --o $APARC_DKT_ATLAS_ASEG --label-cortex --i $ASEG --threads 4 --${H[$i]}-annot ${DKT_APARC_ANNOT[$i]} 1000 --${H[$i]}-cortex-mask ${CORTEX_LABEL[$i]} --${H[$i]}-white ${ORIG[$i]} --${H[$i]}-pial ${RIBBON_EDIT_PIAL[$i]} --${H[$((1-i))]}-annot ${APARC_A2009S_ANNOT[$((1-i))]} 2000 --${H[$((1-i))]}-cortex-mask ${CORTEX_LABEL[$((1-i))]} --${H[$((1-i))]}-white ${ORIG[$((1-i))]} --${H[$((1-i))]}-pial ${RIBBON_EDIT_PIAL[$((1-i))]}"
+    "mri_surf2volseg --o $APARC_DKT_ATLAS_ASEG --label-cortex --i $ASEG_OUT --threads 4 --${H[$i]}-annot ${DKT_APARC_ANNOT[$i]} 1000 --${H[$i]}-cortex-mask ${CORTEX_LABEL[$i]} --${H[$i]}-white ${ORIG[$i]} --${H[$i]}-pial ${RIBBON_EDIT_PIAL[$i]} --${H[$((1-i))]}-annot ${APARC_A2009S_ANNOT[$((1-i))]} 2000 --${H[$((1-i))]}-cortex-mask ${CORTEX_LABEL[$((1-i))]} --${H[$((1-i))]}-white ${ORIG[$((1-i))]} --${H[$((1-i))]}-pial ${RIBBON_EDIT_PIAL[$((1-i))]}"
 
     cmd "${H[$i]} WMParc" \
     "mri_surf2volseg --o $WMPARC --label-wm --i $APARC_PLUS_ASEG --threads 4 --${H[$i]}-annot ${APARC_ANNOT[$i]} 3000 --${H[$i]}-cortex-mask ${CORTEX_LABEL[$i]} --${H[$i]}-white ${ORIG[$i]} --${H[$i]}-pial ${RIBBON_EDIT_PIAL[$i]} --${H[$((1-i))]}-annot ${APARC_A2009S_ANNOT[$((1-i))]} 4000 --${H[$((1-i))]}-cortex-mask ${CORTEX_LABEL[$((1-i))]} --${H[$((1-i))]}-white ${ORIG[$((1-i))]} --${H[$((1-i))]}-pial ${RIBBON_EDIT_PIAL[$((1-i))]}"
@@ -1062,7 +1062,7 @@ do
     "export SUBJID=\`echo \"\$SUBJID\" | cut -d/ -f1-1\`"
 
     cmd "ASeg stats" \
-    "mri_segstats --seed 1234 --seg $ASEG --sum $ASEG_STATS --pv $NORM_FS --empty --brainmask $BRAIN_FINALSURFS_FS --brain-vol-from-seg --excludeid 0 --excl-ctxgmwm --supratent --subcortgray --in $NORM_FS --in-intensity-name norm --in-intensity-units MR --etiv --euler --ctab $ASEG_STATS_LUT --subject $SUBJID/$OUTPUT_FOLDER --no-global-stats"
+    "mri_segstats --seed 1234 --seg $ASEG_OUT --sum $ASEG_STATS --pv $NORM_FS --empty --brainmask $BRAIN_FINALSURFS_FS --brain-vol-from-seg --excludeid 0 --excl-ctxgmwm --supratent --subcortgray --in $NORM_FS --in-intensity-name norm --in-intensity-units MR --etiv --euler --ctab $ASEG_STATS_LUT --subject $SUBJID/$OUTPUT_FOLDER --no-global-stats"
 
     cmd "Create fsaverage symlink if needed" \
     "if [ ! -d \"$SUBJECTS_DIR/fsaverage\" ]; then ln -s $FSAVERAGE $SUBJECTS_DIR; fi"
