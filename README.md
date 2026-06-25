@@ -114,7 +114,7 @@ TROUBLESHOOTS:
 
 -----------
 
-#Comparison merge_hoa_into_aseg.py VS ribbon_edit_script.sh
+# Comparison merge_hoa_into_aseg.py VS ribbon_edit_script.sh
 
 ribbon_edit_script.sh is a full FreeSurfer surface reconstruction pipeline — it takes an edited ribbon + subcortical volume and drives ~30 FreeSurfer tools to produce white/pial surfaces, parcellations, and stats. HOA merging is one step inside a larger pipeline.
 
@@ -128,19 +128,19 @@ ribbon_edit_script.sh: Hardcoded bash arrays
    (LABELS_SUBCORTICAL_OLD/NEW)
 merge_hoa_into_aseg.py: External TSV file
   (--tsv)
-────────────────────────────────────────
+---
 Strategy
 ribbon_edit_script.sh: Remap → Dilate/erode
   HA into ribbon → Merge into aseg
 merge_hoa_into_aseg.py: Remap → Carve FS
   labels → Paint HOA labels → Refill gaps
-────────────────────────────────────────
+---
 HA morphology
 ribbon_edit_script.
    preserved
 merge_hoa_into_aseg.py: None — HOA boundary
   is used as-is
-────────────────────────────────────────
+---
 Carved-but-unpainted voxels
 ribbon_edit_script.sh: WM fills where
   subcortical was removed
@@ -148,18 +148,18 @@ ribbon_edit_script.sh: WM fills where
 merge_hoa_into_aseg.py: Configurable:
   surround (nearest non-replaced tissue via
   EDT), nearest (regrows nucleus), none
-────────────────────────────────────────
+---
 Cerebellum
 ribbon_edit_script.sh: Always kept from FS
   ribbon
 merge_hoa_into_aseg.py: Optional via
   --include-cerebellum
-────────────────────────────────────────
+---
 VDC anterior/posterior
 ribbon_edit_script.sh: Collapsed to 28/60
 merge_hoa_into_aseg.py: Optionally split
   into 28/60 + 8028/8060 via --split-vdc
-────────────────────────────────────────
+---
 Reslicing
 ribbon_edit_script.sh: Handled externally
   before the script
