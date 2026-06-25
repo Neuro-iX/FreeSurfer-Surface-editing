@@ -27,21 +27,36 @@ Stage B — Label fusion  (optional, requires --fuse)
     Merge rule: the Stage-A' result takes priority.  Where it is background
     (0), the corresponding remapped voxel from the fusion volume is inserted.
 
-Stage C — Hole filling  (opt-in, requires --fill-holes)
+Stage C — Hole filling  (always runs)
     For each non-zero label (in sorted order), scipy binary_fill_holes fills
     any enclosed background void with that label.  Labels processed later
     overwrite earlier ones in the rare case of overlapping filled regions.
+
+Stage D — T1 brain masking  (optional, requires --t1)
+    The post-Stage-C volume is first saved as an unmasked intermediate to
+    <output>/../unmasked/<filename>.  Then every label voxel whose
+    corresponding T1 intensity is 0 is set to background (0), and the masked
+    result is written to the normal output folder.
+    T1 files are matched to segmentation files by the 6-digit subject ID
+    found anywhere in the filename.
+    When --t1 is omitted, the output folder still receives the unmasked
+    result and the unmasked/ copy is written identically.
+
+    Migration: on the first run of a script version that includes Stage D,
+    any file already present in the output folder but absent from unmasked/ is
+    automatically moved to unmasked/ (it was produced without T1 masking and
+    will be reprocessed).
 
 Usage
 -----
     # Stages A + A' only, in-place:
     python keep_main_components.py /path/to/labels
 
-    # Stages A + A' + B + C:
+    # Stages A + A' + B + C + D (all stages):
     python keep_main_components.py /path/to/labels \\
         --fuse /path/to/hoa_labels \\
-        --out  /path/to/output \\
-        --fill-holes
+        --t1   /path/to/t1_images \\
+        --out  /path/to/output
 """
 
 import argparse
@@ -410,6 +425,37 @@ def find_t1_file(t1_folder: Path, subject_id: str) -> Optional[Path]:
     return matches[0]
 
 
+def _stage_d_mask_and_save(
+    name_ref: Path,
+    vol: np.ndarray,
+    affine,
+    header,
+    dst: Path,
+    t1_folder: Optional[Path],
+) -> None:
+    """Apply T1 brain mask to *vol* (in-place) and save to *dst*.
+
+    *name_ref* is any path whose filename contains the 6-digit subject ID used
+    to locate the matching T1.  When *t1_folder* is None the volume is saved
+    unchanged.
+    """
+    if t1_folder is not None:
+        sid     = extract_subject_id(name_ref)
+        t1_path = find_t1_file(t1_folder, sid) if sid else None
+        if t1_path is None:
+            print(
+                f"  WARNING: no T1 found for ID {sid} in {t1_folder} "
+                f"— T1 masking skipped."
+            )
+        else:
+            print(f"  Stage D — T1 masking with {t1_path.name} ...", flush=True)
+            t1_img = nib.load(str(t1_path))
+            t1_vol = np.asarray(t1_img.dataobj, dtype=t1_img.get_data_dtype())
+            vol[t1_vol == 0] = 0
+    nib.save(nib.Nifti1Image(vol, affine, header), str(dst))
+    print(f"  Saved  →  {dst}", flush=True)
+
+
 # ── Per-file pipeline ─────────────────────────────────────────────────────────
 
 def process_file(
@@ -524,23 +570,7 @@ def process_file(
     # ── Stage D: save unmasked intermediate, then apply T1 brain mask ─────────
     nib.save(nib.Nifti1Image(vol, img.affine, img.header), str(unmasked_dst))
     print(f"  Saved (unmasked) → {unmasked_dst}", flush=True)
-
-    if t1_folder is not None:
-        sid    = extract_subject_id(src)
-        t1_path = find_t1_file(t1_folder, sid) if sid else None
-        if t1_path is None:
-            print(
-                f"  WARNING: no T1 found for ID {sid} in {t1_folder} "
-                f"— T1 masking skipped, saving unmasked copy to {dst}."
-            )
-        else:
-            print(f"  Stage D — T1 masking with {t1_path.name} ...", flush=True)
-            t1_img = nib.load(str(t1_path))
-            t1_vol = np.asarray(t1_img.dataobj, dtype=t1_img.get_data_dtype())
-            vol[t1_vol == 0] = 0
-
-    nib.save(nib.Nifti1Image(vol, img.affine, img.header), str(dst))
-    print(f"  Saved  →  {dst}", flush=True)
+    _stage_d_mask_and_save(src, vol, img.affine, img.header, dst, t1_folder)
 
 
 # ── Entry point ───────────────────────────────────────────────────────────────
@@ -663,12 +693,18 @@ def main() -> None:
         unmasked_dst = unmasked_folder / src.name
         print(f"[{i}/{len(files)}] {src.name}")
 
-        # Migrate files written by an older version of this script that did not
-        # have T1 masking — they live in out_folder but lack a counterpart in
-        # unmasked_folder, so they were produced without the masking step.
+        # Migrate files produced without T1 masking (out_folder has the file but
+        # unmasked_folder does not).  Move the old result to unmasked/, then apply
+        # Stage D only — skips the expensive stages A–C.
         if dst.exists() and not unmasked_dst.exists():
             dst.rename(unmasked_dst)
-            print(f"  Migrated pre-T1-masking output → {unmasked_dst}")
+            print(f"  Migrated pre-masking output → {unmasked_dst}")
+            _img = nib.load(str(unmasked_dst))
+            _vol = np.asarray(_img.dataobj, dtype=np.int32)
+            _stage_d_mask_and_save(unmasked_dst, _vol, _img.affine, _img.header,
+                                   dst, t1_folder)
+            print()
+            continue
 
         if dst.exists() and not args.recompute:
             print(f"  Skipped (output exists — use --recompute to overwrite)\n")
