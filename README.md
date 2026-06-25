@@ -116,9 +116,9 @@ TROUBLESHOOTS:
 
 # Comparison merge_hoa_into_aseg.py VS ribbon_edit_script.sh
 
-ribbon_edit_script.sh is a full FreeSurfer surface reconstruction pipeline — it takes an edited ribbon + subcortical volume and drives ~30 FreeSurfer tools to produce white/pial surfaces, parcellations, and stats. HOA merging is one step inside a larger pipeline.
+* ribbon_edit_script.sh is a full FreeSurfer surface reconstruction pipeline — it takes an edited ribbon + subcortical volume and drives ~30 FreeSurfer tools to produce white/pial surfaces, parcellations, and stats. HOA merging is one step inside a larger pipeline.
 
-merge_hoa_into_aseg.py is a single-purpose volume editing tool — it takes an existing aseg and replaces its subcortical labels with HOA, then writes a new aseg. No surfaces, no FreeSurfer tool calls.
+* merge_hoa_into_aseg.py is a single-purpose volume editing tool — it takes an existing aseg and replaces its subcortical labels with HOA, then writes a new aseg. No surfaces, no FreeSurfer tool calls.
 
 ## HOA merge strategy
 
@@ -131,8 +131,8 @@ merge_hoa_into_aseg.py is a single-purpose volume editing tool — it takes an e
 * merge_hoa_into_aseg.py: Remap → Carve FS labels → Paint HOA labels → Refill gaps
 
 ## HA morphology
-*ribbon_edit_script: preserved
-merge_hoa_into_aseg.py: None — HOA boundary is used as-is
+* ribbon_edit_script: preserved
+* merge_hoa_into_aseg.py: None — HOA boundary is used as-is
 
 ## Carved-but-unpainted voxels
 * ribbon_edit_script.sh: WM fills where subcortical was removed (edit_aseg_presurf_based_on_ribbon.py)
