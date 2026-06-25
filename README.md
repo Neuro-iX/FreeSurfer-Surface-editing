@@ -122,57 +122,42 @@ merge_hoa_into_aseg.py is a single-purpose volume editing tool — it takes an e
 
 ## HOA merge strategy
 
-Label mapping
-ribbon_edit_script.sh: Hardcoded bash arrays
-   (LABELS_SUBCORTICAL_OLD/NEW)
-merge_hoa_into_aseg.py: External TSV file
-  (--tsv)
+## Label mapping
+* ribbon_edit_script.sh: Hardcoded bash array (LABELS_SUBCORTICAL_OLD/NEW)
+* merge_hoa_into_aseg.py: External TSV file (--tsv)
 
 ## Strategy
-ribbon_edit_script.sh: Remap → Dilate/erode
-  HA into ribbon → Merge into aseg
-merge_hoa_into_aseg.py: Remap → Carve FS
-  labels → Paint HOA labels → Refill gaps
+* ribbon_edit_script.sh: Remap → Dilate/erode HA into ribbon → Merge into aseg
+* merge_hoa_into_aseg.py: Remap → Carve FS labels → Paint HOA labels → Refill gaps
 
 ## HA morphology
-ribbon_edit_script.
-   preserved
-merge_hoa_into_aseg.py: None — HOA boundary
-  is used as-is
+*ribbon_edit_script: preserved
+merge_hoa_into_aseg.py: None — HOA boundary is used as-is
 
 ## Carved-but-unpainted voxels
-ribbon_edit_script.sh: WM fills where
-  subcortical was removed
-  (edit_aseg_presurf_based_on_ribbon.py)
-merge_hoa_into_aseg.py: Configurable:
-  surround (nearest non-replaced tissue via
-  EDT), nearest (regrows nucleus), none
+* ribbon_edit_script.sh: WM fills where subcortical was removed (edit_aseg_presurf_based_on_ribbon.py)
+* merge_hoa_into_aseg.py: Configurable: surround (nearest non-replaced tissue via EDT), nearest (regrows nucleus), none
 
 ## Cerebellum
-ribbon_edit_script.sh: Always kept from FS
-  ribbon
-merge_hoa_into_aseg.py: Optional via
-  --include-cerebellum
+* ribbon_edit_script.sh: Always kept from FS ribbon
+* merge_hoa_into_aseg.py: Optional via --include-cerebellum
 
 ## VDC anterior/posterior
-ribbon_edit_script.sh: Collapsed to 28/60
-merge_hoa_into_aseg.py: Optionally split
-  into 28/60 + 8028/8060 via --split-vdc
+* ribbon_edit_script.sh: Collapsed to 28/60
+* merge_hoa_into_aseg.py: Optionally split into 28/60 + 8028/8060 via --split-vdc
 
 ## Reslicing
-ribbon_edit_script.sh: Handled externally
-  before the script
-merge_hoa_into_aseg.py: Built-in --reslice
-  using nibabel
+* ribbon_edit_script.sh: Handled externally before the script
+* merge_hoa_into_aseg.py: Built-in --reslice using nibabel
 
 ## What each does that the other cannot
 
-ribbon_edit_script.sh only:
+* ribbon_edit_script.sh only:
 - Morphologically integrates HA (hippocampus, amygdala, inf-lat-vent) into the cortical ribbon via dilation/erosion — this matters for surface topology, not just volume labels
 - Recomputes white and pial surfaces driven by the edited anatomy
 - Produces aseg.presurf_wo_subc.mgz (subcortical replaced by WM) used as constraint during surface placement
 
-merge_hoa_into_aseg.py only:
+* merge_hoa_into_aseg.py only:
 - Resolution-agnostic (handles HOA at different resolution than aseg)
 - TSV-driven mapping — portable, no hardcoded label tables
 - EDT-based surround refill gives a tighter HOA boundary than the WM-fill fallback in the shell scriptwant the surfaces themselves to follow the HOA boundaries — the HA dilation/erosion step exists specifically to push the pial surface around the hippocampus/amygdala complex correctly, which a pure aseg edit cannot do.
