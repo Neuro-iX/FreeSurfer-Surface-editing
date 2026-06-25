@@ -114,7 +114,7 @@ TROUBLESHOOTS:
 
 -----------
 
-# Comparison merge_hoa_into_aseg.py VS ribbon_edit_script.sh
+# Comparison: merge_hoa_into_aseg.py VS ribbon_edit_script.sh
 
 * ribbon_edit_script.sh is a full FreeSurfer surface reconstruction pipeline — it takes an edited ribbon + subcortical volume and drives ~30 FreeSurfer tools to produce white/pial surfaces, parcellations, and stats. HOA merging is one step inside a larger pipeline.
 
