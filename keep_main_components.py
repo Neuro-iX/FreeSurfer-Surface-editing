@@ -450,8 +450,11 @@ def _stage_d_mask_and_save(
         else:
             print(f"  Stage D — T1 masking with {t1_path.name} ...", flush=True)
             t1_img = nib.load(str(t1_path))
-            t1_vol = np.asarray(t1_img.dataobj, dtype=t1_img.get_data_dtype())
-            vol[t1_vol == 0] = 0
+            t1_vol = np.asarray(t1_img.dataobj, dtype=np.float32)
+            t1_max = t1_vol.max()
+            if t1_max > 0:
+                t1_vol *= 110.0 / t1_max
+            vol[t1_vol < 5] = 0
     nib.save(nib.Nifti1Image(vol, affine, header), str(dst))
     print(f"  Saved  →  {dst}", flush=True)
 
@@ -651,6 +654,16 @@ def main() -> None:
             "By default, files whose destination already exists are skipped."
         ),
     )
+    parser.add_argument(
+        "--recompute-masking",
+        action="store_true",
+        default=False,
+        help=(
+            "Redo Stage D (T1 masking) only, using the existing unmasked "
+            "intermediate in <output>/../unmasked/.  Stages A–C are skipped.  "
+            "Requires --t1 and a pre-existing unmasked intermediate."
+        ),
+    )
     args = parser.parse_args()
 
     src_folder = args.folder.resolve()
@@ -699,6 +712,18 @@ def main() -> None:
         if dst.exists() and not unmasked_dst.exists():
             dst.rename(unmasked_dst)
             print(f"  Migrated pre-masking output → {unmasked_dst}")
+            _img = nib.load(str(unmasked_dst))
+            _vol = np.asarray(_img.dataobj, dtype=np.int32)
+            _stage_d_mask_and_save(unmasked_dst, _vol, _img.affine, _img.header,
+                                   dst, t1_folder)
+            print()
+            continue
+
+        # --recompute-masking: redo Stage D only from the existing unmasked copy.
+        if args.recompute_masking:
+            if not unmasked_dst.exists():
+                print(f"  Skipped --recompute-masking (no unmasked intermediate found)\n")
+                continue
             _img = nib.load(str(unmasked_dst))
             _vol = np.asarray(_img.dataobj, dtype=np.int32)
             _stage_d_mask_and_save(unmasked_dst, _vol, _img.affine, _img.header,
