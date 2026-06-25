@@ -1528,7 +1528,7 @@ def main():
     # 4. Save the output NIfTI file
     # --------------------------------------------------------------------------
     # Preserve the original header and affine matrix to keep spatial info intact
-    out_img = nib.Nifti1Image(remapped_data, img.affine, img.header)
+    out_img = nib.Nifti1Image(remapped_data.astype(np.int32), img.affine)
 
     print(f"\nSaving: {args.output}")
     try:

@@ -231,6 +231,7 @@ fi
 
 script_nifti_padding
 script_extract_labels
+script_create_filled
 script_brain_finalsurfs_edit
 script_remap_labels
 script_expert_file
@@ -298,7 +299,7 @@ labels   = [int(l) for l in sys.argv[3:]]
 img  = nib.load(path_in)
 data = img.get_fdata().astype(np.int32)
 out  = np.where(np.isin(data, labels), data, 0)
-nib.save(nib.Nifti1Image(out, img.affine, img.header), path_out)
+nib.save(nib.Nifti1Image(out.astype(np.int32), img.affine), path_out)
 print(f"Extracted labels {labels} from {path_in} -> {path_out}")
 EOF
 fi
@@ -428,7 +429,7 @@ print(f"Loading: {args.input}")
 img = nib.load(args.input)
 data = img.get_fdata().astype(np.int32)
 out = remap_labels(data, src_labels, dst_labels, args.remove_unlisted)
-nib.save(nib.Nifti1Image(out, img.affine, img.header), args.output)
+nib.save(nib.Nifti1Image(out.astype(np.int32), img.affine), args.output)
 print(f"Saved: {args.output}")
 EOF
 fi
@@ -437,6 +438,54 @@ fi
 #################
 ## expert_file.txt
 #################
+script_create_filled()
+{
+if [ ! -f "$O/create_filled.py" ]
+then
+cat > $O/create_filled.py <<'EOF'
+#!/usr/bin/env python3
+"""
+create_filled.py — build a per-hemisphere filled.mgz equivalent.
+
+Merges WM (from ribbon) with subcortical structures from aseg.presurf,
+excluding labels that must NOT be part of the white surface:
+  - background / WM / GM ribbon labels (0, 2, 3, 41, 42)
+  - cerebellum WM/GM              (7, 8, 46, 47)
+  - inf-lat-vent, hippocampus, amygdala (5, 17, 18, 44, 53, 54)
+
+Usage: create_filled.py <ribbon> <aseg_presurf> <output> --wm-label <2|41>
+"""
+import argparse
+import numpy as np
+import nibabel as nib
+
+SKIP = frozenset([0, 2, 3, 41, 42, 7, 8, 46, 47, 5, 17, 18, 44, 53, 54])
+
+parser = argparse.ArgumentParser()
+parser.add_argument("ribbon")
+parser.add_argument("aseg_presurf")
+parser.add_argument("output")
+parser.add_argument("--wm-label", type=int, required=True)
+args = parser.parse_args()
+
+ribbon_img = nib.load(args.ribbon)
+aseg_img   = nib.load(args.aseg_presurf)
+
+ribbon = np.asarray(ribbon_img.dataobj, dtype=np.int32)
+aseg   = np.asarray(aseg_img.dataobj,   dtype=np.int32)
+
+filled = np.zeros_like(ribbon)
+filled[ribbon == args.wm_label] = args.wm_label
+
+subc_mask = ~np.isin(aseg, list(SKIP)) & (aseg != 0)
+filled[subc_mask] = args.wm_label
+
+nib.save(nib.Nifti1Image(filled.astype(np.int32), ribbon_img.affine), args.output)
+print(f"Saved: {args.output}  (wm_label={args.wm_label}, subcortical voxels merged: {int(subc_mask.sum())})")
+EOF
+fi
+}
+
 script_expert_file()
 {
 if [ ! -f "$SUBJECTS_DIR/expert_file.txt" ]
@@ -533,6 +582,7 @@ WM="$O/mri/wm.mgz"
 
 BRAINMASK="$O/mri/brainmask.mgz"
 
+declare -a FILLED=("$O/mri/RS_filled_lh.mgz" "$O/mri/RS_filled_rh.mgz")
 declare -a FILLED_PRETRESS=("$O/mri/RS_filled_pretress_lh.mgz" "$O/mri/RS_filled_pretress_rh.mgz")
 declare -a ORIG_NOFIX_PREDEC=("$O/surf/lh.orig.nofix.predec" "$O/surf/rh.orig.nofix.predec")
 declare -a ORIG_NOFIX=("$O/surf/lh.orig.nofix" "$O/surf/rh.orig.nofix")
@@ -778,12 +828,20 @@ fi
 #################
 if ((TAG<=4))
 then
+declare -a LABEL_RIBBON_WM_FILLED=(2 41)
+for (( i=0; i<2; i++ ));
+do
+    if ((HEMI>=0 && HEMI!=i)); then continue; fi
+    cmd "${H[$i]} Create filled volume (WM + subcortical, excl. hipp/amyg/inf-lat-vent)" \
+    "python $O/create_filled.py $RIBBON_WO_EDIT $ASEG_PRESURF ${FILLED[$i]} --wm-label ${LABEL_RIBBON_WM_FILLED[$i]}"
+done
+
 for (( i=0; i<2; i++ ));
 do
     if ((HEMI>=0 && HEMI!=i)); then continue; fi
 
-    cmd "${H[$i]} Pretess WM from $RIBBON_WO_EDIT" \
-    "mri_pretess $RIBBON_WO_EDIT ${LABEL_RIBBON_WM[$i]} $NORM_FS ${FILLED_PRETRESS[$i]}"
+    cmd "${H[$i]} Pretess WM from ${FILLED[$i]}" \
+    "mri_pretess ${FILLED[$i]} ${LABEL_RIBBON_WM[$i]} $NORM_FS ${FILLED_PRETRESS[$i]}"
 
     cmd "${H[$i]} Tessellate WM surface" \
     "mri_tessellate ${FILLED_PRETRESS[$i]} ${LABEL_RIBBON_WM[$i]} ${ORIG_NOFIX_PREDEC[$i]}"
