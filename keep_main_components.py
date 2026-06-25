@@ -394,12 +394,30 @@ def find_fuse_file(fuse_folder: Path, subject_id: str) -> Optional[Path]:
     return matches[0]
 
 
+def find_t1_file(t1_folder: Path, subject_id: str) -> Optional[Path]:
+    """Return the .nii.gz T1 file in *t1_folder* whose name contains *subject_id*."""
+    matches = [
+        p for p in sorted(t1_folder.glob("*.nii.gz"))
+        if extract_subject_id(p) == subject_id
+    ]
+    if not matches:
+        return None
+    if len(matches) > 1:
+        print(
+            f"  WARNING: {len(matches)} T1 files share ID {subject_id} "
+            f"— using {matches[0].name}"
+        )
+    return matches[0]
+
+
 # ── Per-file pipeline ─────────────────────────────────────────────────────────
 
 def process_file(
     src: Path,
     dst: Path,
+    unmasked_dst: Path,
     fuse_folder: Optional[Path] = None,
+    t1_folder: Optional[Path] = None,
     connectivity: int = 6,
     reassign_orphans: bool = False,
 ) -> None:
@@ -411,9 +429,18 @@ def process_file(
     Stage A' : reverse remap back to FreeSurfer label values (REVERSE_REMAP)
     Stage B  : fuse-volume remap (FUSE_REMAP) + label fusion (skipped when fuse_folder is None)
     Stage C  : per-label hole filling (always runs)
+    Stage D  : save unmasked intermediate to *unmasked_dst*, then apply T1
+               brain mask (voxels where T1 == 0 → label 0) and save to *dst*.
+               If *t1_folder* is None, *dst* receives the same data as
+               *unmasked_dst*.
 
     Parameters
     ----------
+    unmasked_dst : Path
+        Destination for the post-Stage-C result before T1 masking.
+    t1_folder : Path or None
+        Folder containing T1 .nii.gz files matched by 6-digit subject ID.
+        When None, T1 masking is skipped.
     connectivity : {6, 26}
         Connectivity for CC detection and neighbor voting.
         6 = face-adjacent only (default); 26 = face + edge + corner adjacent.
@@ -494,7 +521,24 @@ def process_file(
     print(f"  Stage C — hole filling ...", flush=True)
     vol = fill_label_holes(vol)
 
-    # ── Save ──────────────────────────────────────────────────────────────────
+    # ── Stage D: save unmasked intermediate, then apply T1 brain mask ─────────
+    nib.save(nib.Nifti1Image(vol, img.affine, img.header), str(unmasked_dst))
+    print(f"  Saved (unmasked) → {unmasked_dst}", flush=True)
+
+    if t1_folder is not None:
+        sid    = extract_subject_id(src)
+        t1_path = find_t1_file(t1_folder, sid) if sid else None
+        if t1_path is None:
+            print(
+                f"  WARNING: no T1 found for ID {sid} in {t1_folder} "
+                f"— T1 masking skipped, saving unmasked copy to {dst}."
+            )
+        else:
+            print(f"  Stage D — T1 masking with {t1_path.name} ...", flush=True)
+            t1_img = nib.load(str(t1_path))
+            t1_vol = np.asarray(t1_img.dataobj, dtype=t1_img.get_data_dtype())
+            vol[t1_vol == 0] = 0
+
     nib.save(nib.Nifti1Image(vol, img.affine, img.header), str(dst))
     print(f"  Saved  →  {dst}", flush=True)
 
@@ -558,6 +602,17 @@ def main() -> None:
         ),
     )
     parser.add_argument(
+        "--t1",
+        type=Path,
+        default=None,
+        metavar="T1_FOLDER",
+        help=(
+            "Optional folder of T1 .nii.gz images matched by 6-digit subject ID.  "
+            "Stage D zeros out label voxels where the T1 is 0 (brain mask).  "
+            "The pre-masking volume is always saved to <output>/../unmasked/."
+        ),
+    )
+    parser.add_argument(
         "--recompute",
         action="store_true",
         default=False,
@@ -578,9 +633,17 @@ def main() -> None:
         print(f"ERROR: fuse folder not found: {fuse_folder}", file=sys.stderr)
         sys.exit(1)
 
+    t1_folder = args.t1.resolve() if args.t1 else None
+    if t1_folder is not None and not t1_folder.is_dir():
+        print(f"ERROR: T1 folder not found: {t1_folder}", file=sys.stderr)
+        sys.exit(1)
+
     out_folder = args.out.resolve() if args.out else src_folder
     if out_folder != src_folder:
         out_folder.mkdir(parents=True, exist_ok=True)
+
+    unmasked_folder = out_folder.parent / "unmasked"
+    unmasked_folder.mkdir(parents=True, exist_ok=True)
 
     files = sorted(src_folder.glob("*.nii.gz"))
     if not files:
@@ -589,17 +652,30 @@ def main() -> None:
 
     print(f"Found {len(files)} file(s) in {src_folder}")
     if fuse_folder:
-        print(f"Fuse  → {fuse_folder}")
-    print(f"Output → {'in-place' if out_folder == src_folder else out_folder}\n")
+        print(f"Fuse    → {fuse_folder}")
+    if t1_folder:
+        print(f"T1      → {t1_folder}")
+    print(f"Output  → {'in-place' if out_folder == src_folder else out_folder}")
+    print(f"Unmasked → {unmasked_folder}\n")
 
     for i, src in enumerate(files, 1):
-        dst = out_folder / src.name
+        dst          = out_folder     / src.name
+        unmasked_dst = unmasked_folder / src.name
         print(f"[{i}/{len(files)}] {src.name}")
+
+        # Migrate files written by an older version of this script that did not
+        # have T1 masking — they live in out_folder but lack a counterpart in
+        # unmasked_folder, so they were produced without the masking step.
+        if dst.exists() and not unmasked_dst.exists():
+            dst.rename(unmasked_dst)
+            print(f"  Migrated pre-T1-masking output → {unmasked_dst}")
+
         if dst.exists() and not args.recompute:
             print(f"  Skipped (output exists — use --recompute to overwrite)\n")
             continue
-        process_file(src, dst,
+        process_file(src, dst, unmasked_dst,
                      fuse_folder=fuse_folder,
+                     t1_folder=t1_folder,
                      connectivity=args.connectivity,
                      reassign_orphans=args.reassign_orphans)
         print()
