@@ -2,8 +2,23 @@
 
 [![DOI](https://zenodo.org/badge/665245427.svg)](https://zenodo.org/doi/10.5281/zenodo.12784724)
 
+## Layout (since 2026-11-11)
+
+Top level = what is used to build FreeSurfer 7.4.1 surfaces from an aseg in FreeSurfer label space (e.g. predictions of the
+HOA-2 model, https://github.com/HOA-2/):
+- `aseg_surface_script.sh`: aseg + T1 -> surfaces (recon-all stages recomputed from the aseg; steps `-t 0..11`).
+- `merge_hoa_into_aseg.py`: replace the subcortical labels of an aseg with HOA labels.
+- `apply_gwmatter_crosswalk.py`: remap a label volume to FreeSurfer ids with a TSV crosswalk.
+
+`legacy/` = earlier tools, kept unchanged and not maintained: `ribbon_edit_script.sh` and
+`ribbon_edit_script_only_subcortical.sh` (ribbon + subcortical files as input; the tool described below and archived on Zenodo),
+`keep_main_components.py` and `mask_test_images.py` (aparc+aseg / nnUNet preprocessing). Run them from `legacy/`; the usage text below
+for `ribbon_edit_script.sh` is unchanged.
+
+-----------
+
 This repository contains:
-- **ribbon_edit_script.sh**: \
+- **legacy/ribbon_edit_script.sh**: \
 This shell script reuses Freesurfer 7.4.1 recon-all pipeline to correct the white and pial surfaces based on manually curated ribbon and subcortical files.
 
 Help function:
