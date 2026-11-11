@@ -40,7 +40,9 @@ Otherwise run beforehand:
 
 EXAMPLES:
 $ export SUBJECTS_DIR=\`pwd\`
-$ bash /home/bverreman/Documents/FreeSurfer-Surface-editing/aseg_surface_script.sh -i /project/hippocampus/common/bverreman/nnUNet/nnUNet/nnUNet_raw/Dataset110_Brain9/imagesTs_not_masked_yet/100307_0000.nii.gz -s 100307 -a /project/hippocampus/common/bverreman/nnUNet/nnUNet/nnUNet_raw/Dataset110_Brain9/imagesTs_not_masked_yet/100307.nii.gz
+$ bash /home/bverreman/Documents/FreeSurfer-Surface-editing/aseg_surface_script.sh -i  -s 101107 -a /project/hippocampus/common/bverreman/ribbon_project/Merged_HOA-20260724T160050Z-1-001/Merged_HOA/101107_conformed.mgz
+
+$ bash /home/bverreman/Documents/FreeSurfer-Surface-editing/aseg_surface_script.sh -a /project/hippocampus/common/bverreman/ribbon_project/Merged_HOA-20260724T160050Z-1-001/Merged_HOA/101107_HOA.presurf.mgz -s 100307 -i /project/hippocampus/common/bverreman/nnUNet/nnUNet/nnUNet_raw/Dataset110_Brain9/imagesTs_not_masked_yet/100307.nii.gz
 
 $ bash aseg_surface_script.sh -s 100307 -t 4 -r
 #restart from orig surface (TAG 4), right hemisphere only
@@ -440,8 +442,8 @@ fi
 #################
 script_create_filled()
 {
-if [ ! -f "$O/create_filled.py" ]
-then
+# Always rewrite (no "if not exists" guard): a stale create_filled.py left in
+# an earlier/partial output folder would silently keep an older behaviour.
 cat > $O/create_filled.py <<'EOF'
 #!/usr/bin/env python3
 """
@@ -453,13 +455,31 @@ excluding labels that must NOT be part of the white surface:
   - cerebellum WM/GM              (7, 8, 46, 47)
   - inf-lat-vent, hippocampus, amygdala (5, 17, 18, 44, 53, 54)
 
+Each hemisphere's fill gets ONLY its own side's subcortical labels (fixes the
+earlier bug where both hemispheres received every subcortical label, so
+lh.orig and rh.orig each wrapped the other side's deep structures and the two
+surfaces interpenetrated instead of meeting at the medial wall):
+  - left-only labels  -> lh fill:  4 10 11 12 13 26 28 30 31
+  - right-only labels -> rh fill:  43 49 50 51 52 58 60 62 63
+  - midline / unlateralized labels (brainstem, 3rd/4th ventricle, CSF, CC
+    251-255, WM-hypointensities, optic chiasm, ...) are split voxel by voxel:
+    each goes to the hemisphere whose lateralized labels (aseg + ribbon) are
+    NEAREST, so the two fills are disjoint and tile the midline.
+
 Usage: create_filled.py <ribbon> <aseg_presurf> <output> --wm-label <2|41>
 """
 import argparse
 import numpy as np
 import nibabel as nib
+from scipy import ndimage as ndi
 
 SKIP = frozenset([0, 2, 3, 41, 42, 7, 8, 46, 47, 5, 17, 18, 44, 53, 54])
+# Subcortical labels kept in the fill, by side.
+LEFT_SUBC  = frozenset([4, 10, 11, 12, 13, 26, 28, 30, 31])
+RIGHT_SUBC = frozenset([43, 49, 50, 51, 52, 58, 60, 62, 63])
+# Every label with a known side (incl. the skipped ones): seeds for the midline split.
+LEFT_ALL   = LEFT_SUBC  | frozenset([2, 3, 5, 7, 8, 17, 18])
+RIGHT_ALL  = RIGHT_SUBC | frozenset([41, 42, 44, 46, 47, 53, 54])
 
 parser = argparse.ArgumentParser()
 parser.add_argument("ribbon")
@@ -467,6 +487,9 @@ parser.add_argument("aseg_presurf")
 parser.add_argument("output")
 parser.add_argument("--wm-label", type=int, required=True)
 args = parser.parse_args()
+if args.wm_label not in (2, 41):
+    raise SystemExit("--wm-label must be 2 (lh) or 41 (rh)")
+is_left = args.wm_label == 2
 
 ribbon_img = nib.load(args.ribbon)
 aseg_img   = nib.load(args.aseg_presurf)
@@ -477,13 +500,30 @@ aseg   = np.asarray(aseg_img.dataobj,   dtype=np.int32)
 filled = np.zeros_like(ribbon)
 filled[ribbon == args.wm_label] = args.wm_label
 
-subc_mask = ~np.isin(aseg, list(SKIP)) & (aseg != 0)
-filled[subc_mask] = args.wm_label
+own_subc = LEFT_SUBC if is_left else RIGHT_SUBC
+own_mask = np.isin(aseg, list(own_subc))
+
+midline = ~np.isin(aseg, list(SKIP | LEFT_SUBC | RIGHT_SUBC)) & (aseg != 0)
+seed_l = np.isin(aseg, list(LEFT_ALL))  | np.isin(ribbon, [2, 3])
+seed_r = np.isin(aseg, list(RIGHT_ALL)) | np.isin(ribbon, [41, 42])
+both = seed_l & seed_r
+seed_l &= ~both
+seed_r &= ~both
+n_mid_own = 0
+if midline.any():
+    # index of the nearest lateralized voxel, for every voxel of the volume
+    idx = ndi.distance_transform_edt(~(seed_l | seed_r), return_distances=False, return_indices=True)
+    nearest_is_left = seed_l[tuple(idx[:, midline])]
+    mid_own = np.zeros_like(midline)
+    mid_own[midline] = nearest_is_left if is_left else ~nearest_is_left
+    n_mid_own = int(mid_own.sum())
+    own_mask |= mid_own
+
+filled[own_mask] = args.wm_label
 
 nib.save(nib.Nifti1Image(filled.astype(np.int32), ribbon_img.affine), args.output)
-print(f"Saved: {args.output}  (wm_label={args.wm_label}, subcortical voxels merged: {int(subc_mask.sum())})")
+print(f"Saved: {args.output}  (wm_label={args.wm_label}, subcortical voxels merged: {int(own_mask.sum())}, of which midline-split: {n_mid_own})")
 EOF
-fi
 }
 
 script_expert_file()
